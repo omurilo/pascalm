@@ -1,1 +1,4 @@
 **/*.yy.c
+
+.DS_Store
+test
