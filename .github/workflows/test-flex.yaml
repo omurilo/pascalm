@@ -19,27 +19,42 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y flex gcc
+        sudo apt-get install -y flex gcc libfl-dev
 
     - name: Find and test all Flex modules
       run: |
-        find ./exercises/flex/ -type f \( -name "*.l" -or -name "*.lex" \) -exec dirname {} \; | sort -u | while read module; do
+        find exercises/flex/ -type f \( -name "*.lex" -or -name "*.l" \) -exec dirname {} \; | sort -u | while read module; do
           echo "Testing module: $module"
 
           mkdir -p $HOME/flex_build
 
-          flex "$module"/*.l "$module"/*.lex -o $HOME/flex_build/lex.yy.c
-          gcc -o $HOME/flex_build/lexer $HOME/flex_build/lex.yy.c -lfl
+          lfiles=$(find "$module" -maxdepth 1 \( -name "*.l" -or -name "*.lex" \))
 
-          input_file="$module"/*.test.txt
-          expected_output="$module"/*.output.txt
+          if [ -z "$lfiles" ]; then
+            echo "No .l or .lex files found in module $module, skipping this module."
+            continue
+          fi
+
+          flex $lfiles
+          
+          if [ ! -f "lex.yy.c" ]; then
+            echo "lex.yy.c not generated, skipping this module."
+            continue
+          fi
+
+          gcc -o $HOME/flex_build/lexer lex.yy.c -lfl
+
+          rm -rf lex.yy.c
+
+          input_file=$(find "$module" -maxdepth 1 \( -name "*.test.txt" \))
+          expected_output=$(find "$module" -maxdepth 1 \( -name "*.output.txt" \))
 
           if [ ! -f "$input_file" ] || [ ! -f "$expected_output" ]; then
             echo "Test files not found in module $module, skipping this module."
             continue
           fi
 
-          $HOME/flex_build/lexer < "$input_file" > $HOME/flex_build/output.txt
+          $HOME/flex_build/lexer "$input_file" > $HOME/flex_build/output.txt
 
           diff $HOME/flex_build/output.txt "$expected_output" || exit 1
         done
