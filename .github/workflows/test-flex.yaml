@@ -1,0 +1,54 @@
+name: Flex Lexer Tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y flex gcc
+
+    - name: Find and test all Flex modules
+      run: |
+        find ./exercises/flex/ -type f \( -name "*.l" -or -name "*.lex" \) -exec dirname {} \; | sort -u | while read module; do
+          echo "Testing module: $module"
+
+          mkdir -p $HOME/flex_build
+
+          flex "$module"/*.l "$module"/*.lex -o $HOME/flex_build/lex.yy.c
+          gcc -o $HOME/flex_build/lexer $HOME/flex_build/lex.yy.c -lfl
+
+          input_file="$module"/*.test.txt
+          expected_output="$module"/*.output.txt
+
+          if [ ! -f "$input_file" ] || [ ! -f "$expected_output" ]; then
+            echo "Test files not found in module $module, skipping this module."
+            continue
+          fi
+
+          $HOME/flex_build/lexer < "$input_file" > $HOME/flex_build/output.txt
+
+          diff $HOME/flex_build/output.txt "$expected_output" || exit 1
+        done
+
+    - name: Check test results
+      run: |
+        if [ $? -eq 0 ]; then
+          echo "All tests passed!"
+        else
+          echo "Test failed!"
+          exit 1
+        fi

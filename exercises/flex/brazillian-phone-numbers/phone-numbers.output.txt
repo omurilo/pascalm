@@ -1,0 +1,34 @@
+Valid phone number: 62999999999
+
+Valid phone number: 6299999-9999
+
+Valid phone number: 62 999999999
+
+Valid phone number: 62 99999-9999
+
+Valid phone number: (62)999999999
+
+Valid phone number: (62)99999-9999
+
+Valid phone number: (62) 999999999
+
+Valid phone number: (62) 99999-9999
+
+Valid phone number: 6299999999
+
+Valid phone number: 629999-9999
+
+Valid phone number: 62 99999999
+
+Valid phone number: 62 9999-9999
+
+Valid phone number: (62)99999999
+
+Valid phone number: (62)9999-9999
+
+Valid phone number: (62) 99999999
+
+Valid phone number: (62) 9999-9999
+
+
+
