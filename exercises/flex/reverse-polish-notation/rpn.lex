@@ -14,6 +14,8 @@ Node *stack = NULL;
 void push(Node **stack, double val);
 int pop(Node **stack, double *val);
 void checkStack(int a, int b);
+
+FILE *yyin;
 %}
 
 %%
@@ -94,8 +96,11 @@ void checkStack(int a, int b) {
   }
 }
 
-int main() {
+int main(int argc, char **argv) {
+  yyin = fopen(argv[1], "r");
   yylex();
+  fclose(yyin);
+  return 0;
 }
 
 int yywrap() {
