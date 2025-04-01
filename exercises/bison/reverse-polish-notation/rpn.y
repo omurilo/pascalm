@@ -35,6 +35,7 @@ progexec: stmt
 
 stmt: atrib DONE {}
     | expr DONE {result = $1; return 0;}
+    | DONE { return 0; }
 
 atrib: VARIABLE EQUALS expr { 
      symb[$1] = $3;
