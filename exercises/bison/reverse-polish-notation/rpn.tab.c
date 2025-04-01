@@ -1347,7 +1347,7 @@ yyreduce:
     {
   case 4: /* stmt: atrib DONE  */
 #line 36 "rpn.y"
-                 { printf("%lf\n", result); }
+                 {}
 #line 1352 "rpn.tab.c"
     break;
 
@@ -1359,7 +1359,7 @@ yyreduce:
 
   case 6: /* atrib: VARIABLE EQUALS expr  */
 #line 39 "rpn.y"
-                            { symb[(yyvsp[-2].valueInt)] = (yyvsp[0].value);}
+                            { symb[(yyvsp[-2].valueInt)] = (yyvsp[0].value); result = (yyvsp[0].value); printf("%lf\n", result); }
 #line 1364 "rpn.tab.c"
     break;
 

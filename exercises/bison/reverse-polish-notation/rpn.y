@@ -36,7 +36,7 @@ progexec: stmt
 stmt: atrib DONE {}
     | expr DONE {result = $1; return 0;}
 
-atrib: VARIABLE EQUALS expr { symb[$1] = $3;}
+atrib: VARIABLE EQUALS expr { symb[$1] = $3; result = $3; printf("%lf\n", result); }
 
 expr: expr factor PLUS {$$ = $1 + $2;}
     | expr factor MINUS {$$ = $1 - $2;}
