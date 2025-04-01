@@ -510,8 +510,8 @@ static const yytype_int8 yytranslate[] =
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
 static const yytype_int8 yyrline[] =
 {
-       0,    33,    33,    34,    36,    37,    39,    41,    42,    43,
-      44,    45,    47,    48
+       0,    33,    33,    34,    36,    37,    39,    45,    46,    47,
+      48,    49,    51,    52
 };
 #endif
 
@@ -1359,54 +1359,58 @@ yyreduce:
 
   case 6: /* atrib: VARIABLE EQUALS expr  */
 #line 39 "rpn.y"
-                            { symb[(yyvsp[-2].valueInt)] = (yyvsp[0].value); result = (yyvsp[0].value); printf("%lf\n", result); }
-#line 1364 "rpn.tab.c"
+                            { 
+     symb[(yyvsp[-2].valueInt)] = (yyvsp[0].value);
+     result = (yyvsp[0].value);
+     printf("%lf\n", result);
+  }
+#line 1368 "rpn.tab.c"
     break;
 
   case 7: /* expr: expr factor PLUS  */
-#line 41 "rpn.y"
+#line 45 "rpn.y"
                        {(yyval.value) = (yyvsp[-2].value) + (yyvsp[-1].value);}
-#line 1370 "rpn.tab.c"
+#line 1374 "rpn.tab.c"
     break;
 
   case 8: /* expr: expr factor MINUS  */
-#line 42 "rpn.y"
+#line 46 "rpn.y"
                         {(yyval.value) = (yyvsp[-2].value) - (yyvsp[-1].value);}
-#line 1376 "rpn.tab.c"
+#line 1380 "rpn.tab.c"
     break;
 
   case 9: /* expr: expr factor TIMES  */
-#line 43 "rpn.y"
+#line 47 "rpn.y"
                         {(yyval.value) = (yyvsp[-2].value) * (yyvsp[-1].value);}
-#line 1382 "rpn.tab.c"
+#line 1386 "rpn.tab.c"
     break;
 
   case 10: /* expr: expr factor DIVIDE  */
-#line 44 "rpn.y"
+#line 48 "rpn.y"
                          {(yyval.value) = (yyvsp[-2].value) / (yyvsp[-1].value);}
-#line 1388 "rpn.tab.c"
+#line 1392 "rpn.tab.c"
     break;
 
   case 11: /* expr: factor  */
-#line 45 "rpn.y"
+#line 49 "rpn.y"
              {(yyval.value) = (yyvsp[0].value);}
-#line 1394 "rpn.tab.c"
+#line 1398 "rpn.tab.c"
     break;
 
   case 12: /* factor: VAL  */
-#line 47 "rpn.y"
+#line 51 "rpn.y"
             {(yyval.value) = (yyvsp[0].value);}
-#line 1400 "rpn.tab.c"
+#line 1404 "rpn.tab.c"
     break;
 
   case 13: /* factor: VARIABLE  */
-#line 48 "rpn.y"
+#line 52 "rpn.y"
                  { (yyval.value) = symb[(yyvsp[0].valueInt)]; }
-#line 1406 "rpn.tab.c"
+#line 1410 "rpn.tab.c"
     break;
 
 
-#line 1410 "rpn.tab.c"
+#line 1414 "rpn.tab.c"
 
       default: break;
     }
@@ -1630,7 +1634,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 49 "rpn.y"
+#line 53 "rpn.y"
 
 
 int yywrap( ) {
