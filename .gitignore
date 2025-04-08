@@ -5,3 +5,7 @@ test
 exercises/flex/ip-address/ip-address
 exercises/flex/brazillian-plates/brazillian-plates
 exercises/flex/brazillian-phone-numbers/brazillian_phone_numbers
+grammar/grammar
+exercises/flex/reverse-polish-notation/lexer
+exercises/flex/language-tokenization/lexer
+exercises/bison/reverse-polish-notation/rpn

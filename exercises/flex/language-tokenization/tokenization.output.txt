@@ -1,0 +1,48 @@
+Type: String at column 1
+Typed Name: texto at column 8
+Typed =: = at column 14
+Typed Text: "uma string qlq" at column 16
+Typed final expression: ;
+
+Type: Double at column 1
+Typed Name: double at column 8
+Typed =: = at column 15
+Typed Number: 1.23e69 at column 17
+Typed final expression: ;
+
+Type: Float at column 1
+Typed Name: float at column 7
+Typed =: = at column 13
+Typed Number: 1.23e15 at column 15
+Typed final expression: ;
+
+Type: Integer at column 1
+Typed Name: int at column 9
+Typed =: = at column 13
+Typed Number: 125e10 at column 15
+Typed final expression: ;
+
+Type: Real at column 1
+Typed Name: real at column 6
+Typed =: = at column 11
+Typed Number: 124.095 at column 13
+Typed final expression: ;
+
+Type: Char at column 1
+Typed Name: char at column 6
+Typed =: = at column 11
+54Typed Char: 'A' (65) at column 13
+Typed final expression: ;
+
+Type: Char at column 1
+Typed Name: char at column 6
+Typed =: = at column 11
+97Typed Char: 'a' (97) at column 13
+Typed final expression: ;
+
+Type: Boolean at column 1
+Typed Name: exist at column 9
+Typed =: = at column 15
+Typed Boolean: True at column 17
+Typed final expression: ;
+

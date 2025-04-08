@@ -1,0 +1,3 @@
+String uma = "string qlq"
+Double num = 1.23e69;
+a123!oanc .
