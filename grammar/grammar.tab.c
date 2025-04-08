@@ -102,7 +102,63 @@ int symb[26];
 #  endif
 # endif
 
-#include "grammar.tab.h"
+
+/* Debug traces.  */
+#ifndef YYDEBUG
+# define YYDEBUG 0
+#endif
+#if YYDEBUG
+extern int yydebug;
+#endif
+
+/* Token kinds.  */
+#ifndef YYTOKENTYPE
+# define YYTOKENTYPE
+  enum yytokentype
+  {
+    YYEMPTY = -2,
+    YYEOF = 0,                     /* "end of file"  */
+    YYerror = 256,                 /* error  */
+    YYUNDEF = 257,                 /* "invalid token"  */
+    VAL = 258,                     /* VAL  */
+    PLUS = 259,                    /* PLUS  */
+    MINUS = 260,                   /* MINUS  */
+    DIVIDE = 261,                  /* DIVIDE  */
+    TIMES = 262,                   /* TIMES  */
+    LEFT = 263,                    /* LEFT  */
+    RIGHT = 264,                   /* RIGHT  */
+    DONE = 265,                    /* DONE  */
+    VARIABLE = 266,                /* VARIABLE  */
+    EQUALS = 267                   /* EQUALS  */
+  };
+  typedef enum yytokentype yytoken_kind_t;
+#endif
+
+/* Value type.  */
+#if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
+union YYSTYPE
+{
+#line 13 "grammar.y"
+
+  double value;
+  int valueInt;
+
+#line 147 "grammar.tab.c"
+
+};
+typedef union YYSTYPE YYSTYPE;
+# define YYSTYPE_IS_TRIVIAL 1
+# define YYSTYPE_IS_DECLARED 1
+#endif
+
+
+extern YYSTYPE yylval;
+
+
+int yyparse (void);
+
+
+
 /* Symbol kind.  */
 enum yysymbol_kind_t
 {
@@ -1356,77 +1412,77 @@ yyreduce:
   case 4: /* stmt: atrib DONE  */
 #line 38 "grammar.y"
                  {}
-#line 1360 "grammar.tab.c"
+#line 1416 "grammar.tab.c"
     break;
 
   case 5: /* stmt: expr DONE  */
 #line 39 "grammar.y"
                 {result = (yyvsp[-1].value); return 0;}
-#line 1366 "grammar.tab.c"
+#line 1422 "grammar.tab.c"
     break;
 
   case 6: /* atrib: VARIABLE EQUALS expr  */
 #line 41 "grammar.y"
                             { symb[(yyvsp[-2].valueInt)] = (yyvsp[0].value);}
-#line 1372 "grammar.tab.c"
+#line 1428 "grammar.tab.c"
     break;
 
   case 7: /* expr: expr PLUS term  */
 #line 43 "grammar.y"
                      {(yyval.value) = (yyvsp[-2].value) + (yyvsp[0].value);}
-#line 1378 "grammar.tab.c"
+#line 1434 "grammar.tab.c"
     break;
 
   case 8: /* expr: expr MINUS term  */
 #line 44 "grammar.y"
                       {(yyval.value) = (yyvsp[-2].value) - (yyvsp[0].value);}
-#line 1384 "grammar.tab.c"
+#line 1440 "grammar.tab.c"
     break;
 
   case 9: /* expr: term  */
 #line 45 "grammar.y"
            {(yyval.value) = (yyvsp[0].value);}
-#line 1390 "grammar.tab.c"
+#line 1446 "grammar.tab.c"
     break;
 
   case 10: /* term: term TIMES factor  */
 #line 47 "grammar.y"
                         {(yyval.value) = (yyvsp[-2].value) * (yyvsp[0].value);}
-#line 1396 "grammar.tab.c"
+#line 1452 "grammar.tab.c"
     break;
 
   case 11: /* term: term DIVIDE factor  */
 #line 48 "grammar.y"
                          {(yyval.value) = (yyvsp[-2].value) / (yyvsp[0].value);}
-#line 1402 "grammar.tab.c"
+#line 1458 "grammar.tab.c"
     break;
 
   case 12: /* term: factor  */
 #line 49 "grammar.y"
              {(yyval.value) = (yyvsp[0].value);}
-#line 1408 "grammar.tab.c"
+#line 1464 "grammar.tab.c"
     break;
 
   case 13: /* factor: VAL  */
 #line 51 "grammar.y"
             {(yyval.value) = (yyvsp[0].value);}
-#line 1414 "grammar.tab.c"
+#line 1470 "grammar.tab.c"
     break;
 
   case 14: /* factor: LEFT expr RIGHT  */
 #line 52 "grammar.y"
                         {(yyval.value) = (yyvsp[-1].value);}
-#line 1420 "grammar.tab.c"
+#line 1476 "grammar.tab.c"
     break;
 
   case 15: /* factor: VARIABLE  */
 #line 53 "grammar.y"
                  { (yyval.value) = symb[(yyvsp[0].valueInt)];}
-#line 1426 "grammar.tab.c"
+#line 1482 "grammar.tab.c"
     break;
 
 
-#line 1430 "grammar.tab.c"
+#line 1486 "grammar.tab.c"
 
       default: break;
     }
