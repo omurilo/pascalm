@@ -77,10 +77,10 @@ cond:
     | L_PAREN cond OR cond R_PAREN {$$ = $2 || $4;}
     | L_PAREN NOT cond R_PAREN {$$ = !$3;}
 
-expr: expr PLUS factor {$$ = $1 + $3;}
-    | expr MINUS factor {$$ = $1 - $3;}
-    | expr TIMES factor {$$ = $1 * $3;}
-    | expr DIVIDE factor {$$ = $1 / $3;}
+expr: expr PLUS expr {$$ = $1 + $3;}
+    | expr MINUS expr {$$ = $1 - $3;}
+    | expr TIMES expr {$$ = $1 * $3;}
+    | expr DIVIDE expr {$$ = $1 / $3;}
     | L_PAREN expr R_PAREN {$$ = $2;}
     | factor {$$ = $1;}
 
