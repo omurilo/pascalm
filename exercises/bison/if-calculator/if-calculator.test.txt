@@ -1,4 +1,10 @@
-c := 5
-if ((c > 2 AND c < 10)) then {a := 4 + 5
-} else {b := 4 - 2
+c := 5;
+if (((c > 2 AND c < 10) OR (c > -1 AND c = 5))) then {
+  a := 4 + 5;
+  if (a = 9) then {
+    a := a * c;
+    a;
+  }
+} else {
+  b := 4 - 2;
 }

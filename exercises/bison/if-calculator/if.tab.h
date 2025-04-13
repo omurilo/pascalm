@@ -39,7 +39,7 @@
 # define YY_YY_IF_TAB_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
-# define YYDEBUG 0
+# define YYDEBUG 1
 #endif
 #if YYDEBUG
 extern int yydebug;
@@ -55,30 +55,30 @@ extern int yydebug;
     YYerror = 256,                 /* error  */
     YYUNDEF = 257,                 /* "invalid token"  */
     VAL = 258,                     /* VAL  */
-    MINUS = 259,                   /* MINUS  */
-    PLUS = 260,                    /* PLUS  */
-    TIMES = 261,                   /* TIMES  */
-    DIVIDE = 262,                  /* DIVIDE  */
-    NEG = 263,                     /* NEG  */
-    DONE = 264,                    /* DONE  */
-    VARIABLE = 265,                /* VARIABLE  */
-    ATTRIB = 266,                  /* ATTRIB  */
-    IF = 267,                      /* IF  */
-    THEN = 268,                    /* THEN  */
-    ELSE = 269,                    /* ELSE  */
-    L_PAREN = 270,                 /* L_PAREN  */
-    R_PAREN = 271,                 /* R_PAREN  */
-    L_CBRACE = 272,                /* L_CBRACE  */
-    R_CBRACE = 273,                /* R_CBRACE  */
-    GT = 274,                      /* GT  */
-    GTE = 275,                     /* GTE  */
-    LT = 276,                      /* LT  */
-    LTE = 277,                     /* LTE  */
-    DIFF = 278,                    /* DIFF  */
-    EQUALS = 279,                  /* EQUALS  */
-    NOT = 280,                     /* NOT  */
-    OR = 281,                      /* OR  */
-    AND = 282                      /* AND  */
+    VARIABLE = 259,                /* VARIABLE  */
+    ATTRIB = 260,                  /* ATTRIB  */
+    IF = 261,                      /* IF  */
+    THEN = 262,                    /* THEN  */
+    ELSE = 263,                    /* ELSE  */
+    L_PAREN = 264,                 /* L_PAREN  */
+    R_PAREN = 265,                 /* R_PAREN  */
+    L_CBRACE = 266,                /* L_CBRACE  */
+    R_CBRACE = 267,                /* R_CBRACE  */
+    GT = 268,                      /* GT  */
+    GTE = 269,                     /* GTE  */
+    LT = 270,                      /* LT  */
+    LTE = 271,                     /* LTE  */
+    DIFF = 272,                    /* DIFF  */
+    EQUALS = 273,                  /* EQUALS  */
+    SEMICOLON = 274,               /* SEMICOLON  */
+    MINUS = 275,                   /* MINUS  */
+    PLUS = 276,                    /* PLUS  */
+    TIMES = 277,                   /* TIMES  */
+    DIVIDE = 278,                  /* DIVIDE  */
+    NEG = 279,                     /* NEG  */
+    OR = 280,                      /* OR  */
+    AND = 281,                     /* AND  */
+    NOT = 282                      /* NOT  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif

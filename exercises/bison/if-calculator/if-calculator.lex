@@ -9,6 +9,7 @@ DIGIT [0-9]
 %option noyywrap
 
 %%
+
 "+"             {return PLUS;}
 "-"             {return MINUS;}
 "/"             {return DIVIDE;}
@@ -30,10 +31,10 @@ DIGIT [0-9]
 "OR"            {return OR;}
 "AND"           {return AND;}
 ":="		        {return ATTRIB;}
+";"             {return SEMICOLON;}
 [a-z]           {yylval.valueInt=(int)(yytext[0])- 97; return VARIABLE; }
 {DIGIT}+(\.{DIGIT}*)? {yylval.value = atof(yytext); return VAL;}
-[ \t]           {}
-"\n"            {return DONE;}
+[ \t\n(\r\n)]   {}
 .               {printf("Error: invlaid lexeme '%s'.\n", yytext); return 0;}
 
 %%
