@@ -3,7 +3,7 @@ DIGIT [0-9]
 %{
 #include <stdio.h>
 #include <string.h>
-#include "if.tab.h"
+#include "if-calculator.tab.h"
 %}
 
 %option noyywrap

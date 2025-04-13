@@ -80,7 +80,7 @@ void yyerror(const char* str);
 double result = 0;
 double symb[26];
 
-#line 84 "if.tab.c"
+#line 84 "if-calculator.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -103,7 +103,7 @@ double symb[26];
 #  endif
 # endif
 
-#include "if.tab.h"
+#include "if-calculator.tab.h"
 /* Symbol kind.  */
 enum yysymbol_kind_t
 {
@@ -1412,43 +1412,43 @@ yyreduce:
   case 4: /* stmt_list: stmt  */
 #line 53 "if-calculator.y"
               {}
-#line 1416 "if.tab.c"
+#line 1416 "if-calculator.tab.c"
     break;
 
   case 5: /* stmt_list: stmt_list stmt  */
 #line 54 "if-calculator.y"
                           {}
-#line 1422 "if.tab.c"
+#line 1422 "if-calculator.tab.c"
     break;
 
   case 6: /* stmt: atrib SEMICOLON  */
 #line 57 "if-calculator.y"
                     {}
-#line 1428 "if.tab.c"
+#line 1428 "if-calculator.tab.c"
     break;
 
   case 7: /* stmt: expr SEMICOLON  */
 #line 58 "if-calculator.y"
                      {result = (yyvsp[-1].value);}
-#line 1434 "if.tab.c"
+#line 1434 "if-calculator.tab.c"
     break;
 
   case 8: /* stmt: if_stmt  */
 #line 59 "if-calculator.y"
               {}
-#line 1440 "if.tab.c"
+#line 1440 "if-calculator.tab.c"
     break;
 
   case 9: /* if_stmt: IF L_PAREN cond R_PAREN THEN L_CBRACE stmt_list R_CBRACE  */
 #line 62 "if-calculator.y"
                                                              { if ((yyvsp[-5].condition)) { (yyval.value) = (yyvsp[-1].value); }}
-#line 1446 "if.tab.c"
+#line 1446 "if-calculator.tab.c"
     break;
 
   case 10: /* if_stmt: IF L_PAREN cond R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE  */
 #line 63 "if-calculator.y"
                                                                                                 { if ((yyvsp[-9].condition)) { (yyval.value) = (yyvsp[-5].value); } else { (yyval.value) = (yyvsp[-1].value); }}
-#line 1452 "if.tab.c"
+#line 1452 "if-calculator.tab.c"
     break;
 
   case 11: /* atrib: VARIABLE ATTRIB expr  */
@@ -1457,113 +1457,113 @@ yyreduce:
      symb[(yyvsp[-2].valueInt)] = (yyvsp[0].value);
      (yyval.value) = (yyvsp[0].value);
   }
-#line 1461 "if.tab.c"
+#line 1461 "if-calculator.tab.c"
     break;
 
   case 12: /* cond: expr GT factor  */
 #line 71 "if-calculator.y"
                    {(yyval.condition) = (yyvsp[-2].value) > (yyvsp[0].value);}
-#line 1467 "if.tab.c"
+#line 1467 "if-calculator.tab.c"
     break;
 
   case 13: /* cond: expr GTE factor  */
 #line 72 "if-calculator.y"
                       {(yyval.condition) = (yyvsp[-2].value) >= (yyvsp[0].value);}
-#line 1473 "if.tab.c"
+#line 1473 "if-calculator.tab.c"
     break;
 
   case 14: /* cond: expr LT factor  */
 #line 73 "if-calculator.y"
                      {(yyval.condition) = (yyvsp[-2].value) < (yyvsp[0].value);}
-#line 1479 "if.tab.c"
+#line 1479 "if-calculator.tab.c"
     break;
 
   case 15: /* cond: expr LTE factor  */
 #line 74 "if-calculator.y"
                       {(yyval.condition) = (yyvsp[-2].value) <= (yyvsp[0].value);}
-#line 1485 "if.tab.c"
+#line 1485 "if-calculator.tab.c"
     break;
 
   case 16: /* cond: expr EQUALS expr  */
 #line 75 "if-calculator.y"
                        {(yyval.condition) = (yyvsp[-2].value) == (yyvsp[0].value);}
-#line 1491 "if.tab.c"
+#line 1491 "if-calculator.tab.c"
     break;
 
   case 17: /* cond: L_PAREN cond AND cond R_PAREN  */
 #line 76 "if-calculator.y"
                                     {(yyval.condition) = (yyvsp[-3].condition) && (yyvsp[-1].condition);}
-#line 1497 "if.tab.c"
+#line 1497 "if-calculator.tab.c"
     break;
 
   case 18: /* cond: L_PAREN cond OR cond R_PAREN  */
 #line 77 "if-calculator.y"
                                    {(yyval.condition) = (yyvsp[-3].condition) || (yyvsp[-1].condition);}
-#line 1503 "if.tab.c"
+#line 1503 "if-calculator.tab.c"
     break;
 
   case 19: /* cond: L_PAREN NOT cond R_PAREN  */
 #line 78 "if-calculator.y"
                                {(yyval.condition) = !(yyvsp[-1].condition);}
-#line 1509 "if.tab.c"
+#line 1509 "if-calculator.tab.c"
     break;
 
   case 20: /* expr: expr PLUS factor  */
 #line 80 "if-calculator.y"
                        {(yyval.value) = (yyvsp[-2].value) + (yyvsp[0].value);}
-#line 1515 "if.tab.c"
+#line 1515 "if-calculator.tab.c"
     break;
 
   case 21: /* expr: expr MINUS factor  */
 #line 81 "if-calculator.y"
                         {(yyval.value) = (yyvsp[-2].value) - (yyvsp[0].value);}
-#line 1521 "if.tab.c"
+#line 1521 "if-calculator.tab.c"
     break;
 
   case 22: /* expr: expr TIMES factor  */
 #line 82 "if-calculator.y"
                         {(yyval.value) = (yyvsp[-2].value) * (yyvsp[0].value);}
-#line 1527 "if.tab.c"
+#line 1527 "if-calculator.tab.c"
     break;
 
   case 23: /* expr: expr DIVIDE factor  */
 #line 83 "if-calculator.y"
                          {(yyval.value) = (yyvsp[-2].value) / (yyvsp[0].value);}
-#line 1533 "if.tab.c"
+#line 1533 "if-calculator.tab.c"
     break;
 
   case 24: /* expr: L_PAREN expr R_PAREN  */
 #line 84 "if-calculator.y"
                            {(yyval.value) = (yyvsp[-1].value);}
-#line 1539 "if.tab.c"
+#line 1539 "if-calculator.tab.c"
     break;
 
   case 25: /* expr: factor  */
 #line 85 "if-calculator.y"
              {(yyval.value) = (yyvsp[0].value);}
-#line 1545 "if.tab.c"
+#line 1545 "if-calculator.tab.c"
     break;
 
   case 26: /* factor: VAL  */
 #line 87 "if-calculator.y"
             {(yyval.value) = (yyvsp[0].value);}
-#line 1551 "if.tab.c"
+#line 1551 "if-calculator.tab.c"
     break;
 
   case 27: /* factor: MINUS VAL  */
 #line 88 "if-calculator.y"
                             {(yyval.value) = -(yyvsp[0].value);}
-#line 1557 "if.tab.c"
+#line 1557 "if-calculator.tab.c"
     break;
 
   case 28: /* factor: VARIABLE  */
 #line 89 "if-calculator.y"
                  { (yyval.value) = symb[(yyvsp[0].valueInt)]; }
-#line 1563 "if.tab.c"
+#line 1563 "if-calculator.tab.c"
     break;
 
 
-#line 1567 "if.tab.c"
+#line 1567 "if-calculator.tab.c"
 
       default: break;
     }
