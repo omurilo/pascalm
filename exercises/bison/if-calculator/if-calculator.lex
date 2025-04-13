@@ -3,7 +3,7 @@ DIGIT [0-9]
 %{
 #include <stdio.h>
 #include <string.h>
-#include "rpn.tab.h"
+#include "if.tab.h"
 %}
 
 %option noyywrap
@@ -13,8 +13,24 @@ DIGIT [0-9]
 "-"             {return MINUS;}
 "/"             {return DIVIDE;}
 "*"             {return TIMES;}
+"if"            {return IF;}
+"then"          {return THEN;}
+"else"          {return ELSE;}
+"("             {return L_PAREN;}
+")"             {return R_PAREN;}
+"{"             {return L_CBRACE;}
+"}"             {return R_CBRACE;}
+">="            {return GTE;}
+"<="            {return LTE;}
+">"             {return GT;}
+"<"             {return LT;}
+"="             {return EQUALS;}
+"<>"            {return DIFF;}
+"NOT"           {return NOT;}
+"OR"            {return OR;}
+"AND"           {return AND;}
+":="		        {return ATTRIB;}
 [a-z]           {yylval.valueInt=(int)(yytext[0])- 97; return VARIABLE; }
-"="		{return EQUALS;}
 {DIGIT}+(\.{DIGIT}*)? {yylval.value = atof(yytext); return VAL;}
 [ \t]           {}
 "\n"            {return DONE;}
