@@ -19,3 +19,10 @@ flex DIT_PATH/MODULE_NAME.lex
 g++ -o MODULE_NAME lex.yy.c MODULE_NAME.tab.c
 ./MODULE_NAME < MODULE_NAME.test.txt
 ```
+
+## Using Make (only bison)
+
+```bash
+cd MODULE_DIR
+make -f BASE_DIR/Makefile test
+```
