@@ -1,0 +1,11 @@
+int inteiro;
+boolean bool;
+char character;
+float double;
+
+inteiro := 10;
+bool := 10 < 20;
+character := 'a';
+double := 1.00;
+
+character;
