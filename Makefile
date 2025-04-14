@@ -1,10 +1,16 @@
+SHELL := /bin/bash
+
 LD=g++
 TARGET=$(shell basename $(PWD))
 FLEX=flex
 BISON=bison
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-NC='\033[0m'
+
+FG_BLACK :=\033[30m
+
+BG_RED := \033[101m
+BG_GREEN := \033[42m
+BG_YELLOW := \033[43m
+NC=\033[0m
 
 .PHONY: all clean
 
@@ -12,26 +18,26 @@ all: build run test clean
 
 build: $(TARGET).tab.c lex.yy.c
 	@$(LD) -o $(TARGET) $?
-	@echo "✅ \033[0;46m\033[30mBuild program finish\033[m"
+	@printf "✅$(BG_GREEN)$(FG_BLACK) Build program finish $(NC)\n"
 
 run: $(TARGET).test.txt build
-	@echo "Run program"
+	@printf "$(BG_YELLOW)$(FG_BLACK) Run program $(NC)\n"
 	@./$(TARGET) < $< > $(TARGET).output
 	@cat $(TARGET).output
 
 test: $(TARGET).output.txt run
-	@echo "Test program and compare output"
+	@printf "$(BG_YELLOW)$(FG_BLACK) Test program and compare output $(NC)\n"
 	@
 	@if diff_output=$$(diff $(TARGET).output $<); then \
-		echo "✅ \033[0;46m\033[30mTest sucessful\033[m\033[m"; \
+		printf  "✅$(BG_GREEN)$(FG_BLACK) Test sucessful $(NC)\n"; \
 	else \
-		echo "❌ \033[0;41m\033[30mTest error\033[m\033[m"; \
+		printf  "❌$(BG_RED)$(FG_BLACK) Test error $(NC)\n"; \
 		echo "$$diff_output"; \
 		exit 1; \
 	fi
 
 $(filter %.tab.c,$(TARGET).y): %.tab.c: %.y
-	echo "target: $@ prereq: $<"
+	@printf  "$(RED)target: $@ prereq: $<$(NC)"
 
 %.tab.c: $(TARGET).y
 	@$(BISON) -o $@ -H $< -Wcounterexamples
@@ -41,4 +47,4 @@ lex.yy.c: $(TARGET).lex $(TARGET).tab.c
 
 clean:
 	@rm -rf $(TARGET).output $(TARGET)
-	@echo "✅ \033[0;46m\033[30mFiles cleaned\033[m"
+	@printf  "✅$(BG_GREEN)$(FG_BLACK) Files cleaned $(NC)\n"

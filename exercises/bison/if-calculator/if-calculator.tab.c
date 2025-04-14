@@ -472,7 +472,7 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  17
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   118
+#define YYLAST   123
 
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  28
@@ -534,8 +534,8 @@ static const yytype_int8 yytranslate[] =
 static const yytype_int8 yyrline[] =
 {
        0,    49,    49,    50,    53,    54,    57,    58,    59,    62,
-      63,    65,    71,    72,    73,    74,    75,    76,    77,    78,
-      80,    81,    82,    83,    84,    85,    87,    88,    89
+      67,    81,    87,    88,    89,    90,    91,    92,    93,    94,
+      96,    97,    98,    99,   100,   101,   103,   104,   105
 };
 #endif
 
@@ -566,7 +566,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-22)
+#define YYPACT_NINF (-33)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -580,13 +580,13 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-      42,   -22,    -2,     4,    49,    12,     7,    42,   -22,    -3,
-      44,   -22,    49,    51,   -22,    69,   -22,   -22,   -22,   -22,
-     -22,    49,    49,    49,    49,    89,     1,    13,    80,   -22,
-     -21,   -21,   -22,   -22,    51,   -14,    62,    24,    53,    53,
-      53,    53,    49,    27,    51,    51,    33,   -22,   -22,   -22,
-     -22,    89,   -22,    37,    39,    42,   -22,   -22,    23,   -22,
-      60,   -22,    48,    42,    30,   -22
+      58,   -33,    -2,     4,    62,    12,     7,    58,   -33,    -3,
+      96,   -33,    62,    65,   -33,    80,   -33,   -33,   -33,   -33,
+     -33,    62,    62,    62,    62,   100,     1,    17,    91,   -33,
+     -21,   -21,   -33,   -33,    65,   -14,    73,    22,    62,    62,
+      62,    62,    62,    23,    65,    65,    28,   100,   100,   100,
+     100,   100,   -33,    34,    40,    58,   -33,   -33,    39,   -33,
+      45,   -33,    46,    58,    43,   -33
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -606,7 +606,7 @@ static const yytype_int8 yydefact[] =
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -22,    54,    11,    50,   -22,   -22,   -20,    -4,    77
+     -33,    47,    -7,   -32,   -33,   -33,   -20,    -4,   -33
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
@@ -622,32 +622,34 @@ static const yytype_int8 yytable[] =
 {
       15,    23,    24,    12,     1,    14,    35,    17,    25,    28,
       26,    44,    45,    13,    43,    16,    19,    30,    31,    32,
-      33,     5,    36,    37,    53,    54,     1,     2,    34,     3,
-      28,    46,     4,     1,     2,    60,     3,    52,    51,     4,
-      28,    28,    65,     5,    55,     1,     2,    56,     3,    57,
-       5,     4,     1,    14,     1,    14,     1,    14,     4,    63,
-      26,    18,     5,    20,    21,    22,    23,    24,    62,     5,
-       0,     5,    29,     5,    64,    38,    39,    40,    41,    29,
-      42,     0,    21,    22,    23,    24,     0,     0,     0,    21,
-      22,    23,    24,    38,    39,    40,    41,     0,    42,     0,
-      21,    22,    23,    24,     0,    59,     0,     0,    61,    21,
-      22,    23,    24,    59,    61,    47,    48,    49,    50
+      33,     5,    36,    59,    53,    54,    61,    37,    34,    46,
+      28,    59,    61,    52,    47,    48,    49,    50,    51,    55,
+      28,    28,     1,     2,    56,     3,     1,     2,     4,     3,
+      57,    60,     4,    62,    18,    65,    64,    63,     0,     5,
+       0,     1,     2,     5,     3,     1,    14,     4,     1,    14,
+       0,     4,     0,     0,    26,     0,     0,     0,     5,     0,
+       0,     0,     5,    29,     0,     5,    38,    39,    40,    41,
+      29,    42,     0,    21,    22,    23,    24,     0,     0,     0,
+      21,    22,    23,    24,    38,    39,    40,    41,     0,    42,
+       0,    21,    22,    23,    24,    20,    21,    22,    23,    24,
+      21,    22,    23,    24
 };
 
 static const yytype_int8 yycheck[] =
 {
        4,    22,    23,     5,     3,     4,    26,     0,    12,    13,
        9,    25,    26,     9,    34,     3,    19,    21,    22,    23,
-      24,    20,    26,    10,    44,    45,     3,     4,    27,     6,
-      34,     7,     9,     3,     4,    12,     6,    10,    42,     9,
-      44,    45,    12,    20,    11,     3,     4,    10,     6,    10,
-      20,     9,     3,     4,     3,     4,     3,     4,     9,    11,
-       9,     7,    20,    19,    20,    21,    22,    23,     8,    20,
-      -1,    20,    10,    20,    63,    13,    14,    15,    16,    10,
-      18,    -1,    20,    21,    22,    23,    -1,    -1,    -1,    20,
-      21,    22,    23,    13,    14,    15,    16,    -1,    18,    -1,
-      20,    21,    22,    23,    -1,    55,    -1,    -1,    58,    20,
-      21,    22,    23,    63,    64,    38,    39,    40,    41
+      24,    20,    26,    55,    44,    45,    58,    10,    27,     7,
+      34,    63,    64,    10,    38,    39,    40,    41,    42,    11,
+      44,    45,     3,     4,    10,     6,     3,     4,     9,     6,
+      10,    12,     9,     8,     7,    12,    63,    11,    -1,    20,
+      -1,     3,     4,    20,     6,     3,     4,     9,     3,     4,
+      -1,     9,    -1,    -1,     9,    -1,    -1,    -1,    20,    -1,
+      -1,    -1,    20,    10,    -1,    20,    13,    14,    15,    16,
+      10,    18,    -1,    20,    21,    22,    23,    -1,    -1,    -1,
+      20,    21,    22,    23,    13,    14,    15,    16,    -1,    18,
+      -1,    20,    21,    22,    23,    19,    20,    21,    22,    23,
+      20,    21,    22,    23
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
@@ -658,8 +660,8 @@ static const yytype_int8 yystos[] =
       35,    36,     5,     9,     4,    35,     3,     0,    29,    19,
       19,    20,    21,    22,    23,    35,     9,    34,    35,    10,
       35,    35,    35,    35,    27,    34,    35,    10,    13,    14,
-      15,    16,    18,    34,    25,    26,     7,    36,    36,    36,
-      36,    35,    10,    34,    34,    11,    10,    10,    30,    31,
+      15,    16,    18,    34,    25,    26,     7,    35,    35,    35,
+      35,    35,    10,    34,    34,    11,    10,    10,    30,    31,
       12,    31,     8,    11,    30,    12
 };
 
@@ -1409,161 +1411,165 @@ yyreduce:
   YY_REDUCE_PRINT (yyn);
   switch (yyn)
     {
-  case 4: /* stmt_list: stmt  */
-#line 53 "if-calculator.y"
-              {}
-#line 1416 "if-calculator.tab.c"
-    break;
-
-  case 5: /* stmt_list: stmt_list stmt  */
-#line 54 "if-calculator.y"
-                          {}
-#line 1422 "if-calculator.tab.c"
-    break;
-
   case 6: /* stmt: atrib SEMICOLON  */
 #line 57 "if-calculator.y"
                     {}
-#line 1428 "if-calculator.tab.c"
+#line 1418 "if-calculator.tab.c"
     break;
 
   case 7: /* stmt: expr SEMICOLON  */
 #line 58 "if-calculator.y"
-                     {result = (yyvsp[-1].value);}
-#line 1434 "if-calculator.tab.c"
+                     {}
+#line 1424 "if-calculator.tab.c"
     break;
 
   case 8: /* stmt: if_stmt  */
 #line 59 "if-calculator.y"
               {}
-#line 1440 "if-calculator.tab.c"
+#line 1430 "if-calculator.tab.c"
     break;
 
   case 9: /* if_stmt: IF L_PAREN cond R_PAREN THEN L_CBRACE stmt_list R_CBRACE  */
 #line 62 "if-calculator.y"
-                                                             { if ((yyvsp[-5].condition)) { (yyval.value) = (yyvsp[-1].value); }}
-#line 1446 "if-calculator.tab.c"
+                                                             { 
+      if ((yyvsp[-5].condition)) {
+        (yyval.value) = (yyvsp[-1].value);
+      }
+    }
+#line 1440 "if-calculator.tab.c"
     break;
 
   case 10: /* if_stmt: IF L_PAREN cond R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE  */
-#line 63 "if-calculator.y"
-                                                                                                { if ((yyvsp[-9].condition)) { (yyval.value) = (yyvsp[-5].value); } else { (yyval.value) = (yyvsp[-1].value); }}
-#line 1452 "if-calculator.tab.c"
+#line 67 "if-calculator.y"
+                                                                                                {
+      if ((yyvsp[-9].condition)) { 
+        (yyval.value) = (yyvsp[-5].value);
+        if (!result) {
+          result = (yyvsp[-5].value);
+        }
+      } else {
+        (yyval.value) = (yyvsp[-1].value);
+        if (!result) {
+          result = (yyvsp[-1].value);
+        }
+      }
+    }
+#line 1458 "if-calculator.tab.c"
     break;
 
   case 11: /* atrib: VARIABLE ATTRIB expr  */
-#line 65 "if-calculator.y"
+#line 81 "if-calculator.y"
                             { 
      symb[(yyvsp[-2].valueInt)] = (yyvsp[0].value);
      (yyval.value) = (yyvsp[0].value);
   }
-#line 1461 "if-calculator.tab.c"
-    break;
-
-  case 12: /* cond: expr GT factor  */
-#line 71 "if-calculator.y"
-                   {(yyval.condition) = (yyvsp[-2].value) > (yyvsp[0].value);}
 #line 1467 "if-calculator.tab.c"
     break;
 
-  case 13: /* cond: expr GTE factor  */
-#line 72 "if-calculator.y"
-                      {(yyval.condition) = (yyvsp[-2].value) >= (yyvsp[0].value);}
+  case 12: /* cond: expr GT expr  */
+#line 87 "if-calculator.y"
+                 {(yyval.condition) = (yyvsp[-2].value) > (yyvsp[0].value);}
 #line 1473 "if-calculator.tab.c"
     break;
 
-  case 14: /* cond: expr LT factor  */
-#line 73 "if-calculator.y"
-                     {(yyval.condition) = (yyvsp[-2].value) < (yyvsp[0].value);}
+  case 13: /* cond: expr GTE expr  */
+#line 88 "if-calculator.y"
+                    {(yyval.condition) = (yyvsp[-2].value) >= (yyvsp[0].value);}
 #line 1479 "if-calculator.tab.c"
     break;
 
-  case 15: /* cond: expr LTE factor  */
-#line 74 "if-calculator.y"
-                      {(yyval.condition) = (yyvsp[-2].value) <= (yyvsp[0].value);}
+  case 14: /* cond: expr LT expr  */
+#line 89 "if-calculator.y"
+                   {(yyval.condition) = (yyvsp[-2].value) < (yyvsp[0].value);}
 #line 1485 "if-calculator.tab.c"
     break;
 
-  case 16: /* cond: expr EQUALS expr  */
-#line 75 "if-calculator.y"
-                       {(yyval.condition) = (yyvsp[-2].value) == (yyvsp[0].value);}
+  case 15: /* cond: expr LTE expr  */
+#line 90 "if-calculator.y"
+                    {(yyval.condition) = (yyvsp[-2].value) <= (yyvsp[0].value);}
 #line 1491 "if-calculator.tab.c"
     break;
 
-  case 17: /* cond: L_PAREN cond AND cond R_PAREN  */
-#line 76 "if-calculator.y"
-                                    {(yyval.condition) = (yyvsp[-3].condition) && (yyvsp[-1].condition);}
+  case 16: /* cond: expr EQUALS expr  */
+#line 91 "if-calculator.y"
+                       {(yyval.condition) = (yyvsp[-2].value) == (yyvsp[0].value);}
 #line 1497 "if-calculator.tab.c"
     break;
 
-  case 18: /* cond: L_PAREN cond OR cond R_PAREN  */
-#line 77 "if-calculator.y"
-                                   {(yyval.condition) = (yyvsp[-3].condition) || (yyvsp[-1].condition);}
+  case 17: /* cond: L_PAREN cond AND cond R_PAREN  */
+#line 92 "if-calculator.y"
+                                    {(yyval.condition) = (yyvsp[-3].condition) && (yyvsp[-1].condition);}
 #line 1503 "if-calculator.tab.c"
     break;
 
-  case 19: /* cond: L_PAREN NOT cond R_PAREN  */
-#line 78 "if-calculator.y"
-                               {(yyval.condition) = !(yyvsp[-1].condition);}
+  case 18: /* cond: L_PAREN cond OR cond R_PAREN  */
+#line 93 "if-calculator.y"
+                                   {(yyval.condition) = (yyvsp[-3].condition) || (yyvsp[-1].condition);}
 #line 1509 "if-calculator.tab.c"
     break;
 
-  case 20: /* expr: expr PLUS expr  */
-#line 80 "if-calculator.y"
-                     {(yyval.value) = (yyvsp[-2].value) + (yyvsp[0].value);}
+  case 19: /* cond: L_PAREN NOT cond R_PAREN  */
+#line 94 "if-calculator.y"
+                               {(yyval.condition) = !(yyvsp[-1].condition);}
 #line 1515 "if-calculator.tab.c"
     break;
 
-  case 21: /* expr: expr MINUS expr  */
-#line 81 "if-calculator.y"
-                      {(yyval.value) = (yyvsp[-2].value) - (yyvsp[0].value);}
+  case 20: /* expr: expr PLUS expr  */
+#line 96 "if-calculator.y"
+                     {(yyval.value) = (yyvsp[-2].value) + (yyvsp[0].value);}
 #line 1521 "if-calculator.tab.c"
     break;
 
-  case 22: /* expr: expr TIMES expr  */
-#line 82 "if-calculator.y"
-                      {(yyval.value) = (yyvsp[-2].value) * (yyvsp[0].value);}
+  case 21: /* expr: expr MINUS expr  */
+#line 97 "if-calculator.y"
+                      {(yyval.value) = (yyvsp[-2].value) - (yyvsp[0].value);}
 #line 1527 "if-calculator.tab.c"
     break;
 
-  case 23: /* expr: expr DIVIDE expr  */
-#line 83 "if-calculator.y"
-                       {(yyval.value) = (yyvsp[-2].value) / (yyvsp[0].value);}
+  case 22: /* expr: expr TIMES expr  */
+#line 98 "if-calculator.y"
+                      {(yyval.value) = (yyvsp[-2].value) * (yyvsp[0].value);}
 #line 1533 "if-calculator.tab.c"
     break;
 
-  case 24: /* expr: L_PAREN expr R_PAREN  */
-#line 84 "if-calculator.y"
-                           {(yyval.value) = (yyvsp[-1].value);}
+  case 23: /* expr: expr DIVIDE expr  */
+#line 99 "if-calculator.y"
+                       {(yyval.value) = (yyvsp[-2].value) / (yyvsp[0].value);}
 #line 1539 "if-calculator.tab.c"
     break;
 
-  case 25: /* expr: factor  */
-#line 85 "if-calculator.y"
-             {(yyval.value) = (yyvsp[0].value);}
+  case 24: /* expr: L_PAREN expr R_PAREN  */
+#line 100 "if-calculator.y"
+                           {(yyval.value) = (yyvsp[-1].value);}
 #line 1545 "if-calculator.tab.c"
     break;
 
-  case 26: /* factor: VAL  */
-#line 87 "if-calculator.y"
-            {(yyval.value) = (yyvsp[0].value);}
+  case 25: /* expr: factor  */
+#line 101 "if-calculator.y"
+             {(yyval.value) = (yyvsp[0].value);}
 #line 1551 "if-calculator.tab.c"
     break;
 
-  case 27: /* factor: MINUS VAL  */
-#line 88 "if-calculator.y"
-                            {(yyval.value) = -(yyvsp[0].value);}
+  case 26: /* factor: VAL  */
+#line 103 "if-calculator.y"
+            {(yyval.value) = (yyvsp[0].value);}
 #line 1557 "if-calculator.tab.c"
     break;
 
-  case 28: /* factor: VARIABLE  */
-#line 89 "if-calculator.y"
-                 { (yyval.value) = symb[(yyvsp[0].valueInt)]; }
+  case 27: /* factor: MINUS VAL  */
+#line 104 "if-calculator.y"
+                            {(yyval.value) = -(yyvsp[0].value);}
 #line 1563 "if-calculator.tab.c"
     break;
 
+  case 28: /* factor: VARIABLE  */
+#line 105 "if-calculator.y"
+                 { (yyval.value) = symb[(yyvsp[0].valueInt)]; }
+#line 1569 "if-calculator.tab.c"
+    break;
 
-#line 1567 "if-calculator.tab.c"
+
+#line 1573 "if-calculator.tab.c"
 
       default: break;
     }
@@ -1787,7 +1793,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 90 "if-calculator.y"
+#line 106 "if-calculator.y"
 
 
 int yywrap( ) {
@@ -1799,7 +1805,6 @@ void yyerror(const char* str) {
 }
 
 int main() {
-  /*yydebug = 1;*/
   yyparse();
   printf("The answer is %lf\n", result);
   return 0;

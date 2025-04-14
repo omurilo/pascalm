@@ -50,17 +50,36 @@ progexec:
         | stmt progexec
 
 stmt_list:
-         stmt {}
-         | stmt_list stmt {}
+         stmt
+         | stmt_list stmt 
 
 stmt:
     atrib SEMICOLON {}
-    | expr SEMICOLON {result = $1;}
+    | expr SEMICOLON {}
     | if_stmt {}
 
 if_stmt:
-    IF L_PAREN cond R_PAREN THEN L_CBRACE stmt_list R_CBRACE { if ($3) { $<value>$ = $7; }}
-    | IF L_PAREN cond R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE { if ($3) { $<value>$ = $7; } else { $<value>$ = $11; }}
+    IF L_PAREN cond R_PAREN THEN L_CBRACE stmt_list R_CBRACE { 
+      if ($3) {
+        $<value>$ = $7;
+        if (!result) {
+          result = $7;
+        }
+      }
+    }
+    | IF L_PAREN cond R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE {
+      if ($3) { 
+        $<value>$ = $7;
+        if (!result) {
+          result = $7;
+        }
+      } else {
+        $<value>$ = $11;
+        if (!result) {
+          result = $11;
+        }
+      }
+    }
  
 atrib: VARIABLE ATTRIB expr { 
      symb[$1] = $3;
@@ -68,10 +87,10 @@ atrib: VARIABLE ATTRIB expr {
   }
 
 cond:
-    expr GT factor {$$ = $1 > $3;}
-    | expr GTE factor {$$ = $1 >= $3;}
-    | expr LT factor {$$ = $1 < $3;}
-    | expr LTE factor {$$ = $1 <= $3;}
+    expr GT expr {$$ = $1 > $3;}
+    | expr GTE expr {$$ = $1 >= $3;}
+    | expr LT expr {$$ = $1 < $3;}
+    | expr LTE expr {$$ = $1 <= $3;}
     | expr EQUALS expr {$$ = $1 == $3;}
     | L_PAREN cond AND cond R_PAREN {$$ = $2 && $4;}
     | L_PAREN cond OR cond R_PAREN {$$ = $2 || $4;}
@@ -98,7 +117,6 @@ void yyerror(const char* str) {
 }
 
 int main() {
-  /*yydebug = 1;*/
   yyparse();
   printf("The answer is %lf\n", result);
   return 0;
