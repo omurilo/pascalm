@@ -43,3 +43,5 @@ Accept negative numbers with a unary `-` sign.
 Evaluate semantic operations: boolean variables only accept values resulting from
 <logical_expr> operations. Integer or float variables can receive expressions with numbers
 (performing conversions when necessary).
+
+USING REFERENCES AT: [Flex Examples](https://github.com/westes/flex/blob/master/examples/manual/pascal.lex)

@@ -149,28 +149,29 @@ enum yysymbol_kind_t
   YYSYMBOL_VAL = 18,                       /* VAL  */
   YYSYMBOL_VARIABLE = 19,                  /* VARIABLE  */
   YYSYMBOL_TYPE = 20,                      /* TYPE  */
-  YYSYMBOL_WRITE = 21,                     /* WRITE  */
-  YYSYMBOL_READ = 22,                      /* READ  */
-  YYSYMBOL_MINUS = 23,                     /* MINUS  */
-  YYSYMBOL_PLUS = 24,                      /* PLUS  */
-  YYSYMBOL_TIMES = 25,                     /* TIMES  */
-  YYSYMBOL_DIVIDE = 26,                    /* DIVIDE  */
-  YYSYMBOL_NEG = 27,                       /* NEG  */
-  YYSYMBOL_OR = 28,                        /* OR  */
-  YYSYMBOL_AND = 29,                       /* AND  */
-  YYSYMBOL_NOT = 30,                       /* NOT  */
-  YYSYMBOL_YYACCEPT = 31,                  /* $accept  */
-  YYSYMBOL_progexec = 32,                  /* progexec  */
-  YYSYMBOL_declarations = 33,              /* declarations  */
-  YYSYMBOL_declaration = 34,               /* declaration  */
-  YYSYMBOL_stmt_list = 35,                 /* stmt_list  */
-  YYSYMBOL_stmt = 36,                      /* stmt  */
-  YYSYMBOL_if_stmt = 37,                   /* if_stmt  */
-  YYSYMBOL_atrib = 38,                     /* atrib  */
-  YYSYMBOL_expr_value = 39,                /* expr_value  */
-  YYSYMBOL_logical_expr = 40,              /* logical_expr  */
-  YYSYMBOL_arithmetic_expr = 41,           /* arithmetic_expr  */
-  YYSYMBOL_factor = 42                     /* factor  */
+  YYSYMBOL_STRING = 21,                    /* STRING  */
+  YYSYMBOL_WRITE = 22,                     /* WRITE  */
+  YYSYMBOL_READ = 23,                      /* READ  */
+  YYSYMBOL_MINUS = 24,                     /* MINUS  */
+  YYSYMBOL_PLUS = 25,                      /* PLUS  */
+  YYSYMBOL_TIMES = 26,                     /* TIMES  */
+  YYSYMBOL_DIVIDE = 27,                    /* DIVIDE  */
+  YYSYMBOL_NEG = 28,                       /* NEG  */
+  YYSYMBOL_OR = 29,                        /* OR  */
+  YYSYMBOL_AND = 30,                       /* AND  */
+  YYSYMBOL_NOT = 31,                       /* NOT  */
+  YYSYMBOL_YYACCEPT = 32,                  /* $accept  */
+  YYSYMBOL_progexec = 33,                  /* progexec  */
+  YYSYMBOL_declarations = 34,              /* declarations  */
+  YYSYMBOL_declaration = 35,               /* declaration  */
+  YYSYMBOL_stmt_list = 36,                 /* stmt_list  */
+  YYSYMBOL_stmt = 37,                      /* stmt  */
+  YYSYMBOL_if_stmt = 38,                   /* if_stmt  */
+  YYSYMBOL_atrib = 39,                     /* atrib  */
+  YYSYMBOL_expr_value = 40,                /* expr_value  */
+  YYSYMBOL_logical_expr = 41,              /* logical_expr  */
+  YYSYMBOL_arithmetic_expr = 42,           /* arithmetic_expr  */
+  YYSYMBOL_factor = 43                     /* factor  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -498,10 +499,10 @@ union yyalloc
 /* YYFINAL -- State number of the termination state.  */
 #define YYFINAL  3
 /* YYLAST -- Last index in YYTABLE.  */
-#define YYLAST   139
+#define YYLAST   120
 
 /* YYNTOKENS -- Number of terminals.  */
-#define YYNTOKENS  31
+#define YYNTOKENS  32
 /* YYNNTS -- Number of nonterminals.  */
 #define YYNNTS  12
 /* YYNRULES -- Number of rules.  */
@@ -510,7 +511,7 @@ union yyalloc
 #define YYNSTATES  73
 
 /* YYMAXUTOK -- Last valid token kind.  */
-#define YYMAXUTOK   285
+#define YYMAXUTOK   286
 
 
 /* YYTRANSLATE(TOKEN-NUM) -- Symbol number corresponding to TOKEN-NUM
@@ -552,17 +553,17 @@ static const yytype_int8 yytranslate[] =
        2,     2,     2,     2,     2,     2,     1,     2,     3,     4,
        5,     6,     7,     8,     9,    10,    11,    12,    13,    14,
       15,    16,    17,    18,    19,    20,    21,    22,    23,    24,
-      25,    26,    27,    28,    29,    30
+      25,    26,    27,    28,    29,    30,    31
 };
 
 #if YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
-static const yytype_uint8 yyrline[] =
+static const yytype_int16 yyrline[] =
 {
-       0,    88,    88,    89,    91,    92,    95,   103,   104,   107,
-     108,   109,   112,   117,   125,   168,   169,   172,   176,   180,
-     184,   188,   194,   198,   202,   208,   209,   210,   211,   212,
-     213,   216,   217,   218
+       0,    87,    87,    88,    90,    91,    94,   102,   103,   106,
+     107,   108,   111,   116,   124,   167,   168,   171,   175,   179,
+     183,   187,   193,   197,   201,   207,   234,   261,   288,   315,
+     316,   319,   320,   328
 };
 #endif
 
@@ -580,10 +581,10 @@ static const char *const yytname[] =
 {
   "\"end of file\"", "error", "\"invalid token\"", "ATTRIB", "IF", "THEN",
   "ELSE", "L_PAREN", "R_PAREN", "L_CBRACE", "R_CBRACE", "GT", "GTE", "LT",
-  "LTE", "DIFF", "EQUALS", "SEMICOLON", "VAL", "VARIABLE", "TYPE", "WRITE",
-  "READ", "MINUS", "PLUS", "TIMES", "DIVIDE", "NEG", "OR", "AND", "NOT",
-  "$accept", "progexec", "declarations", "declaration", "stmt_list",
-  "stmt", "if_stmt", "atrib", "expr_value", "logical_expr",
+  "LTE", "DIFF", "EQUALS", "SEMICOLON", "VAL", "VARIABLE", "TYPE",
+  "STRING", "WRITE", "READ", "MINUS", "PLUS", "TIMES", "DIVIDE", "NEG",
+  "OR", "AND", "NOT", "$accept", "progexec", "declarations", "declaration",
+  "stmt_list", "stmt", "if_stmt", "atrib", "expr_value", "logical_expr",
   "arithmetic_expr", "factor", YY_NULLPTR
 };
 
@@ -594,7 +595,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-23)
+#define YYPACT_NINF (-24)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -608,14 +609,14 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-     -23,     5,    13,   -23,     4,    -5,   -23,    16,     7,     9,
-     -23,    34,   -23,    18,    91,   -23,   100,   -23,    80,   100,
-      23,   -23,   -23,   -23,   -23,    -5,    -5,    -5,    -5,    42,
-      38,   113,   -23,   -23,   -23,   113,   -23,   -22,   -22,   -23,
-     -23,   100,     1,    86,    45,    -5,    -5,    -5,    -5,    -5,
-      43,   100,   100,    44,   -16,   -16,   -16,   -16,   -16,   -23,
-      46,    49,    73,   -23,   -23,    48,   -23,    50,   -23,    53,
-      73,    66,   -23
+     -24,     5,    42,   -24,     4,    33,   -24,    15,     1,    13,
+     -24,    27,   -24,    37,    93,   -24,    60,   -24,     9,    60,
+      38,   -24,   -24,   -24,   -24,    33,    33,    33,    33,    -5,
+      24,    88,   -24,   -24,   -24,    88,   -24,   -23,   -23,   -24,
+     -24,    60,     0,    82,    53,    33,    33,    33,    33,    33,
+      51,    60,    60,    67,   -17,   -17,   -17,   -17,   -17,   -24,
+      65,    69,    68,   -24,   -24,    46,   -24,    74,   -24,    72,
+      68,    64,   -24
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -636,8 +637,8 @@ static const yytype_int8 yydefact[] =
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -23,    57,   -23,   -23,   -11,    -2,   -23,   -23,   -23,   -13,
-      -4,   -23
+     -24,    78,   -24,   -24,    21,    -2,   -24,   -24,   -24,   -13,
+      -4,   -24
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
@@ -652,61 +653,59 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-      11,    18,     5,    27,    28,     3,    34,    25,    26,    27,
-      28,    16,    31,     6,    17,    35,    42,     4,     9,    19,
-       5,    37,    38,    39,    40,    43,    20,    21,    50,    51,
-      52,     6,     7,     8,    -2,    23,     9,    31,    60,    61,
-      36,    54,    55,    56,    57,    58,    44,    31,    31,    29,
-      53,    59,     4,    62,    63,     5,    69,    64,    67,    71,
-       6,    17,    70,    68,     0,     9,     6,     7,    22,    68,
-       4,     9,    41,     5,     0,     0,    72,     4,     0,     0,
-       5,     0,     0,     0,     6,     7,     0,     0,    32,     9,
-       0,     6,     7,     0,    32,     0,     9,    45,    46,    47,
-      48,     0,    49,    25,    26,    27,    28,    29,    24,    25,
-      26,    27,    28,     0,    25,    26,    27,    28,     6,    17,
-       0,     0,     0,     9,    45,    46,    47,    48,     0,    49,
-       0,     0,     0,     0,     0,     0,    25,    26,    27,    28
+      11,    18,    29,    27,    28,     3,    34,    25,    26,    27,
+      28,    16,    31,     6,    17,    35,    42,    32,    19,     9,
+      20,    37,    38,    39,    40,    43,    41,    -2,    50,    51,
+      52,    21,    44,    25,    26,    27,    28,    31,    60,    61,
+       5,    54,    55,    56,    57,    58,     4,    31,    31,     5,
+       4,     6,    17,     5,    23,    36,    67,     9,    53,    59,
+       6,     7,     8,    68,     6,     7,     9,    29,     4,    68,
+       9,     5,     4,    63,    72,     5,    62,    64,     6,    17,
+      69,    70,     6,     7,     9,     0,     6,     7,     9,    22,
+      32,    71,     9,    45,    46,    47,    48,     0,    49,    45,
+      46,    47,    48,     0,    49,     0,    25,    26,    27,    28,
+      24,     0,    25,    26,    27,    28,     0,    25,    26,    27,
+      28
 };
 
 static const yytype_int8 yycheck[] =
 {
-       2,     5,     7,    25,    26,     0,    19,    23,    24,    25,
-      26,     7,    16,    18,    19,    19,    29,     4,    23,     3,
-       7,    25,    26,    27,    28,    29,    19,    18,    41,    28,
-      29,    18,    19,    20,     0,    17,    23,    41,    51,    52,
-      17,    45,    46,    47,    48,    49,     8,    51,    52,     7,
-       5,     8,     4,     9,     8,     7,     6,     8,    10,    70,
-      18,    19,     9,    65,    -1,    23,    18,    19,    11,    71,
-       4,    23,    30,     7,    -1,    -1,    10,     4,    -1,    -1,
-       7,    -1,    -1,    -1,    18,    19,    -1,    -1,     8,    23,
-      -1,    18,    19,    -1,     8,    -1,    23,    11,    12,    13,
-      14,    -1,    16,    23,    24,    25,    26,     7,    17,    23,
-      24,    25,    26,    -1,    23,    24,    25,    26,    18,    19,
-      -1,    -1,    -1,    23,    11,    12,    13,    14,    -1,    16,
-      -1,    -1,    -1,    -1,    -1,    -1,    23,    24,    25,    26
+       2,     5,     7,    26,    27,     0,    19,    24,    25,    26,
+      27,     7,    16,    18,    19,    19,    29,     8,     3,    24,
+      19,    25,    26,    27,    28,    29,    31,     0,    41,    29,
+      30,    18,     8,    24,    25,    26,    27,    41,    51,    52,
+       7,    45,    46,    47,    48,    49,     4,    51,    52,     7,
+       4,    18,    19,     7,    17,    17,    10,    24,     5,     8,
+      18,    19,    20,    65,    18,    19,    24,     7,     4,    71,
+      24,     7,     4,     8,    10,     7,     9,     8,    18,    19,
+       6,     9,    18,    19,    24,    -1,    18,    19,    24,    11,
+       8,    70,    24,    11,    12,    13,    14,    -1,    16,    11,
+      12,    13,    14,    -1,    16,    -1,    24,    25,    26,    27,
+      17,    -1,    24,    25,    26,    27,    -1,    24,    25,    26,
+      27
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
    state STATE-NUM.  */
 static const yytype_int8 yystos[] =
 {
-       0,    32,    33,     0,     4,     7,    18,    19,    20,    23,
-      34,    36,    37,    38,    41,    42,     7,    19,    41,     3,
-      19,    18,    32,    17,    17,    23,    24,    25,    26,     7,
-      40,    41,     8,    39,    40,    41,    17,    41,    41,    41,
-      41,    30,    40,    41,     8,    11,    12,    13,    14,    16,
-      40,    28,    29,     5,    41,    41,    41,    41,    41,     8,
-      40,    40,     9,     8,     8,    35,    36,    10,    36,     6,
-       9,    35,    10
+       0,    33,    34,     0,     4,     7,    18,    19,    20,    24,
+      35,    37,    38,    39,    42,    43,     7,    19,    42,     3,
+      19,    18,    33,    17,    17,    24,    25,    26,    27,     7,
+      41,    42,     8,    40,    41,    42,    17,    42,    42,    42,
+      42,    31,    41,    42,     8,    11,    12,    13,    14,    16,
+      41,    29,    30,     5,    42,    42,    42,    42,    42,     8,
+      41,    41,     9,     8,     8,    36,    37,    10,    37,     6,
+       9,    36,    10
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
-       0,    31,    32,    32,    33,    33,    34,    35,    35,    36,
-      36,    36,    37,    37,    38,    39,    39,    40,    40,    40,
-      40,    40,    40,    40,    40,    41,    41,    41,    41,    41,
-      41,    42,    42,    42
+       0,    32,    33,    33,    34,    34,    35,    36,    36,    37,
+      37,    37,    38,    38,    39,    40,    40,    41,    41,    41,
+      41,    41,    41,    41,    41,    42,    42,    42,    42,    42,
+      42,    43,    43,    43
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
@@ -1449,91 +1448,91 @@ yyreduce:
   switch (yyn)
     {
   case 6: /* declaration: TYPE VARIABLE SEMICOLON  */
-#line 95 "symbol-table.y"
+#line 94 "symbol-table.y"
                           {
     if (add_symbol((yyvsp[-1].identifier), (VarType)(yyvsp[-2].type)) == -1) {
-      yerror("Error on variable declaration");
+      fprintf(stderr, "Mismatch types");
     }
     free((yyvsp[-1].identifier));
   }
-#line 1460 "symbol-table.tab.c"
+#line 1459 "symbol-table.tab.c"
     break;
 
   case 9: /* stmt: atrib SEMICOLON  */
-#line 107 "symbol-table.y"
+#line 106 "symbol-table.y"
                     {}
-#line 1466 "symbol-table.tab.c"
+#line 1465 "symbol-table.tab.c"
     break;
 
   case 10: /* stmt: arithmetic_expr SEMICOLON  */
-#line 108 "symbol-table.y"
+#line 107 "symbol-table.y"
                                 {}
-#line 1472 "symbol-table.tab.c"
+#line 1471 "symbol-table.tab.c"
     break;
 
   case 11: /* stmt: if_stmt  */
-#line 109 "symbol-table.y"
+#line 108 "symbol-table.y"
               {}
-#line 1478 "symbol-table.tab.c"
+#line 1477 "symbol-table.tab.c"
     break;
 
   case 12: /* if_stmt: IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE  */
-#line 112 "symbol-table.y"
+#line 111 "symbol-table.y"
                                                                      { 
-      if ((yyvsp[-5].condition)) {
+      if ((yyvsp[-5].value).b) {
         (yyval.value) = (yyvsp[-1].value);
               }
     }
-#line 1488 "symbol-table.tab.c"
+#line 1487 "symbol-table.tab.c"
     break;
 
   case 13: /* if_stmt: IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE  */
-#line 117 "symbol-table.y"
+#line 116 "symbol-table.y"
                                                                                                         {
-      if ((yyvsp[-9].condition)) { 
+      if ((yyvsp[-9].value).b) { 
         (yyval.value) = (yyvsp[-5].value);
               } else {
         (yyval.value) = (yyvsp[-1].value);
               }
     }
-#line 1500 "symbol-table.tab.c"
+#line 1499 "symbol-table.tab.c"
     break;
 
   case 14: /* atrib: VARIABLE ATTRIB expr_value  */
-#line 125 "symbol-table.y"
+#line 124 "symbol-table.y"
                                   {
      int si = get_symbol_index((yyvsp[-2].identifier));
      if (si != -1) {
       Symbol symb = symb_table[si];
-      val_type = (yyvsp[0].value).type;
+      char val_type = (yyvsp[0].value).type;
 
       switch (symb.type) {
         case TYPE_INT:
           if (val_type == TYPE_INT) {
             symb_table[si].i = (yyvsp[0].value).i;
           } else {
-            yyerror("Semantic Error: Variable '%s' type mismatch", (yyvsp[-2].identifier));
+            /*yyerror("Semantic Error: Variable '%s' type mismatch", $1);*/
           }
           break;
         case TYPE_BOOL:
           if (val_type == TYPE_BOOL) {
             symb_table[si].b = (yyvsp[0].value).b;
           } else {
-            yyerror("Semantic Error: Variable '%s' type mismatch", (yyvsp[-2].identifier));
+            /*yyerror("Semantic Error: Variable '%s' type mismatch", $1);*/
           }
           break;
         case TYPE_CHAR:
           if (val_type == TYPE_CHAR) {
             symb_table[si].c = (yyvsp[0].value).c;
           } else {
-            yyerror("Semantic Error: Variable '%s' type mismatch", (yyvsp[-2].identifier));
+            /*yyerror("Semantic Error: Variable '%s' type mismatch", $1);*/
           }
           break;
         case TYPE_FLOAT:
           if (val_type == TYPE_FLOAT) {
             symb_table[si].f = (yyvsp[0].value).f;
           } else {
-            yyerror("Semantic Error: Variable '%s' type mismatch", (yyvsp[-2].identifier));
+            /*yyerror("Semantic Error: Variable '%s' type mismatch", $1);*/
           }
           break;
       }
@@ -1542,145 +1541,256 @@ yyreduce:
       exit(1);
      }
   }
-#line 1546 "symbol-table.tab.c"
+#line 1545 "symbol-table.tab.c"
     break;
 
   case 15: /* expr_value: arithmetic_expr  */
-#line 168 "symbol-table.y"
+#line 167 "symbol-table.y"
                           { (yyval.value) = (yyvsp[0].value); }
-#line 1552 "symbol-table.tab.c"
+#line 1551 "symbol-table.tab.c"
     break;
 
   case 16: /* expr_value: logical_expr  */
-#line 169 "symbol-table.y"
-                         { (yyval.value) = (yyvsp[0].condition); }
-#line 1558 "symbol-table.tab.c"
+#line 168 "symbol-table.y"
+                         { (yyval.value) = (yyvsp[0].value); }
+#line 1557 "symbol-table.tab.c"
     break;
 
   case 17: /* logical_expr: arithmetic_expr GT arithmetic_expr  */
-#line 172 "symbol-table.y"
+#line 171 "symbol-table.y"
                                        {
-      (yyval.condition).type = TYPE_BOOL;
-      (yyval.condition).b = (yyvsp[-2].value).i > (yyvsp[0].value).i;
+      (yyval.value).type = TYPE_BOOL;
+      (yyval.value).b = (yyvsp[-2].value).i > (yyvsp[0].value).i;
     }
-#line 1567 "symbol-table.tab.c"
+#line 1566 "symbol-table.tab.c"
     break;
 
   case 18: /* logical_expr: arithmetic_expr GTE arithmetic_expr  */
-#line 176 "symbol-table.y"
+#line 175 "symbol-table.y"
                                           {
-        (yyval.condition).type = TYPE_BOOL;
-        (yyval.condition).b = (yyvsp[-2].value).i >= (yyvsp[0].value).i;
+        (yyval.value).type = TYPE_BOOL;
+        (yyval.value).b = (yyvsp[-2].value).i >= (yyvsp[0].value).i;
       }
-#line 1576 "symbol-table.tab.c"
+#line 1575 "symbol-table.tab.c"
     break;
 
   case 19: /* logical_expr: arithmetic_expr LT arithmetic_expr  */
-#line 180 "symbol-table.y"
+#line 179 "symbol-table.y"
                                          {
-        (yyval.condition).type = TYPE_BOOL;
-        (yyval.condition).b = (yyvsp[-2].value).i < (yyvsp[0].value).i;
+        (yyval.value).type = TYPE_BOOL;
+        (yyval.value).b = (yyvsp[-2].value).i < (yyvsp[0].value).i;
       }
-#line 1585 "symbol-table.tab.c"
+#line 1584 "symbol-table.tab.c"
     break;
 
   case 20: /* logical_expr: arithmetic_expr LTE arithmetic_expr  */
-#line 184 "symbol-table.y"
+#line 183 "symbol-table.y"
                                           {
-        (yyval.condition).type = TYPE_BOOL;
-        (yyval.condition).b = (yyvsp[-2].value).i <= (yyvsp[0].value).i;
+        (yyval.value).type = TYPE_BOOL;
+        (yyval.value).b = (yyvsp[-2].value).i <= (yyvsp[0].value).i;
       }
-#line 1594 "symbol-table.tab.c"
+#line 1593 "symbol-table.tab.c"
     break;
 
   case 21: /* logical_expr: arithmetic_expr EQUALS arithmetic_expr  */
-#line 188 "symbol-table.y"
+#line 187 "symbol-table.y"
                                              {
-        (yyval.condition).type = TYPE_BOOL;
-        (yyval.condition).b = ((yyvsp[-2].value).type == TYPE_FLOAT || (yyvsp[0].value).type == TYPE_FLOAT)
+        (yyval.value).type = TYPE_BOOL;
+        (yyval.value).b = ((yyvsp[-2].value).type == TYPE_FLOAT || (yyvsp[0].value).type == TYPE_FLOAT)
                ? (double)(yyvsp[-2].value).i == (double)(yyvsp[0].value).i
                : (yyvsp[-2].value).i == (yyvsp[0].value).i;
       }
-#line 1605 "symbol-table.tab.c"
+#line 1604 "symbol-table.tab.c"
     break;
 
   case 22: /* logical_expr: L_PAREN logical_expr AND logical_expr R_PAREN  */
-#line 194 "symbol-table.y"
+#line 193 "symbol-table.y"
                                                     {
-        (yyval.condition).type = TYPE_BOOL;
-        (yyval.condition).b = (yyvsp[-3].condition).b && (yyvsp[-1].condition).b;
+        (yyval.value).type = TYPE_BOOL;
+        (yyval.value).b = (yyvsp[-3].value).b && (yyvsp[-1].value).b;
       }
-#line 1614 "symbol-table.tab.c"
+#line 1613 "symbol-table.tab.c"
     break;
 
   case 23: /* logical_expr: L_PAREN logical_expr OR logical_expr R_PAREN  */
-#line 198 "symbol-table.y"
+#line 197 "symbol-table.y"
                                                    {
-        (yyval.condition).type = TYPE_BOOL;
-        (yyval.condition).b = (yyvsp[-3].condition).b || (yyvsp[-1].condition).b;
+        (yyval.value).type = TYPE_BOOL;
+        (yyval.value).b = (yyvsp[-3].value).b || (yyvsp[-1].value).b;
       }
-#line 1623 "symbol-table.tab.c"
+#line 1622 "symbol-table.tab.c"
     break;
 
   case 24: /* logical_expr: L_PAREN NOT logical_expr R_PAREN  */
-#line 202 "symbol-table.y"
+#line 201 "symbol-table.y"
                                        {
-      (yyval.condition).type = TYPE_BOOL;
-      (yyval.condition).b = !(yyvsp[-1].condition).b;
+      (yyval.value).type = TYPE_BOOL;
+      (yyval.value).b = !(yyvsp[-1].value).b;
     }
-#line 1632 "symbol-table.tab.c"
+#line 1631 "symbol-table.tab.c"
     break;
 
   case 25: /* arithmetic_expr: arithmetic_expr PLUS arithmetic_expr  */
-#line 208 "symbol-table.y"
-                                         {(yyval.value) = (yyvsp[-2].value) + (yyvsp[0].value);}
-#line 1638 "symbol-table.tab.c"
+#line 207 "symbol-table.y"
+                                         {
+      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
+        (yyval.value).type = TYPE_INT;
+        (yyval.value).i = (yyvsp[-2].value).i + (yyvsp[0].value).i;
+      }
+
+      if ((yyvsp[-2].value).type == TYPE_FLOAT || (yyvsp[0].value).type == TYPE_FLOAT) {
+        double first;
+        double second;
+
+        (yyval.value).type = TYPE_FLOAT;
+        
+        if ((yyvsp[-2].value).type == TYPE_INT) {
+          first = (double)(yyvsp[-2].value).i;
+        } else {
+          first = (yyvsp[-2].value).f;
+        }
+
+        if ((yyvsp[0].value).type == TYPE_INT) {
+          second = (double)(yyvsp[0].value).i;
+        } else {
+          second = (yyvsp[0].value).f;
+        }
+
+        (yyval.value).f = first + second;
+      }
+    }
+#line 1663 "symbol-table.tab.c"
     break;
 
   case 26: /* arithmetic_expr: arithmetic_expr MINUS arithmetic_expr  */
-#line 209 "symbol-table.y"
-                                            {(yyval.value) = (yyvsp[-2].value) - (yyvsp[0].value);}
-#line 1644 "symbol-table.tab.c"
+#line 234 "symbol-table.y"
+                                             {
+      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
+        (yyval.value).type = TYPE_INT;
+        (yyval.value).i = (yyvsp[-2].value).i - (yyvsp[0].value).i;
+      }
+
+      if ((yyvsp[-2].value).type == TYPE_FLOAT || (yyvsp[0].value).type == TYPE_FLOAT) {
+        double first;
+        double second;
+
+        (yyval.value).type = TYPE_FLOAT;
+        
+        if ((yyvsp[-2].value).type == TYPE_INT) {
+          first = (double)(yyvsp[-2].value).i;
+        } else {
+          first = (yyvsp[-2].value).f;
+        }
+
+        if ((yyvsp[0].value).type == TYPE_INT) {
+          second = (double)(yyvsp[0].value).i;
+        } else {
+          second = (yyvsp[0].value).f;
+        }
+
+        (yyval.value).f = first - second;
+      }
+    }
+#line 1695 "symbol-table.tab.c"
     break;
 
   case 27: /* arithmetic_expr: arithmetic_expr TIMES arithmetic_expr  */
-#line 210 "symbol-table.y"
-                                            {(yyval.value) = (yyvsp[-2].value) * (yyvsp[0].value);}
-#line 1650 "symbol-table.tab.c"
+#line 261 "symbol-table.y"
+                                             {
+      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
+        (yyval.value).type = TYPE_INT;
+        (yyval.value).i = (yyvsp[-2].value).i * (yyvsp[0].value).i;
+      }
+
+      if ((yyvsp[-2].value).type == TYPE_FLOAT || (yyvsp[0].value).type == TYPE_FLOAT) {
+        double first;
+        double second;
+
+        (yyval.value).type = TYPE_FLOAT;
+        
+        if ((yyvsp[-2].value).type == TYPE_INT) {
+          first = (double)(yyvsp[-2].value).i;
+        } else {
+          first = (yyvsp[-2].value).f;
+        }
+
+        if ((yyvsp[0].value).type == TYPE_INT) {
+          second = (double)(yyvsp[0].value).i;
+        } else {
+          second = (yyvsp[0].value).f;
+        }
+
+        (yyval.value).f = first * second;
+      }
+    }
+#line 1727 "symbol-table.tab.c"
     break;
 
   case 28: /* arithmetic_expr: arithmetic_expr DIVIDE arithmetic_expr  */
-#line 211 "symbol-table.y"
-                                             {(yyval.value) = (yyvsp[-2].value) / (yyvsp[0].value);}
-#line 1656 "symbol-table.tab.c"
+#line 288 "symbol-table.y"
+                                              {
+      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
+        (yyval.value).type = TYPE_INT;
+        (yyval.value).i = (yyvsp[-2].value).i / (yyvsp[0].value).i;
+      }
+
+      if ((yyvsp[-2].value).type == TYPE_FLOAT || (yyvsp[0].value).type == TYPE_FLOAT) {
+        double first;
+        double second;
+
+        (yyval.value).type = TYPE_FLOAT;
+        
+        if ((yyvsp[-2].value).type == TYPE_INT) {
+          first = (double)(yyvsp[-2].value).i;
+        } else {
+          first = (yyvsp[-2].value).f;
+        }
+
+        if ((yyvsp[0].value).type == TYPE_INT) {
+          second = (double)(yyvsp[0].value).i;
+        } else {
+          second = (yyvsp[0].value).f;
+        }
+
+        (yyval.value).f = first / second;
+      }
+    }
+#line 1759 "symbol-table.tab.c"
     break;
 
   case 29: /* arithmetic_expr: L_PAREN arithmetic_expr R_PAREN  */
-#line 212 "symbol-table.y"
+#line 315 "symbol-table.y"
                                       {(yyval.value) = (yyvsp[-1].value);}
-#line 1662 "symbol-table.tab.c"
+#line 1765 "symbol-table.tab.c"
     break;
 
   case 30: /* arithmetic_expr: factor  */
-#line 213 "symbol-table.y"
+#line 316 "symbol-table.y"
              {(yyval.value) = (yyvsp[0].value);}
-#line 1668 "symbol-table.tab.c"
+#line 1771 "symbol-table.tab.c"
     break;
 
   case 31: /* factor: VAL  */
-#line 216 "symbol-table.y"
+#line 319 "symbol-table.y"
           {(yyval.value) = (yyvsp[0].value);}
-#line 1674 "symbol-table.tab.c"
+#line 1777 "symbol-table.tab.c"
     break;
 
   case 32: /* factor: MINUS VAL  */
-#line 217 "symbol-table.y"
-                            {(yyval.value) = -(yyvsp[0].value);}
-#line 1680 "symbol-table.tab.c"
+#line 320 "symbol-table.y"
+                            {
+        (yyval.value).type = (yyvsp[0].value).type;
+        if ((yyvsp[0].value).type == TYPE_INT) {
+          (yyval.value).i = -(yyvsp[0].value).i;
+        } else {
+          (yyval.value).f = -(yyvsp[0].value).f;
+        }
+      }
+#line 1790 "symbol-table.tab.c"
     break;
 
   case 33: /* factor: VARIABLE  */
-#line 218 "symbol-table.y"
+#line 328 "symbol-table.y"
                  {
         int si = get_symbol_index((yyvsp[0].identifier));
         if (si == -1) {
@@ -1691,18 +1801,28 @@ yyreduce:
         Symbol symb = symb_table[si];
                 printf("%d\n", symb.c);
 
-        if (symb.type == TYPE_INT) (yyval.value) = symb.i;
-        if (symb.type == TYPE_BOOL) (yyval.value) = symb.b;
-        if (symb.type == TYPE_CHAR) (yyval.value) = (char)symb.c;
-        if (symb.type == TYPE_FLOAT) (yyval.value) = symb.f;
-
-        printf("variable: %c\n", symb.c);
+        if (symb.type == TYPE_INT) {
+          (yyval.value).type = TYPE_INT;
+          (yyval.value).i = symb.i;
+        }
+        if (symb.type == TYPE_BOOL) {
+          (yyval.value).type = TYPE_BOOL;
+          (yyval.value).b = symb.b;
+        } 
+        if (symb.type == TYPE_CHAR) {
+          (yyval.value).type = TYPE_CHAR;
+          (yyval.value).c = symb.c;
+        }
+        if (symb.type == TYPE_FLOAT) {
+          (yyval.value).type = TYPE_FLOAT;
+          (yyval.value).f = symb.f;
+        }
       }
-#line 1702 "symbol-table.tab.c"
+#line 1822 "symbol-table.tab.c"
     break;
 
 
-#line 1706 "symbol-table.tab.c"
+#line 1826 "symbol-table.tab.c"
 
       default: break;
     }
@@ -1926,15 +2046,11 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 235 "symbol-table.y"
+#line 355 "symbol-table.y"
 
 
 int yywrap( ) {
   return 1;
-}
-
-void yyerror(const char* str) {
-  fprintf(stderr, "Compiler error: '%s'.\n", str);
 }
 
 int add_symbol(const char* id, VarType type) { //isso eu usei o chatGPT pra gerar pra mim

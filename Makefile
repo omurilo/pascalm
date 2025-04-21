@@ -46,5 +46,5 @@ lex.yy.c: $(TARGET).lex $(TARGET).tab.c
 	@$(FLEX) $<
 
 clean:
-	@rm -rf $(TARGET).output $(TARGET)
+	@rm -rf $(TARGET).output $(TARGET) $(TARGET).tab.c $(TARGET).tab.h lex.yy.c
 	@printf  "✅$(BG_GREEN)$(FG_BLACK) Files cleaned $(NC)\n"

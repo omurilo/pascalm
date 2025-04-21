@@ -32,7 +32,6 @@ static int symb_count = 0;
 %}
 
 %union {
-  bool condition;
   char* identifier;
   char* val;
   int type;
@@ -64,12 +63,12 @@ static int symb_count = 0;
 %token <identifier> VARIABLE
 %token <type> TYPE
 
+%token <val> STRING
 %token <val> WRITE
 %token <identifier> READ
 
 
-%type <condition> logical_expr
-%type <value> stmt arithmetic_expr factor stmt_list expr_value
+%type <value> stmt arithmetic_expr factor stmt_list expr_value logical_expr
 %type <type> declaration
 
 %left MINUS PLUS
@@ -94,7 +93,7 @@ declarations:
 declaration:
   TYPE VARIABLE SEMICOLON {
     if (add_symbol($2, (VarType)$1) == -1) {
-      yerror("Error on variable declaration");
+      fprintf(stderr, "Mismatch types");
     }
     free($2);
   }
@@ -110,12 +109,12 @@ stmt:
 
 if_stmt:
     IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE { 
-      if ($3) {
+      if ($3.b) {
         $<value>$ = $7;
               }
     }
     | IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE {
-      if ($3) { 
+      if ($3.b) { 
         $<value>$ = $7;
               } else {
         $<value>$ = $11;
@@ -126,35 +125,35 @@ atrib: VARIABLE ATTRIB expr_value {
      int si = get_symbol_index($1);
      if (si != -1) {
       Symbol symb = symb_table[si];
-      val_type = $3.type;
+      char val_type = $3.type;
 
       switch (symb.type) {
         case TYPE_INT:
           if (val_type == TYPE_INT) {
             symb_table[si].i = $3.i;
           } else {
-            yyerror("Semantic Error: Variable '%s' type mismatch", $1);
+            /*yyerror("Semantic Error: Variable '%s' type mismatch", $1);*/
           }
           break;
         case TYPE_BOOL:
           if (val_type == TYPE_BOOL) {
             symb_table[si].b = $3.b;
           } else {
-            yyerror("Semantic Error: Variable '%s' type mismatch", $1);
+            /*yyerror("Semantic Error: Variable '%s' type mismatch", $1);*/
           }
           break;
         case TYPE_CHAR:
           if (val_type == TYPE_CHAR) {
             symb_table[si].c = $3.c;
           } else {
-            yyerror("Semantic Error: Variable '%s' type mismatch", $1);
+            /*yyerror("Semantic Error: Variable '%s' type mismatch", $1);*/
           }
           break;
         case TYPE_FLOAT:
           if (val_type == TYPE_FLOAT) {
             symb_table[si].f = $3.f;
           } else {
-            yyerror("Semantic Error: Variable '%s' type mismatch", $1);
+            /*yyerror("Semantic Error: Variable '%s' type mismatch", $1);*/
           }
           break;
       }
@@ -205,16 +204,127 @@ logical_expr:
     }
 
 arithmetic_expr: 
-    arithmetic_expr PLUS arithmetic_expr {$$ = $1 + $3;}
-    | arithmetic_expr MINUS arithmetic_expr {$$ = $1 - $3;}
-    | arithmetic_expr TIMES arithmetic_expr {$$ = $1 * $3;}
-    | arithmetic_expr DIVIDE arithmetic_expr {$$ = $1 / $3;}
+    arithmetic_expr PLUS arithmetic_expr {
+      if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
+        $$.type = TYPE_INT;
+        $$.i = $1.i + $3.i;
+      }
+
+      if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
+        double first;
+        double second;
+
+        $$.type = TYPE_FLOAT;
+        
+        if ($1.type == TYPE_INT) {
+          first = (double)$1.i;
+        } else {
+          first = $1.f;
+        }
+
+        if ($3.type == TYPE_INT) {
+          second = (double)$3.i;
+        } else {
+          second = $3.f;
+        }
+
+        $$.f = first + second;
+      }
+    }
+    | arithmetic_expr MINUS arithmetic_expr  {
+      if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
+        $$.type = TYPE_INT;
+        $$.i = $1.i - $3.i;
+      }
+
+      if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
+        double first;
+        double second;
+
+        $$.type = TYPE_FLOAT;
+        
+        if ($1.type == TYPE_INT) {
+          first = (double)$1.i;
+        } else {
+          first = $1.f;
+        }
+
+        if ($3.type == TYPE_INT) {
+          second = (double)$3.i;
+        } else {
+          second = $3.f;
+        }
+
+        $$.f = first - second;
+      }
+    }
+    | arithmetic_expr TIMES arithmetic_expr  {
+      if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
+        $$.type = TYPE_INT;
+        $$.i = $1.i * $3.i;
+      }
+
+      if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
+        double first;
+        double second;
+
+        $$.type = TYPE_FLOAT;
+        
+        if ($1.type == TYPE_INT) {
+          first = (double)$1.i;
+        } else {
+          first = $1.f;
+        }
+
+        if ($3.type == TYPE_INT) {
+          second = (double)$3.i;
+        } else {
+          second = $3.f;
+        }
+
+        $$.f = first * second;
+      }
+    }
+    | arithmetic_expr DIVIDE arithmetic_expr  {
+      if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
+        $$.type = TYPE_INT;
+        $$.i = $1.i / $3.i;
+      }
+
+      if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
+        double first;
+        double second;
+
+        $$.type = TYPE_FLOAT;
+        
+        if ($1.type == TYPE_INT) {
+          first = (double)$1.i;
+        } else {
+          first = $1.f;
+        }
+
+        if ($3.type == TYPE_INT) {
+          second = (double)$3.i;
+        } else {
+          second = $3.f;
+        }
+
+        $$.f = first / second;
+      }
+    }
     | L_PAREN arithmetic_expr R_PAREN {$$ = $2;}
     | factor {$$ = $1;}
 
 factor: 
       VAL {$$ = $1;}
-      | MINUS VAL %prec NEG {$$ = -$2;}
+      | MINUS VAL %prec NEG {
+        $$.type = $2.type;
+        if ($2.type == TYPE_INT) {
+          $$.i = -$2.i;
+        } else {
+          $$.f = -$2.f;
+        }
+      }
       | VARIABLE {
         int si = get_symbol_index($1);
         if (si == -1) {
@@ -225,21 +335,27 @@ factor:
         Symbol symb = symb_table[si];
                 printf("%d\n", symb.c);
 
-        if (symb.type == TYPE_INT) $$ = symb.i;
-        if (symb.type == TYPE_BOOL) $$ = symb.b;
-        if (symb.type == TYPE_CHAR) $$ = (char)symb.c;
-        if (symb.type == TYPE_FLOAT) $$ = symb.f;
-
-        printf("variable: %c\n", symb.c);
+        if (symb.type == TYPE_INT) {
+          $$.type = TYPE_INT;
+          $$.i = symb.i;
+        }
+        if (symb.type == TYPE_BOOL) {
+          $$.type = TYPE_BOOL;
+          $$.b = symb.b;
+        } 
+        if (symb.type == TYPE_CHAR) {
+          $$.type = TYPE_CHAR;
+          $$.c = symb.c;
+        }
+        if (symb.type == TYPE_FLOAT) {
+          $$.type = TYPE_FLOAT;
+          $$.f = symb.f;
+        }
       }
 %%
 
 int yywrap( ) {
   return 1;
-}
-
-void yyerror(const char* str) {
-  fprintf(stderr, "Compiler error: '%s'.\n", str);
 }
 
 int add_symbol(const char* id, VarType type) { //isso eu usei o chatGPT pra gerar pra mim

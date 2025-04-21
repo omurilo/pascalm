@@ -6,6 +6,6 @@ float double;
 inteiro := 10;
 bool := 10 < 20;
 character := 'a';
-double := 1.00;
+double := 1.0;
 
-character;
+write("uma string");

@@ -72,16 +72,17 @@ extern int yydebug;
     VAL = 273,                     /* VAL  */
     VARIABLE = 274,                /* VARIABLE  */
     TYPE = 275,                    /* TYPE  */
-    WRITE = 276,                   /* WRITE  */
-    READ = 277,                    /* READ  */
-    MINUS = 278,                   /* MINUS  */
-    PLUS = 279,                    /* PLUS  */
-    TIMES = 280,                   /* TIMES  */
-    DIVIDE = 281,                  /* DIVIDE  */
-    NEG = 282,                     /* NEG  */
-    OR = 283,                      /* OR  */
-    AND = 284,                     /* AND  */
-    NOT = 285                      /* NOT  */
+    STRING = 276,                  /* STRING  */
+    WRITE = 277,                   /* WRITE  */
+    READ = 278,                    /* READ  */
+    MINUS = 279,                   /* MINUS  */
+    PLUS = 280,                    /* PLUS  */
+    TIMES = 281,                   /* TIMES  */
+    DIVIDE = 282,                  /* DIVIDE  */
+    NEG = 283,                     /* NEG  */
+    OR = 284,                      /* OR  */
+    AND = 285,                     /* AND  */
+    NOT = 286                      /* NOT  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -92,7 +93,6 @@ union YYSTYPE
 {
 #line 34 "symbol-table.y"
 
-  bool condition;
   char* identifier;
   char* val;
   int type;
