@@ -101,7 +101,7 @@ declarations:
 declaration:
   TYPE VARIABLE SEMICOLON {
     if (add_symbol($2, (VarType)$1) == -1) {
-      fprintf(stderr, "Mismatch types");
+      fprintf(stderr, "Error to declare variables");
     }
     free($2);
   }
@@ -116,9 +116,8 @@ stmt:
     | if_stmt {}
     | write SEMICOLON {}
     | READ SEMICOLON {
-      add_symbol($1, TYPE_STRING);
+      int si = add_symbol($1, TYPE_STRING);
 
-      int si = get_symbol_index($1);
       if (si == -1) {
         fprintf(stderr, "Error: undeclared variable '%s'\n", $1);
         exit(1);
