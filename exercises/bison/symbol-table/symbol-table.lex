@@ -65,7 +65,7 @@ enum {
 {CHAR}          {yylval.value.type = TYPE_CHAR; yylval.value.c = yytext[1]; return VAL;}
 [0-9]+          {yylval.value.type = TYPE_INT; yylval.value.i = atoi(yytext); return VAL;}
 {NUMBER}        {yylval.value.type = TYPE_FLOAT; yylval.value.f = atof(yytext); return VAL;}
-"false"|"true"  {yylval.value.type = TYPE_BOOL; yylval.value.b = yytext == "true"; return VAL;}
+"false"|"true"  {yylval.value.type = TYPE_BOOL; yylval.value.b = strcmp(yytext, "true"); return VAL;}
 
 {ID} { 
   if (yyleng > 10) {

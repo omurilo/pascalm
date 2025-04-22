@@ -240,6 +240,8 @@ atrib: VARIABLE ATTRIB expr_value {
             yyerror(buffer);
           }
           break;
+        default:
+          break;
       }
      } else {
       snprintf(buffer, sizeof(buffer),
@@ -377,6 +379,8 @@ factor:
           case TYPE_CHAR:
             $$.type = TYPE_CHAR;
             $$.c = symb.c;
+            break;
+          default:
             break;
         }
       }

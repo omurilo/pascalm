@@ -27,7 +27,6 @@ run: $(TARGET).test.txt build
 
 test: $(TARGET).output.txt run
 	@printf "$(BG_YELLOW)$(FG_BLACK) Test program and compare output $(NC)\n"
-	@
 	@if diff_output=$$(diff $(TARGET).output $<); then \
 		printf  "✅$(BG_GREEN)$(FG_BLACK) Test sucessful $(NC)\n"; \
 	else \
