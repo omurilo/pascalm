@@ -2,10 +2,35 @@ int inteiro;
 boolean bool;
 char character;
 float double;
+int exponent;
+boolean dois_bool;
+
+int a;
+float b;
+
+a := (5 + 2) * 3;
+b := (a - 1) / 2.0 + 4.5;
+float aritmethic;
 
 inteiro := 10;
 bool := 10 < 20;
 character := 'a';
 double := 1.0;
+exponent := 3^(4+5);
 
+aritmethic := a * b;
+
+dois_bool := 10 = inteiro;
+
+write(inteiro);
+write(bool);
+write(character);
+write(double);
+write(exponent);
+write(aritmethic);
+write('b');
 write("uma string");
+write(dois_bool);
+
+read("entrada");
+write(entrada);
