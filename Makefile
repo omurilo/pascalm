@@ -39,7 +39,7 @@ $(filter %.tab.c,$(TARGET).y): %.tab.c: %.y
 	@printf  "$(RED)target: $@ prereq: $<$(NC)"
 
 %.tab.c: $(TARGET).y
-	@$(BISON) -o $@ -H $< -Wcounterexamples
+	@$(BISON) -o $@ -d $< -Wcounterexamples
 
 lex.yy.c: $(TARGET).lex $(TARGET).tab.c
 	@$(FLEX) $<

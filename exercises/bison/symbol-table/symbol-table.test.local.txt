@@ -7,10 +7,10 @@ boolean dois_bool;
 
 int a;
 float b;
+float aritmethic;
 
 a := (5 + 2) * 3;
 b := (a - 1) / 2.0 + 4.5;
-float aritmethic;
 
 inteiro := 10;
 bool := 10 < 20;

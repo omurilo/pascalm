@@ -10,19 +10,13 @@ CHAR \'[a-zA-Z]\'
 %{
 #include <stdio.h>
 #include <string.h>
+#include "types.h"
 #include "symbol-table.tab.h"
 
 int line_number = 0;
 
 void yyerror(char *message);
 
-enum {
-  TYPE_INT,
-  TYPE_FLOAT,
-  TYPE_BOOL,
-  TYPE_CHAR,
-  TYPE_STRING
-};
 %}
 
 %option noyywrap
