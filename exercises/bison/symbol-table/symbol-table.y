@@ -11,15 +11,15 @@ extern FILE* yyin;
 
 int add_symbol(const char* id, VarType type);
 int get_symbol_index(const char* id);
-void executar_stmt_list(StmtList* list);
+void execute_stmt_list(StmtList* list);
 void print_value(Value v);
 void print_symbol(Symbol s);
 
-Stmt* cria_stmt_write_var(char* var_name);
-Stmt* cria_stmt_write_lit(Value v);
-Stmt* cria_stmt_read(char* var_name);
-Stmt* cria_stmt_if(Value cond, StmtList* then_block, StmtList* else_block);
-StmtList* cria_stmt_list(Stmt* stmt, StmtList* next);
+Stmt* make_stmt_write_var(char* var_name);
+Stmt* make_stmt_write_lit(Value v);
+Stmt* make_stmt_read(char* var_name);
+Stmt* make_stmt_if(Value cond, StmtList* then_block, StmtList* else_block);
+StmtList* make_stmt_list(Stmt* stmt, StmtList* next);
 StmtList* append_stmt_list(StmtList* list, Stmt* stmt);
 
 void print_symbol_table();
@@ -80,7 +80,7 @@ static int symb_count = 0;
 
 progexec:
         declarations stmt_list {
-          executar_stmt_list($2);
+          execute_stmt_list($2);
         }
         |
         ;
@@ -98,10 +98,10 @@ declaration:
 
 stmt_list:
     stmt {
-      $$ = cria_stmt_list($1, NULL);
+      $$ = make_stmt_list($1, NULL);
     }
     | stmt_list stmt { 
-       $$ = cria_stmt_list($2, $1);
+       $$ = make_stmt_list($2, $1);
     } 
 
 stmt:
@@ -118,23 +118,23 @@ stmt:
 
 write:
     WRITE_ID {
-        $$ = cria_stmt_write_var($1);
+        $$ = make_stmt_write_var($1);
     }
     | WRITE {
-        $$ = cria_stmt_write_lit($1);
+        $$ = make_stmt_write_lit($1);
     }
 
 read:
     READ {
-      $$ = cria_stmt_read($1);
+      $$ = make_stmt_read($1);
     }
 
 if_stmt:
     IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE {
-        $<stmt>$ = cria_stmt_if($3, $7, NULL);
+        $<stmt>$ = make_stmt_if($3, $7, NULL);
     }
   | IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE {
-        $<stmt>$ = cria_stmt_if($3, $7, $11);
+        $<stmt>$ = make_stmt_if($3, $7, $11);
     }
 
 atrib: VARIABLE ATTRIB expr_value {
@@ -371,11 +371,11 @@ int add_symbol(const char* id, VarType type) {
     }
   }
 
-  Symbol* sym = &symb_table[symb_count++];
+  Symbol* sym = &symb_table[symb_count];
   strncpy(sym->name, id, sizeof(sym->name) - 1);
   sym->type = type;
   sym->name[sizeof(sym->name)-1] = '\0';
-  return symb_count;
+  return symb_count++;
 }
 
 int get_symbol_index(const char* id) {
@@ -387,7 +387,7 @@ int get_symbol_index(const char* id) {
   return -1;
 }
 
-StmtList* cria_stmt_list(Stmt* stmt, StmtList* list) {
+StmtList* make_stmt_list(Stmt* stmt, StmtList* list) {
   StmtList* new_node = (StmtList*) malloc(sizeof(StmtList));
   new_node->stmt = stmt;
   new_node->next = NULL;
@@ -396,7 +396,6 @@ StmtList* cria_stmt_list(Stmt* stmt, StmtList* list) {
     return new_node;
   }
 
-  // Anexa no final
   StmtList* tail = list;
   while (tail->next != NULL) {
     tail = tail->next;
@@ -406,7 +405,7 @@ StmtList* cria_stmt_list(Stmt* stmt, StmtList* list) {
   return list;
 }
 
-Stmt* cria_stmt_write_var(char* var_name) {
+Stmt* make_stmt_write_var(char* var_name) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_WRITE;
   s->write.var_name = strdup(var_name);
@@ -414,7 +413,7 @@ Stmt* cria_stmt_write_var(char* var_name) {
   return s;
 }
 
-Stmt* cria_stmt_write_lit(Value literal) {
+Stmt* make_stmt_write_lit(Value literal) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_WRITE;
   s->write.literal = literal;
@@ -422,14 +421,14 @@ Stmt* cria_stmt_write_lit(Value literal) {
   return s;
 }
 
-Stmt* cria_stmt_read(char* var_name) {
+Stmt* make_stmt_read(char* var_name) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_READ;
   s->read.var_name = var_name;
   return s;
 }
 
-Stmt* cria_stmt_if(Value cond, StmtList* then_block, StmtList* else_block) {
+Stmt* make_stmt_if(Value cond, StmtList* then_block, StmtList* else_block) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_IF;
   s->if_stmt.cond = cond;
@@ -438,59 +437,60 @@ Stmt* cria_stmt_if(Value cond, StmtList* then_block, StmtList* else_block) {
   return s;
 }
 
-void executar_stmt(Stmt* s) {
-    switch (s->type) {
-      case STMT_WRITE:
-        if (s->write.is_literal) {
-            print_value(s->write.literal);
-        } else {
-            int i = get_symbol_index(s->write.var_name);
-            if (i == -1) {
-              fprintf(stderr, "Error: undeclared variable '%s'\n", s->write.var_name);
-              exit(1);
-            }
-            print_symbol(symb_table[i]);
-        }
-        break;
-      case STMT_READ: {
-        int read_si = add_symbol(s->read.var_name, TYPE_STRING);
-
-        if (read_si == -1) {
-          fprintf(stderr, "Error to declare variable '%s'\n", s->read.var_name);
-          exit(1);
-        }
-
-        Symbol* read_symb = &symb_table[read_si];
-
-        if (read_symb->s == NULL) {
-          read_symb->s = (char*) calloc(100, sizeof(char));
-          if (!read_symb->s) {
-            fprintf(stderr, "Error on allocate memory to variable '%s'\n", read_symb->name);
+void execute_stmt(Stmt* s) {
+  switch (s->type) {
+    case STMT_WRITE:
+      if (s->write.is_literal) {
+          print_value(s->write.literal);
+      } else {
+          int i = get_symbol_index(s->write.var_name);
+          if (i == -1) {
+            fprintf(stderr, "Error: undeclared variable '%s'\n", s->write.var_name);
             exit(1);
           }
-        }
 
-        if (fgets(read_symb->s, 100, stdin) == NULL) {
-          fprintf(stderr, "Error on read value for '%s'\n", read_symb->name);
-          exit(1); 
-        }
-
-        read_symb->s[strcspn(read_symb->s, "\n")] = '\0';
-        break;
+          print_symbol(symb_table[i]);
       }
-      case STMT_IF:
-        if (s->if_stmt.cond.b) {
-            executar_stmt_list(s->if_stmt.then_block);
-        } else if (s->if_stmt.else_block) {
-            executar_stmt_list(s->if_stmt.else_block);
+      break;
+    case STMT_READ: {
+      int read_si = add_symbol(s->read.var_name, TYPE_STRING);
+
+      if (read_si == -1) {
+        fprintf(stderr, "Error to declare variable '%s'\n", s->read.var_name);
+        exit(1);
+      }
+
+      Symbol* read_symb = &symb_table[read_si];
+
+      if (read_symb->s == NULL) {
+        read_symb->s = (char*) calloc(100, sizeof(char));
+        if (!read_symb->s) {
+          fprintf(stderr, "Error on allocate memory to variable '%s'\n", read_symb->name);
+          exit(1);
         }
-        break;
+      }
+
+      if (fgets(read_symb->s, 100, stdin) == NULL) {
+        fprintf(stderr, "Error on read value for '%s'\n", read_symb->name);
+        exit(1); 
+      }
+
+      read_symb->s[strcspn(read_symb->s, "\n")] = '\0';
+      break;
     }
+    case STMT_IF:
+      if (s->if_stmt.cond.b) {
+          execute_stmt_list(s->if_stmt.then_block);
+      } else if (s->if_stmt.else_block) {
+          execute_stmt_list(s->if_stmt.else_block);
+      }
+      break;
+  }
 }
 
-void executar_stmt_list(StmtList* list) {
+void execute_stmt_list(StmtList* list) {
   while (list) {
-    executar_stmt(list->stmt);
+    execute_stmt(list->stmt);
     list = list->next;
   }
 }
