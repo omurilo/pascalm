@@ -7,5 +7,3 @@ b
 uma string
 true
 45
-5
-2
