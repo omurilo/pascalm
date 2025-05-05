@@ -1,0 +1,9 @@
+10
+true
+a
+1.00
+19683
+b
+uma string
+true
+45
