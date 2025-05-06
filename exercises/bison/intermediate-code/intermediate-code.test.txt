@@ -1,9 +1,0 @@
-int c;
-
-c := 5;
-
-while c <= 5 do
-  begin
-    write("entrou no begin");
-    c := c - 1;
-  end;

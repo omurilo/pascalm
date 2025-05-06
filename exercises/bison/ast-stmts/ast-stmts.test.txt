@@ -1,0 +1,51 @@
+int inteiro;
+boolean bool;
+char character;
+float double;
+int exponent;
+boolean dois_bool;
+boolean different;
+int c;
+int a;
+int d;
+int b;
+
+inteiro := 10;
+bool := 10 < 20;
+character := 'a';
+double := 1.0;
+exponent := 3^(4+5);
+different := 3 <> 3.01;
+
+dois_bool := 10 = inteiro;
+
+write(inteiro);
+write(bool);
+write(character);
+write(double);
+write(exponent);
+write('b');
+write("uma string");
+write(dois_bool);
+write(different);
+
+c := 5;
+if (((c > 2 AND c >= 10 / 2) OR (c > -1 AND c = 5))) then {
+  a := 4 + 5;
+  if (a = 9) then {
+    d := a * c;
+    write(d);
+  } else {
+    write(c);
+  }
+} else {
+  b := 4 - 2;
+  write(b);
+}
+
+while (c <= 5 AND c >= 0) do
+  begin
+    write("entrou no begin, valor de c:");
+    write(c);
+    c := c - 1;
+  end;

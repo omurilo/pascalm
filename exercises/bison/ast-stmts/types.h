@@ -62,7 +62,8 @@ typedef enum {
   STMT_WHILE,
   STMT_LOGICAL,
   STMT_ARITHMETIC,
-  STMT_FACTOR
+  STMT_FACTOR,
+  STMT_ATTRIB
 } StmtType;
 
 typedef struct Stmt {
@@ -90,24 +91,27 @@ typedef struct Stmt {
     } while_stmt;
 
     struct {
-      Value left;
-      Value right;
+      struct Stmt* left;
+      struct Stmt* right;
       Operation op;
     } logical_stmt;
 
     struct {
-      Value left;
-      Value right;
+      struct Stmt* left;
+      struct Stmt* right;
       ArithmeticOp op;
     } arithmetic_stmt;
 
     struct {
-      Stmt* expr;
-    } expr_stmt;
+      char* var_name;
+      Value value;
+      bool uminus;
+    } factor_stmt;
 
     struct {
-      Value value;
-    } factor_stmt;
+      char* var_name;
+      Stmt* value;
+    } attrib_stmt;
   };
 } Stmt;
 

@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_YY_INTERMEDIATE_CODE_TAB_H_INCLUDED
-# define YY_YY_INTERMEDIATE_CODE_TAB_H_INCLUDED
+#ifndef YY_YY_AST_STMTS_TAB_H_INCLUDED
+# define YY_YY_AST_STMTS_TAB_H_INCLUDED
 /* Debug traces.  */
 #ifndef YYDEBUG
 # define YYDEBUG 0
@@ -96,7 +96,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 33 "intermediate-code.y"
+#line 40 "ast-stmts.y"
 
   char* identifier;
   char* val;
@@ -107,7 +107,7 @@ union YYSTYPE
   struct Stmt* stmt;
   struct StmtList* stmt_list;
 
-#line 111 "intermediate-code.tab.h"
+#line 111 "ast-stmts.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -122,4 +122,4 @@ extern YYSTYPE yylval;
 int yyparse (void);
 
 
-#endif /* !YY_YY_INTERMEDIATE_CODE_TAB_H_INCLUDED  */
+#endif /* !YY_YY_AST_STMTS_TAB_H_INCLUDED  */

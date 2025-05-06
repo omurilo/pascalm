@@ -11,7 +11,7 @@ CHAR \'[a-zA-Z]\'
 #include <stdio.h>
 #include <string.h>
 #include "types.h"
-#include "intermediate-code.tab.h"
+#include "ast-stmts.tab.h"
 
 int line_number = 0;
 

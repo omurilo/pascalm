@@ -67,7 +67,7 @@
 
 
 /* First part of user prologue.  */
-#line 1 "intermediate-code.y"
+#line 1 "ast-stmts.y"
 
 #include <stdio.h>
 #include <string.h>
@@ -82,6 +82,9 @@ extern FILE* yyin;
 int add_symbol(const char* id, VarType type);
 int get_symbol_index(const char* id);
 void execute_stmt_list(StmtList* list);
+Value evaluate_arithmetic_expr(Stmt* stmt);
+Value evaluate_logical_expr(Stmt* stmt);
+Value evaluate_factor_expr(Stmt* stmt);
 void print_value(Value v);
 void print_symbol(Symbol s);
 
@@ -90,7 +93,11 @@ Stmt* make_stmt_write_lit(Value v);
 Stmt* make_stmt_read(char* var_name);
 Stmt* make_stmt_if(Stmt* cond, StmtList* then_block, StmtList* else_block);
 Stmt* make_stmt_while(Stmt* cond, StmtList* body);
-Stmt* make_stmt_logical(Value left, Operation op, Value right);
+Stmt* make_stmt_logical(Stmt* left, Operation op, Stmt* right);
+Stmt* make_stmt_arithmetic(Stmt* left, ArithmeticOp op, Stmt* right);
+Stmt* make_stmt_factor(Value val, bool minus_unary);
+Stmt* make_stmt_factor_var(char* variable);
+Stmt* make_stmt_attrib(char* variable, Stmt* value);
 StmtList* make_stmt_list(Stmt* stmt, StmtList* next);
 StmtList* append_stmt_list(StmtList* list, Stmt* stmt);
 
@@ -99,7 +106,7 @@ void print_symbol_table();
 static Symbol symb_table[100];
 static int symb_count = 0;
 
-#line 103 "intermediate-code.tab.c"
+#line 110 "ast-stmts.tab.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -122,7 +129,7 @@ static int symb_count = 0;
 #  endif
 # endif
 
-#include "intermediate-code.tab.h"
+#include "ast-stmts.tab.h"
 /* Symbol kind.  */
 enum yysymbol_kind_t
 {
@@ -566,13 +573,13 @@ static const yytype_int8 yytranslate[] =
 
 #if YYDEBUG
 /* YYRLINE[YYN] -- Source line where rule number YYN was defined.  */
-static const yytype_int16 yyrline[] =
+static const yytype_uint8 yyrline[] =
 {
-       0,    85,    85,    88,    91,    92,    95,   103,   106,   111,
-     112,   113,   116,   119,   124,   129,   132,   137,   142,   145,
-     149,   204,   205,   208,   220,   232,   245,   258,   271,   284,
-     290,   296,   304,   313,   322,   331,   340,   349,   350,   353,
-     354,   362
+       0,    92,    92,    95,    98,    99,   102,   110,   113,   118,
+     119,   120,   121,   122,   126,   131,   134,   139,   144,   147,
+     151,   156,   157,   160,   163,   166,   169,   172,   175,   178,
+     181,   184,   189,   192,   195,   198,   201,   204,   205,   208,
+     211,   214
 };
 #endif
 
@@ -636,9 +643,9 @@ static const yytype_int8 yypact[] =
 static const yytype_int8 yydefact[] =
 {
        4,     0,     0,     1,     0,     0,     0,     0,    16,    15,
-      17,     5,     2,     7,     0,     0,     0,    11,     0,     0,
+      17,     5,     2,     7,     0,     0,     0,     9,     0,     0,
        0,    39,    41,     0,     0,     0,    38,     0,     0,     8,
-       9,    13,    12,    10,     0,     0,     0,     0,    40,     0,
+      12,    11,    10,    13,     0,     0,     0,     0,    40,     0,
        0,     0,     0,     0,     0,     0,     0,     0,     0,     0,
        0,    20,    22,    21,     6,     0,     0,     0,     0,    37,
        0,     0,    23,    24,    25,    26,    28,    27,    36,    33,
@@ -731,8 +738,8 @@ static const yytype_int8 yyr1[] =
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
-       0,     2,     2,     0,     0,     2,     3,     1,     2,     2,
-       2,     1,     2,     2,     6,     1,     1,     1,     8,    12,
+       0,     2,     2,     0,     0,     2,     3,     1,     2,     1,
+       2,     2,     2,     2,     6,     1,     1,     1,     8,    12,
        3,     1,     1,     3,     3,     3,     3,     3,     3,     5,
        5,     4,     3,     3,     3,     3,     3,     3,     1,     1,
        2,     1
@@ -1469,475 +1476,288 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* progexec: declarations stmt_list  */
-#line 85 "intermediate-code.y"
+#line 92 "ast-stmts.y"
                                {
           execute_stmt_list((yyvsp[0].stmt_list));
         }
-#line 1477 "intermediate-code.tab.c"
+#line 1484 "ast-stmts.tab.c"
     break;
 
   case 6: /* declaration: TYPE VARIABLE SEMICOLON  */
-#line 95 "intermediate-code.y"
+#line 102 "ast-stmts.y"
                           {
     if (add_symbol((yyvsp[-1].identifier), (VarType)(yyvsp[-2].type)) == -1) {
       fprintf(stderr, "Error to declare variables");
     }
     free((yyvsp[-1].identifier));
   }
-#line 1488 "intermediate-code.tab.c"
+#line 1495 "ast-stmts.tab.c"
     break;
 
   case 7: /* stmt_list: stmt  */
-#line 103 "intermediate-code.y"
+#line 110 "ast-stmts.y"
          {
       (yyval.stmt_list) = make_stmt_list((yyvsp[0].stmt), NULL);
     }
-#line 1496 "intermediate-code.tab.c"
+#line 1503 "ast-stmts.tab.c"
     break;
 
   case 8: /* stmt_list: stmt_list stmt  */
-#line 106 "intermediate-code.y"
+#line 113 "ast-stmts.y"
                      { 
        (yyval.stmt_list) = make_stmt_list((yyvsp[0].stmt), (yyvsp[-1].stmt_list));
     }
-#line 1504 "intermediate-code.tab.c"
+#line 1511 "ast-stmts.tab.c"
     break;
 
-  case 9: /* stmt: while SEMICOLON  */
-#line 111 "intermediate-code.y"
-                    {}
-#line 1510 "intermediate-code.tab.c"
+  case 9: /* stmt: if_stmt  */
+#line 118 "ast-stmts.y"
+            { (yyval.stmt) = (yyvsp[0].stmt); }
+#line 1517 "ast-stmts.tab.c"
     break;
 
-  case 10: /* stmt: atrib SEMICOLON  */
-#line 112 "intermediate-code.y"
+  case 10: /* stmt: read SEMICOLON  */
+#line 119 "ast-stmts.y"
+                     { (yyval.stmt) = (yyvsp[-1].stmt); }
+#line 1523 "ast-stmts.tab.c"
+    break;
+
+  case 11: /* stmt: write SEMICOLON  */
+#line 120 "ast-stmts.y"
+                      { (yyval.stmt) = (yyvsp[-1].stmt); }
+#line 1529 "ast-stmts.tab.c"
+    break;
+
+  case 12: /* stmt: while SEMICOLON  */
+#line 121 "ast-stmts.y"
                       {}
-#line 1516 "intermediate-code.tab.c"
+#line 1535 "ast-stmts.tab.c"
     break;
 
-  case 11: /* stmt: if_stmt  */
-#line 113 "intermediate-code.y"
-              {
-      (yyval.stmt) = (yyvsp[0].stmt);
-    }
-#line 1524 "intermediate-code.tab.c"
-    break;
-
-  case 12: /* stmt: read SEMICOLON  */
-#line 116 "intermediate-code.y"
-                     {
-      (yyval.stmt) = (yyvsp[-1].stmt);
-    }
-#line 1532 "intermediate-code.tab.c"
-    break;
-
-  case 13: /* stmt: write SEMICOLON  */
-#line 119 "intermediate-code.y"
-                      {
-      (yyval.stmt) = (yyvsp[-1].stmt);
-    }
-#line 1540 "intermediate-code.tab.c"
+  case 13: /* stmt: atrib SEMICOLON  */
+#line 122 "ast-stmts.y"
+                      {}
+#line 1541 "ast-stmts.tab.c"
     break;
 
   case 14: /* while: WHILE logical_expr WHILE_DO WHILE_BEGIN stmt_list WHILE_END  */
-#line 124 "intermediate-code.y"
+#line 126 "ast-stmts.y"
                                                                 {
       (yyval.stmt) = make_stmt_while((yyvsp[-4].stmt), (yyvsp[-1].stmt_list));
     }
-#line 1548 "intermediate-code.tab.c"
+#line 1549 "ast-stmts.tab.c"
     break;
 
   case 15: /* write: WRITE_ID  */
-#line 129 "intermediate-code.y"
+#line 131 "ast-stmts.y"
              {
         (yyval.stmt) = make_stmt_write_var((yyvsp[0].identifier));
     }
-#line 1556 "intermediate-code.tab.c"
+#line 1557 "ast-stmts.tab.c"
     break;
 
   case 16: /* write: WRITE  */
-#line 132 "intermediate-code.y"
+#line 134 "ast-stmts.y"
             {
         (yyval.stmt) = make_stmt_write_lit((yyvsp[0].value));
     }
-#line 1564 "intermediate-code.tab.c"
+#line 1565 "ast-stmts.tab.c"
     break;
 
   case 17: /* read: READ  */
-#line 137 "intermediate-code.y"
+#line 139 "ast-stmts.y"
          {
       (yyval.stmt) = make_stmt_read((yyvsp[0].identifier));
     }
-#line 1572 "intermediate-code.tab.c"
+#line 1573 "ast-stmts.tab.c"
     break;
 
   case 18: /* if_stmt: IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE  */
-#line 142 "intermediate-code.y"
+#line 144 "ast-stmts.y"
                                                                      {
-        (yyval.stmt) = make_stmt_if((yyvsp[-5].stmt), (yyvsp[-1].stmt_list), NULL);
+      (yyval.stmt) = make_stmt_if((yyvsp[-5].stmt), (yyvsp[-1].stmt_list), NULL);
     }
-#line 1580 "intermediate-code.tab.c"
+#line 1581 "ast-stmts.tab.c"
     break;
 
   case 19: /* if_stmt: IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE  */
-#line 145 "intermediate-code.y"
-                                                                                                      {
-        (yyval.stmt) = make_stmt_if((yyvsp[-9].stmt), (yyvsp[-5].stmt_list), (yyvsp[-1].stmt_list));
+#line 147 "ast-stmts.y"
+                                                                                                        {
+      (yyval.stmt) = make_stmt_if((yyvsp[-9].stmt), (yyvsp[-5].stmt_list), (yyvsp[-1].stmt_list));
     }
-#line 1588 "intermediate-code.tab.c"
+#line 1589 "ast-stmts.tab.c"
     break;
 
   case 20: /* atrib: VARIABLE ATTRIB expr_value  */
-#line 149 "intermediate-code.y"
+#line 151 "ast-stmts.y"
                                   {
-        int attrib_si = get_symbol_index((yyvsp[-2].identifier));
-        char buffer[256];
-        
-        if (attrib_si == -1) {
-          snprintf(buffer, sizeof(buffer),
-            "Undefined declaration of identifier '%s'", (yyvsp[-2].identifier));
-          yyerror(buffer);
-        }
-
-        char val_type = (yyvsp[0].value).type;
-
-        switch (symb_table[attrib_si].type) {
-          case TYPE_INT:
-            if (val_type == TYPE_INT) {
-              symb_table[attrib_si].i = (yyvsp[0].value).i;
-            } else {
-              snprintf(buffer, sizeof(buffer),
-                      "Semantic Error: Variable '%s' type mismatch", (yyvsp[-2].identifier));
-              yyerror(buffer);
-            }
-            break;
-          case TYPE_BOOL:
-            if (val_type == TYPE_BOOL) {
-              symb_table[attrib_si].b = (yyvsp[0].value).b;
-            } else {
-              snprintf(buffer, sizeof(buffer),
-                      "Semantic Error: Variable '%s' type mismatch", (yyvsp[-2].identifier));
-              yyerror(buffer);
-            }
-            break;
-          case TYPE_CHAR:
-            if (val_type == TYPE_CHAR) {
-              symb_table[attrib_si].c = (yyvsp[0].value).c;
-            } else {
-              snprintf(buffer, sizeof(buffer),
-                      "Semantic Error: Variable '%s' type mismatch", (yyvsp[-2].identifier));
-              yyerror(buffer);
-            }
-            break;
-          case TYPE_FLOAT:
-            if (val_type == TYPE_FLOAT) {
-              symb_table[attrib_si].f = (yyvsp[0].value).f;
-            } else {
-              snprintf(buffer, sizeof(buffer),
-                      "Semantic Error: Variable '%s' type mismatch", (yyvsp[-2].identifier));
-              yyerror(buffer);
-            }
-            break;
-          default:
-            break;
-        }
-      }
-#line 1646 "intermediate-code.tab.c"
+      (yyval.stmt) = make_stmt_attrib((yyvsp[-2].identifier), (yyvsp[0].stmt));
+    }
+#line 1597 "ast-stmts.tab.c"
     break;
 
   case 21: /* expr_value: arithmetic_expr  */
-#line 204 "intermediate-code.y"
-                          { (yyval.value) = (yyvsp[0].value); }
-#line 1652 "intermediate-code.tab.c"
+#line 156 "ast-stmts.y"
+                          { (yyval.stmt) = (yyvsp[0].stmt); }
+#line 1603 "ast-stmts.tab.c"
     break;
 
   case 22: /* expr_value: logical_expr  */
-#line 205 "intermediate-code.y"
-                         { (yyval.value) = (yyvsp[0].stmt); }
-#line 1658 "intermediate-code.tab.c"
+#line 157 "ast-stmts.y"
+                         { (yyval.stmt) = (yyvsp[0].stmt); }
+#line 1609 "ast-stmts.tab.c"
     break;
 
   case 23: /* logical_expr: arithmetic_expr GT arithmetic_expr  */
-#line 208 "intermediate-code.y"
+#line 160 "ast-stmts.y"
                                        {
-      /*$$.type = TYPE_BOOL;
-
-      if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
-        $$.b = $1.i > $3.i;
-      }
-
-      if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
-        $$.b = ($1.type == TYPE_INT ? (double)$1.i : $1.f) > ($3.type == TYPE_INT ? (double)$3.i : $3.f);
-      }*/
-      (yyval.stmt) = make_stmt_logical((yyvsp[-2].value), OP_GT, (yyvsp[0].value));
+      (yyval.stmt) = make_stmt_logical((yyvsp[-2].stmt), OP_GT, (yyvsp[0].stmt));
     }
-#line 1675 "intermediate-code.tab.c"
+#line 1617 "ast-stmts.tab.c"
     break;
 
   case 24: /* logical_expr: arithmetic_expr GTE arithmetic_expr  */
-#line 220 "intermediate-code.y"
+#line 163 "ast-stmts.y"
                                           {
-        /*$$.type = TYPE_BOOL;
-
-        if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
-          $$.b = $1.i >= $3.i;
-        }
-
-        if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
-          $$.b = ($1.type == TYPE_INT ? (double)$1.i : $1.f) >= ($3.type == TYPE_INT ? (double)$3.i : $3.f);
-        }*/
-        (yyval.stmt) = make_stmt_logical((yyvsp[-2].value), OP_GTE, (yyvsp[0].value));
+        (yyval.stmt) = make_stmt_logical((yyvsp[-2].stmt), OP_GTE, (yyvsp[0].stmt));
       }
-#line 1692 "intermediate-code.tab.c"
+#line 1625 "ast-stmts.tab.c"
     break;
 
   case 25: /* logical_expr: arithmetic_expr LT arithmetic_expr  */
-#line 232 "intermediate-code.y"
+#line 166 "ast-stmts.y"
                                          {
-        /*$$.type = TYPE_BOOL;
-
-        if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
-          $$.b = $1.i < $3.i;
-          // cria_stmt_logical(left: $1, op: OP_LT, right: $3);
-        }
-
-        if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
-          $$.b = ($1.type == TYPE_INT ? (double)$1.i : $1.f) < ($3.type == TYPE_INT ? (double)$3.i : $3.f);
-        }*/
-        (yyval.stmt) = make_stmt_logical((yyvsp[-2].value), OP_LT, (yyvsp[0].value));
+        (yyval.stmt) = make_stmt_logical((yyvsp[-2].stmt), OP_LT, (yyvsp[0].stmt));
       }
-#line 1710 "intermediate-code.tab.c"
+#line 1633 "ast-stmts.tab.c"
     break;
 
   case 26: /* logical_expr: arithmetic_expr LTE arithmetic_expr  */
-#line 245 "intermediate-code.y"
+#line 169 "ast-stmts.y"
                                           {
-        /*$$.type = TYPE_BOOL;
-
-        if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
-          $$.b = $1.i <= $3.i;
-          // cria_stmt_logical(left: $1, op: OP_LTE, right: $3);
-        }
-
-        if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
-          $$.b = ($1.type == TYPE_INT ? (double)$1.i : $1.f) <= ($3.type == TYPE_INT ? (double)$3.i : $3.f);
-        }*/
-        (yyval.stmt) = make_stmt_logical((yyvsp[-2].value), OP_LTE, (yyvsp[0].value));
+        (yyval.stmt) = make_stmt_logical((yyvsp[-2].stmt), OP_LTE, (yyvsp[0].stmt));
       }
-#line 1728 "intermediate-code.tab.c"
+#line 1641 "ast-stmts.tab.c"
     break;
 
   case 27: /* logical_expr: arithmetic_expr EQUALS arithmetic_expr  */
-#line 258 "intermediate-code.y"
+#line 172 "ast-stmts.y"
                                              {
-        /*$$.type = TYPE_BOOL;
-
-        if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
-          $$.b = $1.i == $3.i;
-          // cria_stmt_logical(left: $1, op: OP_EQUALS, right: $3);
-        }
-
-        if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
-          $$.b = ($1.type == TYPE_INT ? (double)$1.i : $1.f) == ($3.type == TYPE_INT ? (double)$3.i : $3.f);
-        }*/
-        (yyval.stmt) = make_stmt_logical((yyvsp[-2].value), OP_EQUALS, (yyvsp[0].value));
+        (yyval.stmt) = make_stmt_logical((yyvsp[-2].stmt), OP_EQUALS, (yyvsp[0].stmt));
       }
-#line 1746 "intermediate-code.tab.c"
+#line 1649 "ast-stmts.tab.c"
     break;
 
   case 28: /* logical_expr: arithmetic_expr DIFF arithmetic_expr  */
-#line 271 "intermediate-code.y"
+#line 175 "ast-stmts.y"
                                            {
-        /*$$.type = TYPE_BOOL;
-
-        if ($1.type == TYPE_INT && $3.type == TYPE_INT) {
-          $$.b = $1.i != $3.i;
-          // cria_stmt_logical(left: $1, op: OP_DIFF, right: $3);
-        }
-
-        if ($1.type == TYPE_FLOAT || $3.type == TYPE_FLOAT) {
-          $$.b = ($1.type == TYPE_INT ? (double)$1.i : $1.f) != ($3.type == TYPE_INT ? (double)$3.i : $3.f);
-        }*/
-        (yyval.stmt) = make_stmt_logical((yyvsp[-2].value), OP_DIFF, (yyvsp[0].value));
+        (yyval.stmt) = make_stmt_logical((yyvsp[-2].stmt), OP_DIFF, (yyvsp[0].stmt));
       }
-#line 1764 "intermediate-code.tab.c"
+#line 1657 "ast-stmts.tab.c"
     break;
 
   case 29: /* logical_expr: L_PAREN logical_expr AND logical_expr R_PAREN  */
-#line 284 "intermediate-code.y"
+#line 178 "ast-stmts.y"
                                                     {
-        /* $$.type = TYPE_BOOL;
-        $$.b = $2.b && $4.b;
-        // cria_stmt_logical(left: $2, op: 'AND', right: $4);*/
         (yyval.stmt) = make_stmt_logical((yyvsp[-3].stmt), OP_AND, (yyvsp[-1].stmt));
       }
-#line 1775 "intermediate-code.tab.c"
+#line 1665 "ast-stmts.tab.c"
     break;
 
   case 30: /* logical_expr: L_PAREN logical_expr OR logical_expr R_PAREN  */
-#line 290 "intermediate-code.y"
+#line 181 "ast-stmts.y"
                                                    {
-        /*$$.type = TYPE_BOOL;
-        $$.b = $2.b || $4.b;
-        // cria_stmt_logical(left: $1, op: 'OR', right: $3);*/
         (yyval.stmt) = make_stmt_logical((yyvsp[-3].stmt), OP_OR, (yyvsp[-1].stmt));
       }
-#line 1786 "intermediate-code.tab.c"
+#line 1673 "ast-stmts.tab.c"
     break;
 
   case 31: /* logical_expr: L_PAREN NOT logical_expr R_PAREN  */
-#line 296 "intermediate-code.y"
+#line 184 "ast-stmts.y"
                                        {
-        /*$$.type = TYPE_BOOL;
-        $$.b = !$3.b;
-        // cria_stmt_logical(left: null, op: 'NOT', right: $3);*/
         (yyval.stmt) = make_stmt_logical(NULL, OP_NOT, (yyvsp[-1].stmt));
       }
-#line 1797 "intermediate-code.tab.c"
+#line 1681 "ast-stmts.tab.c"
     break;
 
   case 32: /* arithmetic_expr: arithmetic_expr PLUS arithmetic_expr  */
-#line 304 "intermediate-code.y"
+#line 189 "ast-stmts.y"
                                          {
-      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
-        (yyval.value).type = TYPE_INT;
-        (yyval.value).i = (yyvsp[-2].value).i + (yyvsp[0].value).i;
-      } else {
-        (yyval.value).type = TYPE_FLOAT;
-        (yyval.value).f = ((yyvsp[-2].value).type == TYPE_INT ? (double)(yyvsp[-2].value).i : (yyvsp[-2].value).f) + ((yyvsp[0].value).type == TYPE_INT ? (double)(yyvsp[0].value).i : (yyvsp[0].value).f);
-      }
+      (yyval.stmt) = make_stmt_arithmetic((yyvsp[-2].stmt), AOP_PLUS, (yyvsp[0].stmt));
     }
-#line 1811 "intermediate-code.tab.c"
+#line 1689 "ast-stmts.tab.c"
     break;
 
   case 33: /* arithmetic_expr: arithmetic_expr MINUS arithmetic_expr  */
-#line 313 "intermediate-code.y"
+#line 192 "ast-stmts.y"
                                              {
-      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
-        (yyval.value).type = TYPE_INT;
-        (yyval.value).i = (yyvsp[-2].value).i - (yyvsp[0].value).i;
-      } else {
-        (yyval.value).type = TYPE_FLOAT;
-        (yyval.value).f = ((yyvsp[-2].value).type == TYPE_INT ? (double)(yyvsp[-2].value).i : (yyvsp[-2].value).f) - ((yyvsp[0].value).type == TYPE_INT ? (double)(yyvsp[0].value).i : (yyvsp[0].value).f);
-      }
+      (yyval.stmt) = make_stmt_arithmetic((yyvsp[-2].stmt), AOP_MINUS, (yyvsp[0].stmt));
     }
-#line 1825 "intermediate-code.tab.c"
+#line 1697 "ast-stmts.tab.c"
     break;
 
   case 34: /* arithmetic_expr: arithmetic_expr TIMES arithmetic_expr  */
-#line 322 "intermediate-code.y"
+#line 195 "ast-stmts.y"
                                              {
-      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
-        (yyval.value).type = TYPE_INT;
-        (yyval.value).i = (yyvsp[-2].value).i * (yyvsp[0].value).i;
-      } else {
-        (yyval.value).type = TYPE_FLOAT;
-        (yyval.value).f = ((yyvsp[-2].value).type == TYPE_INT ? (double)(yyvsp[-2].value).i : (yyvsp[-2].value).f) * ((yyvsp[0].value).type == TYPE_INT ? (double)(yyvsp[0].value).i : (yyvsp[0].value).f);
-      }
+      (yyval.stmt) = make_stmt_arithmetic((yyvsp[-2].stmt), AOP_TIMES, (yyvsp[0].stmt));
     }
-#line 1839 "intermediate-code.tab.c"
+#line 1705 "ast-stmts.tab.c"
     break;
 
   case 35: /* arithmetic_expr: arithmetic_expr DIVIDE arithmetic_expr  */
-#line 331 "intermediate-code.y"
+#line 198 "ast-stmts.y"
                                               {
-      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
-        (yyval.value).type = TYPE_INT;
-        (yyval.value).i = (yyvsp[-2].value).i / (yyvsp[0].value).i;
-      } else {
-        (yyval.value).type = TYPE_FLOAT;
-        (yyval.value).f = ((yyvsp[-2].value).type == TYPE_INT ? (double)(yyvsp[-2].value).i : (yyvsp[-2].value).f) / ((yyvsp[0].value).type == TYPE_INT ? (double)(yyvsp[0].value).i : (yyvsp[0].value).f); 
-      }
+      (yyval.stmt) = make_stmt_arithmetic((yyvsp[-2].stmt), AOP_DIVIDE, (yyvsp[0].stmt));
     }
-#line 1853 "intermediate-code.tab.c"
+#line 1713 "ast-stmts.tab.c"
     break;
 
   case 36: /* arithmetic_expr: arithmetic_expr EXPONENT arithmetic_expr  */
-#line 340 "intermediate-code.y"
+#line 201 "ast-stmts.y"
                                                {
-      if ((yyvsp[-2].value).type == TYPE_INT && (yyvsp[0].value).type == TYPE_INT) {
-        (yyval.value).type = TYPE_INT;
-        (yyval.value).i = pow((yyvsp[-2].value).i, (yyvsp[0].value).i);
-      } else {
-        (yyval.value).type = TYPE_FLOAT;
-        (yyval.value).f = pow(((yyvsp[-2].value).type == TYPE_INT ? (double)(yyvsp[-2].value).i : (yyvsp[-2].value).f), ((yyvsp[0].value).type == TYPE_INT ? (double)(yyvsp[0].value).i : (yyvsp[0].value).f));
-      }
+      (yyval.stmt) = make_stmt_arithmetic((yyvsp[-2].stmt), AOP_EXPONENT, (yyvsp[0].stmt));
     }
-#line 1867 "intermediate-code.tab.c"
+#line 1721 "ast-stmts.tab.c"
     break;
 
   case 37: /* arithmetic_expr: L_PAREN arithmetic_expr R_PAREN  */
-#line 349 "intermediate-code.y"
-                                      {(yyval.value) = (yyvsp[-1].value);}
-#line 1873 "intermediate-code.tab.c"
+#line 204 "ast-stmts.y"
+                                      { (yyval.stmt) = (yyvsp[-1].stmt); }
+#line 1727 "ast-stmts.tab.c"
     break;
 
   case 38: /* arithmetic_expr: factor  */
-#line 350 "intermediate-code.y"
-             {(yyval.value) = (yyvsp[0].value);}
-#line 1879 "intermediate-code.tab.c"
+#line 205 "ast-stmts.y"
+             { (yyval.stmt) = (yyvsp[0].stmt); }
+#line 1733 "ast-stmts.tab.c"
     break;
 
   case 39: /* factor: VAL  */
-#line 353 "intermediate-code.y"
-          {(yyval.value) = (yyvsp[0].value);}
-#line 1885 "intermediate-code.tab.c"
+#line 208 "ast-stmts.y"
+          {
+        (yyval.stmt) = make_stmt_factor((yyvsp[0].value), false);
+      }
+#line 1741 "ast-stmts.tab.c"
     break;
 
   case 40: /* factor: MINUS VAL  */
-#line 354 "intermediate-code.y"
+#line 211 "ast-stmts.y"
                             {
-        (yyval.value).type = (yyvsp[0].value).type;
-        if ((yyvsp[0].value).type == TYPE_INT) {
-          (yyval.value).i = -(yyvsp[0].value).i;
-        } else {
-          (yyval.value).f = -(yyvsp[0].value).f;
-        }
+        (yyval.stmt) = make_stmt_factor((yyvsp[0].value), true);
       }
-#line 1898 "intermediate-code.tab.c"
+#line 1749 "ast-stmts.tab.c"
     break;
 
   case 41: /* factor: VARIABLE  */
-#line 362 "intermediate-code.y"
+#line 214 "ast-stmts.y"
                  {
-        int si = get_symbol_index((yyvsp[0].identifier));
-        if (si == -1) {
-          fprintf(stderr, "Error: undeclared variable '%s'\n", (yyvsp[0].identifier));
-          exit(1);
-        }
-
-        Symbol* symb = &symb_table[si];
-
-        switch (symb->type) {
-          case TYPE_INT: {
-            (yyval.value).type = TYPE_INT;
-            (yyval.value).i = symb->i;
-            break;
-          }
-          case TYPE_FLOAT: {
-            (yyval.value).type = TYPE_FLOAT;
-            (yyval.value).f = symb->f;
-            break;
-          }
-          case TYPE_BOOL: {
-            (yyval.value).type = TYPE_BOOL;
-            (yyval.value).b = symb->b;
-            break;
-          }
-          case TYPE_CHAR: {
-            (yyval.value).type = TYPE_CHAR;
-            (yyval.value).c = symb->c;
-            break;
-          }
-          default:
-            break;
-        }
+        (yyval.stmt) = make_stmt_factor_var((yyvsp[0].identifier));
       }
-#line 1937 "intermediate-code.tab.c"
+#line 1757 "ast-stmts.tab.c"
     break;
 
 
-#line 1941 "intermediate-code.tab.c"
+#line 1761 "ast-stmts.tab.c"
 
       default: break;
     }
@@ -2161,7 +1981,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 396 "intermediate-code.y"
+#line 217 "ast-stmts.y"
 
 
 int add_symbol(const char* id, VarType type) {
@@ -2190,6 +2010,17 @@ int get_symbol_index(const char* id) {
     }
   }
   return -1;
+}
+
+Symbol* get_symbol_by_name(const char* id) {
+  int i = get_symbol_index(id);
+  if (i == -1) {
+    fprintf(stderr, "foi aqui mesmo, id: %d\n", id);
+    fprintf(stderr, "Error: undeclared variable '%s'\n", id);
+    exit(1);
+  }
+
+  return &symb_table[i];
 }
 
 StmtList* make_stmt_list(Stmt* stmt, StmtList* list) {
@@ -2250,7 +2081,7 @@ Stmt* make_stmt_while(Stmt* cond, StmtList* body) {
   return s;
 }
 
-Stmt* make_stmt_logical(Value left, Operation op, Value right) {
+Stmt* make_stmt_logical(Stmt* left, Operation op, Stmt* right) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_LOGICAL;
   s->logical_stmt.left = left;
@@ -2259,11 +2090,283 @@ Stmt* make_stmt_logical(Value left, Operation op, Value right) {
   return s;
 }
 
-int evaluate_logical_expr(Stmt* s) {}
+Stmt* make_stmt_arithmetic(Stmt* left, ArithmeticOp op, Stmt* right) {
+  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
+  s->type = STMT_ARITHMETIC;
+  s->arithmetic_stmt.left = left;
+  s->arithmetic_stmt.right = right;
+  s->arithmetic_stmt.op = op;
+  return s;
+}
+
+Stmt* make_stmt_factor_var(char* variable) {
+  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
+  s->type = STMT_FACTOR;
+  fprintf(stderr, "var_name on factor var %s\n", variable);
+  s->factor_stmt.var_name = strdup(variable);
+  s->factor_stmt.uminus = false;
+  return s;
+}
+
+Stmt* make_stmt_factor(Value val, bool minus_unary) {
+  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
+  s->type = STMT_FACTOR;
+  s->factor_stmt.var_name = NULL;
+  s->factor_stmt.value = val;
+  s->factor_stmt.uminus = minus_unary;
+  return s;
+}
+
+Stmt* make_stmt_attrib(char* variable, Stmt* value) {
+  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
+  s->type = STMT_ATTRIB;
+  s->attrib_stmt.var_name = strdup(variable);
+  s->attrib_stmt.value = value;
+  return s;
+}
+
+Value evaluate_factor_expr(Stmt* s) {
+  Value result;
+
+  fprintf(stderr, "var_name: %s, cmp: %d\n", s->factor_stmt.var_name);
+  if (s->factor_stmt.var_name != NULL) {
+    Symbol* symb = get_symbol_by_name(s->factor_stmt.var_name);
+
+    result.type = symb->type;
+
+    switch (result.type) {
+      case TYPE_INT:
+        result.i = symb->i;
+        break;
+      case TYPE_FLOAT:
+        result.f = symb->f;
+        break;
+      case TYPE_BOOL:
+        result.b = symb->b;
+        break;
+      case TYPE_CHAR:
+        result.c = symb->c;
+        break;
+      default:
+        break;
+    }
+  } else {
+    result.type = s->factor_stmt.value.type;
+
+    switch (result.type) {
+      case TYPE_INT:
+        result.i = s->factor_stmt.uminus ? -s->factor_stmt.value.i : s->factor_stmt.value.i;
+        break;
+      case TYPE_FLOAT: 
+        result.f = s->factor_stmt.uminus ? -s->factor_stmt.value.f : s->factor_stmt.value.f;
+        break;
+      case TYPE_CHAR:
+        result.c = s->factor_stmt.value.c;
+        break;
+      case TYPE_BOOL:
+        result.b = s->factor_stmt.value.b;
+        break;
+      default:
+        break;
+    }
+  }
+
+  return result;
+}
+
+Value evaluate_arithmetic_expr(Stmt* s) {
+  double d1, d2;
+  int i1, i2;
+
+  Value value;
+
+  if (s->type != STMT_ARITHMETIC) {
+    return evaluate_factor_expr(s);
+  } 
+
+  if (s->arithmetic_stmt.left != NULL) {
+    Value t1 = evaluate_factor_expr(s->arithmetic_stmt.left);
+    if (t1.type == TYPE_INT) {
+      i1 = t1.i;
+    } else {
+      d1 = t1.f;
+    }
+  }
+
+  Value t2 = evaluate_factor_expr(s->arithmetic_stmt.right);
+  if (t2.type == TYPE_INT) {
+    i2 = t2.i;
+  } else {
+    d2 = t2.f;
+  }
+  switch (s->arithmetic_stmt.op) {
+    case AOP_PLUS: {
+      if (i1 >= 0 && i2 >= 0) {
+        value.type = TYPE_INT;
+        value.i = i1 + i2;
+        return value;
+      }
+  
+      value.type = TYPE_FLOAT;
+      value.f = (i1 >= 0 ? (double)i1 : d1) + (i2 >= 0 ? (double)i2 : d2);
+      return value;
+    }
+    case AOP_MINUS: {
+      if (i1 >= 0 && i2 >= 0) {
+        value.type = TYPE_INT;
+        value.i = i1 - i2;
+        return value;
+      }
+      
+      value.type = TYPE_FLOAT;
+      value.f = (i1 >= 0 ? (double)i1 : d1) - (i2 >= 0 ? (double)i2 : d2);
+      return value;
+    }
+    case AOP_TIMES: {
+      if (i1 >= 0 && i2 >= 0) {
+        value.type = TYPE_INT;
+        value.i = i1 * i2;
+        return value;
+      }
+      
+      value.type = TYPE_FLOAT;
+      value.f = (i1 >= 0 ? (double)i1 : d1) * (i2 >= 0 ? (double)i2 : d2);
+      return value;
+    }
+    case AOP_DIVIDE: {
+      if (i1 >= 0 && i2 >= 0) {
+        value.type = TYPE_INT;
+        value.i = i1 / i2;
+        return value;
+      }
+      
+      value.type = TYPE_FLOAT;
+      value.f = (i1 >= 0 ? (double)i1 : d1) / (i2 >= 0 ? (double)i2 : d2);
+      return value;
+    }
+    case AOP_EXPONENT: {
+      if (i1 >= 0 && i2 >= 0) {
+        value.type = TYPE_INT;
+        value.i = pow(i1, i2);
+        return value;
+      }
+
+      value.type = TYPE_FLOAT;
+      value.f = pow((i1 >= 0 ? i1 : d1), (i2 >= 0 ? i2 : d2)); 
+      return value;
+    }
+    case AOP_UMINUS: {
+      if (i2 >= 0) {
+        value.type = TYPE_INT;
+        value.i = -i2;
+        return value;
+      }
+
+      value.type = TYPE_FLOAT;
+      value.f = -d2;
+      return value;
+    }
+    default:
+      return value;
+  }
+  
+}
+
+Value evaluate_logical_expr(Stmt* s) {
+  Value t1, t2, result;
+
+  result.type == TYPE_BOOL;
+
+  switch (s->logical_stmt.op) {
+    case OP_GT: {
+      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
+      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
+        result.b = t1.i > t2.i;
+      } else {
+        result.b = t1.f > t2.f;
+      }
+      return result;
+    }
+    case OP_GTE: {
+      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
+      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
+        result.b = t1.i >= t2.i;
+      } else {
+        result.b = t1.f >= t2.f;
+      }
+      return result;
+    }
+    case OP_LT: {
+      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
+      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
+        result.b = t1.i < t2.i;
+      } else {
+        result.b = t1.f < t2.f;
+      }
+      return result;
+    }
+    case OP_LTE: {
+      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
+      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
+        result.b = t1.i <= t2.i;
+      } else {
+        result.b = t1.f <= t2.f;
+      }
+      return result;
+    }
+    case OP_EQUALS: {
+      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
+      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
+        result.b = t1.i == t2.i;
+      } else {
+        result.b = t1.f == t2.f;
+      }
+      return result;
+    }
+    case OP_DIFF: {
+      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
+      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
+        result.b = t1.i != t2.i;
+      } else {
+        result.b = t1.f != t2.f;
+      }
+      return result;
+    }
+    case OP_AND: {
+      t1 = evaluate_logical_expr(s->logical_stmt.left);
+      t2 = evaluate_logical_expr(s->logical_stmt.right);
+      result.b = t1.b && t2.b;
+      return result;
+    }
+    case OP_OR: {
+      t1 = evaluate_logical_expr(s->logical_stmt.left);
+      t2 = evaluate_logical_expr(s->logical_stmt.right);
+      result.b = t1.b || t2.b;
+      return result;
+    } 
+    case OP_NOT: {
+      t2 = evaluate_logical_expr(s->logical_stmt.right);
+      result.b = !t2.b;
+      return result;
+    }
+    default:
+      return result;
+  }
+}
 
 void execute_stmt(Stmt* s) {
   switch (s->type) {
+    case STMT_ARITHMETIC:
+      printf("esse é o execute stmt pra arithmetic stmt");
+      break;
     case STMT_LOGICAL:
+      printf("esse é o execute stmt pra logical stmt");
       break;
     case STMT_WRITE:
       if (s->write.is_literal) {
@@ -2305,24 +2408,83 @@ void execute_stmt(Stmt* s) {
       break;
     }
     case STMT_IF:
-      if (evaluate_logical_expr(s->if_stmt.cond)) {
-          execute_stmt_list(s->if_stmt.then_block);
+      if (evaluate_logical_expr(s->if_stmt.cond).b) {
+        execute_stmt_list(s->if_stmt.then_block);
       } else if (s->if_stmt.else_block) {
-          execute_stmt_list(s->if_stmt.else_block);
+        execute_stmt_list(s->if_stmt.else_block);
       }
       break;
-    case STMT_WHILE:
-      printf("Entrando no while\n");
-      /*while (evaluate_logical_expr(s->while_stmt.cond)) {
+    case STMT_WHILE: {
+      while (evaluate_logical_expr(s->while_stmt.cond).b) {
         execute_stmt_list(s->while_stmt.body);
-      }*/
-      int c = 5;
-      while(c>=0 && c <=5) {
-        execute_stmt_list(s->while_stmt.body);
-        c = c -1;
-        printf("cond é: %d\n", evaluate_logical_expr(s->while_stmt.cond));
       }
       break;
+    }
+    case STMT_ATTRIB: {
+      int attrib_si = get_symbol_index(s->attrib_stmt.var_name);
+      char buffer[256];
+      
+      if (attrib_si == -1) {
+        snprintf(buffer, sizeof(buffer),
+          "Undefined declaration of identifier '%s'", s->attrib_stmt.var_name);
+        yyerror(buffer);
+      }
+
+      Value expr_value;
+
+      if (s->attrib_stmt.value->type == STMT_LOGICAL) {
+        expr_value = evaluate_logical_expr(s->attrib_stmt.value);
+      } else if (s->attrib_stmt.value->type == STMT_ARITHMETIC){
+        expr_value = evaluate_arithmetic_expr(s->attrib_stmt.value);
+      } else if (s->attrib_stmt.value->type == STMT_FACTOR) {
+        expr_value = evaluate_factor_expr(s->attrib_stmt.value);
+      }
+
+      char val_type = expr_value.type;
+
+      switch (symb_table[attrib_si].type) {
+        case TYPE_INT:
+          if (val_type == TYPE_INT) {
+            symb_table[attrib_si].i = expr_value.i;
+          } else {
+            snprintf(buffer, sizeof(buffer),
+                    "Semantic Error: Variable '%s' type mismatch", s->attrib_stmt.var_name);
+            yyerror(buffer);
+          }
+          break;
+        case TYPE_BOOL:
+          printf("val_type: %d\n", val_type);
+          if (val_type == TYPE_BOOL) {
+            symb_table[attrib_si].b = expr_value.b;
+          } /*else {
+            snprintf(buffer, sizeof(buffer),
+                    "Semantic Error: Variable '%s' type mismatch", s->attrib_stmt.var_name);
+            yyerror(buffer);
+          }*/
+          break;
+        case TYPE_CHAR:
+          if (val_type == TYPE_CHAR) {
+            symb_table[attrib_si].c = expr_value.c;
+          } else {
+            snprintf(buffer, sizeof(buffer),
+                    "Semantic Error: Variable '%s' type mismatch", s->attrib_stmt.var_name);
+            yyerror(buffer);
+          }
+          break;
+        case TYPE_FLOAT:
+          if (val_type == TYPE_FLOAT) {
+            symb_table[attrib_si].f = expr_value.f;
+          } else {
+            snprintf(buffer, sizeof(buffer),
+                    "Semantic Error: Variable '%s' type mismatch", s->attrib_stmt.var_name);
+            yyerror(buffer);
+          }
+          break;
+        default:
+          break;
+      }
+      break;
+    }
   }
 }
 
