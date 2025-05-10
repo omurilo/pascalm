@@ -3,7 +3,15 @@
 
 #include <stdbool.h>
 
-typedef enum {
+typedef union Data {
+  int i;
+  bool b;
+  char c;
+  double f;
+  char* s;
+} Data;
+
+typedef enum VarType {
   TYPE_INT,
   TYPE_FLOAT,
   TYPE_BOOL,
@@ -11,30 +19,18 @@ typedef enum {
   TYPE_STRING
 } VarType;
 
-typedef struct {
+typedef struct Value {
   VarType type;
-  union {
-    int i;
-    bool b;
-    char c;
-    double f;
-    char* s;
-  };
+  Data data;
 } Value;
 
-typedef struct {
+typedef struct Symbol {
   char name[11];
   VarType type;
-  union {
-    int i;
-    double f;
-    char c;
-    int b;
-    char* s;
-  };
+  Data data;
 } Symbol;
 
-typedef enum {
+typedef enum Operation {
   OP_GT,
   OP_GTE,
   OP_LT,
@@ -46,7 +42,7 @@ typedef enum {
   OP_NOT
 } Operation;
 
-typedef enum {
+typedef enum ArithmeticOp {
   AOP_PLUS,
   AOP_MINUS,
   AOP_TIMES,
@@ -55,69 +51,84 @@ typedef enum {
   AOP_UMINUS
 } ArithmeticOp;
 
-typedef enum {
+typedef struct Stmt Stmt;
+typedef struct StmtList StmtList;
+typedef struct Expr Expr;
+
+typedef enum ExprType {
+  EXPR_VAR,
+  EXPR_LITERAL,
+  EXPR_ARITH,
+  EXPR_LOGIC
+} ExprType;
+
+struct Expr {
+  ExprType type;
+  int lineno;
+  int col;
+
+  union {
+    struct {
+      Expr* left;
+      Expr* right;
+      ArithmeticOp op;
+    } arith;
+
+    struct {
+      Expr* left;
+      Expr* right;
+      Operation op;
+    } logic;
+
+    const char* var_name;
+    Value literal;
+    bool uminus;
+  };
+};
+
+typedef enum StmtType {
   STMT_WRITE,
   STMT_IF,
   STMT_READ,
   STMT_WHILE,
-  STMT_LOGICAL,
-  STMT_ARITHMETIC,
-  STMT_FACTOR,
   STMT_ATTRIB
 } StmtType;
 
-typedef struct Stmt {
+struct Stmt {
   StmtType type;
+  int lineno;
+  int col;
   union {
     struct {
       char* var_name;
-      Value literal;
-      int is_literal;
+      Expr* expr;
     } write;
 
     struct {
-      char* var_name;
+      const char* var_name;
     } read;
 
     struct {
-      struct Stmt* cond;
-      struct StmtList* then_block;
-      struct StmtList* else_block;
+      Expr* cond;
+      StmtList* then_block;
+      StmtList* else_block;
     } if_stmt;
 
     struct {
-      struct Stmt* cond;
-      struct StmtList* body;
+      Expr* cond;
+      StmtList* body;
     } while_stmt;
 
     struct {
-      struct Stmt* left;
-      struct Stmt* right;
-      Operation op;
-    } logical_stmt;
-
-    struct {
-      struct Stmt* left;
-      struct Stmt* right;
-      ArithmeticOp op;
-    } arithmetic_stmt;
-
-    struct {
-      char* var_name;
-      Value value;
-      bool uminus;
-    } factor_stmt;
-
-    struct {
-      char* var_name;
-      Stmt* value;
-    } attrib_stmt;
+      const char* var_name;
+      Expr* expr;
+    } assign;
   };
-} Stmt;
+};
 
-typedef struct StmtList {
+struct StmtList {
   Stmt* stmt;
-  struct StmtList* next;
-} StmtList;
+  StmtList* next;
+};
 
 #endif

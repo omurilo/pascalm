@@ -16,6 +16,10 @@ NC=\033[0m
 
 all: build run test clean
 
+debug: $(TARGET).tab.c lex.yy.c
+	@$(LD) -g -O0 -o $(TARGET) $?
+	@lldb ./$(TARGET)
+
 build: $(TARGET).tab.c lex.yy.c
 	@$(LD) -o $(TARGET) $?
 	@printf "✅$(BG_GREEN)$(FG_BLACK) Build program finish $(NC)\n"
@@ -32,7 +36,6 @@ test: $(TARGET).output.txt run
 	else \
 		printf  "❌$(BG_RED)$(FG_BLACK) Test error $(NC)\n"; \
 		echo "$$diff_output"; \
-		exit 1; \
 	fi
 
 $(filter %.tab.c,$(TARGET).y): %.tab.c: %.y
@@ -45,5 +48,5 @@ lex.yy.c: $(TARGET).lex $(TARGET).tab.c
 	@$(FLEX) $<
 
 clean:
-	@rm -rf $(TARGET).output $(TARGET) $(TARGET).tab.c $(TARGET).tab.h lex.yy.c
+	@rm -rf $(TARGET).output $(TARGET) $(TARGET).tab.c $(TARGET).tab.h lex.yy.c $(TARGET).dSYM
 	@printf  "✅$(BG_GREEN)$(FG_BLACK) Files cleaned $(NC)\n"

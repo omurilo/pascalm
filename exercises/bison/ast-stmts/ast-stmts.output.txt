@@ -6,4 +6,17 @@ a
 b
 uma string
 true
+true
 45
+entrou no begin, valor de c:
+0
+entrou no begin, valor de c:
+1
+entrou no begin, valor de c:
+2
+entrou no begin, valor de c:
+3
+entrou no begin, valor de c:
+4
+entrou no begin, valor de c:
+5

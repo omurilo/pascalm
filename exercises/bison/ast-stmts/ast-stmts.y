@@ -12,24 +12,25 @@ extern FILE* yyin;
 int add_symbol(const char* id, VarType type);
 int get_symbol_index(const char* id);
 void execute_stmt_list(StmtList* list);
-Value evaluate_arithmetic_expr(Stmt* stmt);
-Value evaluate_logical_expr(Stmt* stmt);
-Value evaluate_factor_expr(Stmt* stmt);
+Value evaluate_arithmetic_expr(Expr* expr);
+Value evaluate_logical_expr(Expr* expr);
+Value evaluate_factor_expr(Expr* expr);
 void print_value(Value v);
 void print_symbol(Symbol s);
 
-Stmt* make_stmt_write_var(char* var_name);
-Stmt* make_stmt_write_lit(Value v);
 Stmt* make_stmt_read(char* var_name);
-Stmt* make_stmt_if(Stmt* cond, StmtList* then_block, StmtList* else_block);
-Stmt* make_stmt_while(Stmt* cond, StmtList* body);
-Stmt* make_stmt_logical(Stmt* left, Operation op, Stmt* right);
-Stmt* make_stmt_arithmetic(Stmt* left, ArithmeticOp op, Stmt* right);
-Stmt* make_stmt_factor(Value val, bool minus_unary);
-Stmt* make_stmt_factor_var(char* variable);
-Stmt* make_stmt_attrib(char* variable, Stmt* value);
+Stmt* make_stmt_if(Expr* cond, StmtList* then_block, StmtList* else_block);
+Stmt* make_stmt_while(Expr* cond, StmtList* body);
+Stmt* make_stmt_attrib(char* var_name, Expr* expr);
+Stmt* make_stmt_write(char* var_name, Expr* expr);
+
 StmtList* make_stmt_list(Stmt* stmt, StmtList* next);
 StmtList* append_stmt_list(StmtList* list, Stmt* stmt);
+
+Expr* make_literal_expr(VarType type, Value val, bool uminus);
+Expr* make_var_expr(char* name);
+Expr* make_arith_expr(Expr* left, Expr* right, ArithmeticOp op);
+Expr* make_logic_expr(Expr* left, Expr* right, Operation op);
 
 void print_symbol_table();
 
@@ -38,14 +39,14 @@ static int symb_count = 0;
 %}
 
 %union {
+  int type;
   char* identifier;
   char* val;
-  int type;
-  struct Node *node;
 
   Value value;
-  struct Stmt* stmt;
-  struct StmtList* stmt_list;
+  Expr* expr;
+  Stmt* stmt;
+  StmtList* stmt_list;
 }
 
 %token ATTRIB
@@ -70,9 +71,9 @@ static int symb_count = 0;
 %token <identifier> READ
 
 %type <stmt_list> stmt_list
-%type <stmt> stmt if_stmt write read while expr_value logical_expr arithmetic_expr factor atrib
+%type <stmt> stmt if_stmt write read while atrib
+%type <expr> logical_expr arithmetic_expr expr_value factor_literal factor_var
 
-/* %type <value> factor */
 %type <type> declaration
 
 %left MINUS PLUS
@@ -129,10 +130,13 @@ while:
 
 write:
     WRITE_ID {
-        $$ = make_stmt_write_var($1);
+        $$ = make_stmt_write($1, NULL);
     }
     | WRITE {
-        $$ = make_stmt_write_lit($1);
+        Expr* e = (Expr*) malloc(sizeof(Expr));
+        e->type = EXPR_LITERAL;
+        e->literal = $1;
+        $$ = make_stmt_write(NULL, e);
     }
 
 read:
@@ -158,61 +162,64 @@ expr_value:
  
 logical_expr:
     arithmetic_expr GT arithmetic_expr {
-      $$ = make_stmt_logical($1, OP_GT, $3);
+      $$ = make_logic_expr($1, $3, OP_GT);
     }
     | arithmetic_expr GTE arithmetic_expr {
-        $$ = make_stmt_logical($1, OP_GTE, $3);
+        $$ = make_logic_expr($1, $3, OP_GTE);
       }
     | arithmetic_expr LT arithmetic_expr {
-        $$ = make_stmt_logical($1, OP_LT, $3);
+        $$ = make_logic_expr($1, $3, OP_LT);
       }
     | arithmetic_expr LTE arithmetic_expr {
-        $$ = make_stmt_logical($1, OP_LTE, $3);
+        $$ = make_logic_expr($1, $3, OP_LTE);
       }
     | arithmetic_expr EQUALS arithmetic_expr {
-        $$ = make_stmt_logical($1, OP_EQUALS, $3);
+        $$ = make_logic_expr($1, $3, OP_EQUALS);
       }
     | arithmetic_expr DIFF arithmetic_expr {
-        $$ = make_stmt_logical($1, OP_DIFF, $3);
+        $$ = make_logic_expr($1, $3, OP_DIFF);
       }
     | L_PAREN logical_expr AND logical_expr R_PAREN {
-        $$ = make_stmt_logical($2, OP_AND, $4);
+        $$ = make_logic_expr($2, $4, OP_AND);
       }
     | L_PAREN logical_expr OR logical_expr R_PAREN {
-        $$ = make_stmt_logical($2, OP_OR, $4);
+        $$ = make_logic_expr($2, $4, OP_OR);
       }
     | L_PAREN NOT logical_expr R_PAREN {
-        $$ = make_stmt_logical(NULL, OP_NOT, $3);
+        $$ = make_logic_expr(NULL, $3, OP_NOT);
       }
 
 arithmetic_expr: 
     arithmetic_expr PLUS arithmetic_expr {
-      $$ = make_stmt_arithmetic($1, AOP_PLUS, $3);
+      $$ = make_arith_expr($1, $3, AOP_PLUS);
     }
     | arithmetic_expr MINUS arithmetic_expr  {
-      $$ = make_stmt_arithmetic($1, AOP_MINUS, $3);
+      $$ = make_arith_expr($1, $3, AOP_MINUS);
     }
     | arithmetic_expr TIMES arithmetic_expr  {
-      $$ = make_stmt_arithmetic($1, AOP_TIMES, $3);
+      $$ = make_arith_expr($1, $3, AOP_TIMES);
     }
     | arithmetic_expr DIVIDE arithmetic_expr  {
-      $$ = make_stmt_arithmetic($1, AOP_DIVIDE, $3);
+      $$ = make_arith_expr($1, $3, AOP_DIVIDE);
     }
     | arithmetic_expr EXPONENT arithmetic_expr {
-      $$ = make_stmt_arithmetic($1, AOP_EXPONENT, $3);
+      $$ = make_arith_expr($1, $3, AOP_EXPONENT);
     }
     | L_PAREN arithmetic_expr R_PAREN { $$ = $2; }
-    | factor { $$ = $1; }
+    | factor_literal { $$ = $1; }
+    | factor_var { $$ = $1; }
 
-factor: 
+factor_literal: 
       VAL {
-        $$ = make_stmt_factor($1, false);
+        $$ = make_literal_expr($1.type, $1, false);
       }
       | MINUS VAL %prec NEG {
-        $$ = make_stmt_factor($2, true);
+        $$ = make_literal_expr($2.type, $2, true);
       }
-      | VARIABLE {
-        $$ = make_stmt_factor_var($1);
+
+factor_var:
+      VARIABLE {
+        $$ = make_var_expr($1);
       }
 %%
 
@@ -247,7 +254,6 @@ int get_symbol_index(const char* id) {
 Symbol* get_symbol_by_name(const char* id) {
   int i = get_symbol_index(id);
   if (i == -1) {
-    fprintf(stderr, "foi aqui mesmo, id: %d\n", id);
     fprintf(stderr, "Error: undeclared variable '%s'\n", id);
     exit(1);
   }
@@ -273,30 +279,24 @@ StmtList* make_stmt_list(Stmt* stmt, StmtList* list) {
   return list;
 }
 
-Stmt* make_stmt_write_var(char* var_name) {
+Stmt* make_stmt_write(char* var_name, Expr* expr) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_WRITE;
-  s->write.var_name = strdup(var_name);
-  s->write.is_literal = 0;
-  return s;
-}
-
-Stmt* make_stmt_write_lit(Value literal) {
-  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
-  s->type = STMT_WRITE;
-  s->write.literal = literal;
-  s->write.is_literal = 1;
+  if (var_name != NULL) {
+    s->write.var_name = strdup(var_name);
+  }
+  s->write.expr = expr;
   return s;
 }
 
 Stmt* make_stmt_read(char* var_name) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_READ;
-  s->read.var_name = var_name;
+  s->read.var_name = strdup(var_name);
   return s;
 }
 
-Stmt* make_stmt_if(Stmt* cond, StmtList* then_block, StmtList* else_block) {
+Stmt* make_stmt_if(Expr* cond, StmtList* then_block, StmtList* else_block) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_IF;
   s->if_stmt.cond = cond;
@@ -305,7 +305,7 @@ Stmt* make_stmt_if(Stmt* cond, StmtList* then_block, StmtList* else_block) {
   return s;
 }
 
-Stmt* make_stmt_while(Stmt* cond, StmtList* body) {
+Stmt* make_stmt_while(Expr* cond, StmtList* body) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_WHILE;
   s->while_stmt.cond = cond;
@@ -313,189 +313,203 @@ Stmt* make_stmt_while(Stmt* cond, StmtList* body) {
   return s;
 }
 
-Stmt* make_stmt_logical(Stmt* left, Operation op, Stmt* right) {
-  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
-  s->type = STMT_LOGICAL;
-  s->logical_stmt.left = left;
-  s->logical_stmt.right = right;
-  s->logical_stmt.op = op;
-  return s;
+Expr* make_literal_expr(VarType type, Value val, bool uminus) {
+  Expr* e = (Expr*) malloc(sizeof(Expr));
+  memset(e, 0, sizeof(Expr));
+
+  e->type = EXPR_LITERAL;
+  e->uminus = uminus;
+  e->literal.type = type;
+
+  switch (type) {
+    case TYPE_BOOL:
+      e->literal.data.b = val.data.b;
+      break;
+    case TYPE_INT:
+      e->literal.data.i = val.data.i;
+      break;
+    case TYPE_CHAR:
+      e->literal.data.c = val.data.c;
+      break;
+    case TYPE_FLOAT:
+      e->literal.data.f = val.data.f;
+      break;
+    case TYPE_STRING:
+      e->literal.data.s = strdup(val.data.s);
+      break;
+    default:
+      break;
+  }
+  return e;
 }
 
-Stmt* make_stmt_arithmetic(Stmt* left, ArithmeticOp op, Stmt* right) {
-  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
-  s->type = STMT_ARITHMETIC;
-  s->arithmetic_stmt.left = left;
-  s->arithmetic_stmt.right = right;
-  s->arithmetic_stmt.op = op;
-  return s;
+Expr* make_var_expr(char* name) {
+  Expr* e = (Expr*) malloc(sizeof(Expr));
+  e->type = EXPR_VAR;
+  e->var_name = strdup(name);
+  return e;
 }
 
-Stmt* make_stmt_factor_var(char* variable) {
-  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
-  s->type = STMT_FACTOR;
-  fprintf(stderr, "var_name on factor var %s\n", variable);
-  s->factor_stmt.var_name = strdup(variable);
-  s->factor_stmt.uminus = false;
-  return s;
+Expr* make_arith_expr(Expr* left, Expr* right, ArithmeticOp op) {
+  Expr* e = (Expr*) malloc(sizeof(Expr));
+  e->type = EXPR_ARITH;
+  e->arith.left = left;
+  e->arith.right = right;
+  e->arith.op = op;
+  return e;
 }
 
-Stmt* make_stmt_factor(Value val, bool minus_unary) {
-  Stmt* s = (Stmt*) malloc(sizeof(Stmt));
-  s->type = STMT_FACTOR;
-  s->factor_stmt.var_name = NULL;
-  s->factor_stmt.value = val;
-  s->factor_stmt.uminus = minus_unary;
-  return s;
+Expr* make_logic_expr(Expr* left, Expr* right, Operation op) {
+  Expr* e = (Expr*) malloc(sizeof(Expr));
+  e->type = EXPR_LOGIC;
+  e->logic.left = left;
+  e->logic.right = right;
+  e->logic.op = op;
+  return e;
 }
 
-Stmt* make_stmt_attrib(char* variable, Stmt* value) {
+Stmt* make_stmt_attrib(char* variable, Expr* expr) {
   Stmt* s = (Stmt*) malloc(sizeof(Stmt));
   s->type = STMT_ATTRIB;
-  s->attrib_stmt.var_name = strdup(variable);
-  s->attrib_stmt.value = value;
+  s->assign.var_name = strdup(variable);
+  s->assign.expr = expr;
   return s;
 }
 
-Value evaluate_factor_expr(Stmt* s) {
+Value evaluate_factor_expr(Expr* e) {
   Value result;
 
-  fprintf(stderr, "var_name: %s, cmp: %d\n", s->factor_stmt.var_name);
-  if (s->factor_stmt.var_name != NULL) {
-    Symbol* symb = get_symbol_by_name(s->factor_stmt.var_name);
+  if (e->type == EXPR_VAR && e->var_name != NULL && strlen(e->var_name) > 0) {
+    Symbol* symb = get_symbol_by_name(e->var_name);
 
     result.type = symb->type;
 
     switch (result.type) {
       case TYPE_INT:
-        result.i = symb->i;
+        result.data.i = symb->data.i;
         break;
       case TYPE_FLOAT:
-        result.f = symb->f;
+        result.data.f = symb->data.f;
         break;
       case TYPE_BOOL:
-        result.b = symb->b;
+        result.data.b = symb->data.b;
         break;
       case TYPE_CHAR:
-        result.c = symb->c;
+        result.data.c = symb->data.c;
         break;
       default:
         break;
     }
+  } else if (e->type == EXPR_LITERAL) {
+    result = e->literal;
   } else {
-    result.type = s->factor_stmt.value.type;
-
-    switch (result.type) {
-      case TYPE_INT:
-        result.i = s->factor_stmt.uminus ? -s->factor_stmt.value.i : s->factor_stmt.value.i;
-        break;
-      case TYPE_FLOAT: 
-        result.f = s->factor_stmt.uminus ? -s->factor_stmt.value.f : s->factor_stmt.value.f;
-        break;
-      case TYPE_CHAR:
-        result.c = s->factor_stmt.value.c;
-        break;
-      case TYPE_BOOL:
-        result.b = s->factor_stmt.value.b;
-        break;
-      default:
-        break;
-    }
+    fprintf(stderr,
+      "Erro: expressão inesperada em evaluate_factor_expr\n"
+      "  Tipo da expressão: %d\n"
+      "  Ponteiro da expressão: %p\n"
+      "  var_name: %s\n"
+      "  literal.type: %d\n",
+      e->type,
+      (void*)e,
+      e->var_name ? e->var_name : "(null)",
+      e->literal.type
+    );
+    exit(1);
   }
 
   return result;
 }
 
-Value evaluate_arithmetic_expr(Stmt* s) {
+Value evaluate_arithmetic_expr(Expr* e) {
   double d1, d2;
   int i1, i2;
 
   Value value;
 
-  if (s->type != STMT_ARITHMETIC) {
-    return evaluate_factor_expr(s);
+  if (e->type != EXPR_ARITH) {
+    return evaluate_factor_expr(e);
   } 
 
-  if (s->arithmetic_stmt.left != NULL) {
-    Value t1 = evaluate_factor_expr(s->arithmetic_stmt.left);
+  if (e->arith.left != NULL) {
+    Value t1 = evaluate_arithmetic_expr(e->arith.left);
     if (t1.type == TYPE_INT) {
-      i1 = t1.i;
+      i1 = t1.data.i;
     } else {
-      d1 = t1.f;
+      d1 = t1.data.f;
     }
   }
 
-  Value t2 = evaluate_factor_expr(s->arithmetic_stmt.right);
+  Value t2 = evaluate_arithmetic_expr(e->arith.right);
   if (t2.type == TYPE_INT) {
-    i2 = t2.i;
+    i2 = t2.data.i;
   } else {
-    d2 = t2.f;
+    d2 = t2.data.f;
   }
-  switch (s->arithmetic_stmt.op) {
+  switch (e->arith.op) {
     case AOP_PLUS: {
       if (i1 >= 0 && i2 >= 0) {
         value.type = TYPE_INT;
-        value.i = i1 + i2;
+        value.data.i = i1 + i2;
         return value;
       }
   
       value.type = TYPE_FLOAT;
-      value.f = (i1 >= 0 ? (double)i1 : d1) + (i2 >= 0 ? (double)i2 : d2);
+      value.data.f = (i1 >= 0 ? (double)i1 : d1) + (i2 >= 0 ? (double)i2 : d2);
       return value;
     }
     case AOP_MINUS: {
       if (i1 >= 0 && i2 >= 0) {
         value.type = TYPE_INT;
-        value.i = i1 - i2;
+        value.data.i = i1 - i2;
         return value;
       }
       
       value.type = TYPE_FLOAT;
-      value.f = (i1 >= 0 ? (double)i1 : d1) - (i2 >= 0 ? (double)i2 : d2);
+      value.data.f = (i1 >= 0 ? (double)i1 : d1) - (i2 >= 0 ? (double)i2 : d2);
       return value;
     }
     case AOP_TIMES: {
       if (i1 >= 0 && i2 >= 0) {
         value.type = TYPE_INT;
-        value.i = i1 * i2;
+        value.data.i = i1 * i2;
         return value;
       }
       
       value.type = TYPE_FLOAT;
-      value.f = (i1 >= 0 ? (double)i1 : d1) * (i2 >= 0 ? (double)i2 : d2);
+      value.data.f = (i1 >= 0 ? (double)i1 : d1) * (i2 >= 0 ? (double)i2 : d2);
       return value;
     }
     case AOP_DIVIDE: {
       if (i1 >= 0 && i2 >= 0) {
         value.type = TYPE_INT;
-        value.i = i1 / i2;
+        value.data.i = i1 / i2;
         return value;
       }
       
       value.type = TYPE_FLOAT;
-      value.f = (i1 >= 0 ? (double)i1 : d1) / (i2 >= 0 ? (double)i2 : d2);
+      value.data.f = (i1 >= 0 ? (double)i1 : d1) / (i2 >= 0 ? (double)i2 : d2);
       return value;
     }
     case AOP_EXPONENT: {
       if (i1 >= 0 && i2 >= 0) {
         value.type = TYPE_INT;
-        value.i = pow(i1, i2);
+        value.data.i = pow(i1, i2);
         return value;
       }
 
       value.type = TYPE_FLOAT;
-      value.f = pow((i1 >= 0 ? i1 : d1), (i2 >= 0 ? i2 : d2)); 
+      value.data.f = pow((i1 >= 0 ? i1 : d1), (i2 >= 0 ? i2 : d2)); 
       return value;
     }
     case AOP_UMINUS: {
       if (i2 >= 0) {
         value.type = TYPE_INT;
-        value.i = -i2;
+        value.data.i = -i2;
         return value;
       }
 
       value.type = TYPE_FLOAT;
-      value.f = -d2;
+      value.data.f = -d2;
       return value;
     }
     default:
@@ -504,87 +518,87 @@ Value evaluate_arithmetic_expr(Stmt* s) {
   
 }
 
-Value evaluate_logical_expr(Stmt* s) {
+Value evaluate_logical_expr(Expr* e) {
   Value t1, t2, result;
 
-  result.type == TYPE_BOOL;
+  result.type = TYPE_BOOL;
 
-  switch (s->logical_stmt.op) {
+  switch (e->logic.op) {
     case OP_GT: {
-      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
-      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      t1 = evaluate_arithmetic_expr(e->logic.left);
+      t2 = evaluate_arithmetic_expr(e->logic.right);
       if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
-        result.b = t1.i > t2.i;
+        result.data.b = t1.data.i > t2.data.i;
       } else {
-        result.b = t1.f > t2.f;
+        result.data.b = t1.data.f > t2.data.f;
       }
       return result;
     }
     case OP_GTE: {
-      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
-      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      t1 = evaluate_arithmetic_expr(e->logic.left);
+      t2 = evaluate_arithmetic_expr(e->logic.right);
       if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
-        result.b = t1.i >= t2.i;
+        result.data.b = t1.data.i >= t2.data.i;
       } else {
-        result.b = t1.f >= t2.f;
+        result.data.b = t1.data.f >= t2.data.f;
       }
       return result;
     }
     case OP_LT: {
-      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
-      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      t1 = evaluate_arithmetic_expr(e->logic.left);
+      t2 = evaluate_arithmetic_expr(e->logic.right);
       if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
-        result.b = t1.i < t2.i;
+        result.data.b = t1.data.i < t2.data.i;
       } else {
-        result.b = t1.f < t2.f;
+        result.data.b = t1.data.f < t2.data.f;
       }
       return result;
     }
     case OP_LTE: {
-      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
-      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      t1 = evaluate_arithmetic_expr(e->logic.left);
+      t2 = evaluate_arithmetic_expr(e->logic.right);
       if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
-        result.b = t1.i <= t2.i;
+        result.data.b = t1.data.i <= t2.data.i;
       } else {
-        result.b = t1.f <= t2.f;
+        result.data.b = t1.data.f <= t2.data.f;
       }
       return result;
     }
     case OP_EQUALS: {
-      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
-      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      t1 = evaluate_arithmetic_expr(e->logic.left);
+      t2 = evaluate_arithmetic_expr(e->logic.right);
       if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
-        result.b = t1.i == t2.i;
+        result.data.b = t1.data.i == t2.data.i;
       } else {
-        result.b = t1.f == t2.f;
+        result.data.b = t1.data.f == t2.data.f;
       }
       return result;
     }
     case OP_DIFF: {
-      t1 = evaluate_arithmetic_expr(s->logical_stmt.left);
-      t2 = evaluate_arithmetic_expr(s->logical_stmt.right);
+      t1 = evaluate_arithmetic_expr(e->logic.left);
+      t2 = evaluate_arithmetic_expr(e->logic.right);
       if (t1.type == TYPE_INT && t2.type == TYPE_INT) {
-        result.b = t1.i != t2.i;
+        result.data.b = t1.data.i != t2.data.i;
       } else {
-        result.b = t1.f != t2.f;
+        result.data.b = t1.data.f != t2.data.f;
       }
       return result;
     }
     case OP_AND: {
-      t1 = evaluate_logical_expr(s->logical_stmt.left);
-      t2 = evaluate_logical_expr(s->logical_stmt.right);
-      result.b = t1.b && t2.b;
+      t1 = evaluate_logical_expr(e->logic.left);
+      t2 = evaluate_logical_expr(e->logic.right);
+      result.data.b = t1.data.b && t2.data.b;
       return result;
     }
     case OP_OR: {
-      t1 = evaluate_logical_expr(s->logical_stmt.left);
-      t2 = evaluate_logical_expr(s->logical_stmt.right);
-      result.b = t1.b || t2.b;
+      t1 = evaluate_logical_expr(e->logic.left);
+      t2 = evaluate_logical_expr(e->logic.right);
+      result.data.b = t1.data.b || t2.data.b;
       return result;
     } 
     case OP_NOT: {
-      t2 = evaluate_logical_expr(s->logical_stmt.right);
-      result.b = !t2.b;
+      t2 = evaluate_logical_expr(e->logic.right);
+      result.data.b = !t2.data.b;
       return result;
     }
     default:
@@ -594,15 +608,9 @@ Value evaluate_logical_expr(Stmt* s) {
 
 void execute_stmt(Stmt* s) {
   switch (s->type) {
-    case STMT_ARITHMETIC:
-      printf("esse é o execute stmt pra arithmetic stmt");
-      break;
-    case STMT_LOGICAL:
-      printf("esse é o execute stmt pra logical stmt");
-      break;
     case STMT_WRITE:
-      if (s->write.is_literal) {
-          print_value(s->write.literal);
+      if (!s->write.var_name) {
+          print_value(s->write.expr->literal);
       } else {
           int i = get_symbol_index(s->write.var_name);
           if (i == -1) {
@@ -623,92 +631,91 @@ void execute_stmt(Stmt* s) {
 
       Symbol* read_symb = &symb_table[read_si];
 
-      if (read_symb->s == NULL) {
-        read_symb->s = (char*) calloc(100, sizeof(char));
-        if (!read_symb->s) {
+      if (read_symb->data.s == NULL) {
+        read_symb->data.s = (char*) calloc(100, sizeof(char));
+        if (!read_symb->data.s) {
           fprintf(stderr, "Error on allocate memory to variable '%s'\n", read_symb->name);
           exit(1);
         }
       }
 
-      if (fgets(read_symb->s, 100, stdin) == NULL) {
+      if (fgets(read_symb->data.s, 100, stdin) == NULL) {
         fprintf(stderr, "Error on read value for '%s'\n", read_symb->name);
         exit(1); 
       }
 
-      read_symb->s[strcspn(read_symb->s, "\n")] = '\0';
+      read_symb->data.s[strcspn(read_symb->data.s, "\n")] = '\0';
       break;
     }
     case STMT_IF:
-      if (evaluate_logical_expr(s->if_stmt.cond).b) {
+      if (evaluate_logical_expr(s->if_stmt.cond).data.b) {
         execute_stmt_list(s->if_stmt.then_block);
       } else if (s->if_stmt.else_block) {
         execute_stmt_list(s->if_stmt.else_block);
       }
       break;
     case STMT_WHILE: {
-      while (evaluate_logical_expr(s->while_stmt.cond).b) {
+      while (evaluate_logical_expr(s->while_stmt.cond).data.b) {
         execute_stmt_list(s->while_stmt.body);
       }
       break;
     }
     case STMT_ATTRIB: {
-      int attrib_si = get_symbol_index(s->attrib_stmt.var_name);
+      int attrib_si = get_symbol_index(s->assign.var_name);
       char buffer[256];
       
       if (attrib_si == -1) {
         snprintf(buffer, sizeof(buffer),
-          "Undefined declaration of identifier '%s'", s->attrib_stmt.var_name);
+          "Undefined declaration of identifier '%s'", s->assign.var_name);
         yyerror(buffer);
       }
 
       Value expr_value;
 
-      if (s->attrib_stmt.value->type == STMT_LOGICAL) {
-        expr_value = evaluate_logical_expr(s->attrib_stmt.value);
-      } else if (s->attrib_stmt.value->type == STMT_ARITHMETIC){
-        expr_value = evaluate_arithmetic_expr(s->attrib_stmt.value);
-      } else if (s->attrib_stmt.value->type == STMT_FACTOR) {
-        expr_value = evaluate_factor_expr(s->attrib_stmt.value);
+      if (s->assign.expr->type == EXPR_LOGIC) {
+        expr_value = evaluate_logical_expr(s->assign.expr);
+      } else if (s->assign.expr->type == EXPR_ARITH){
+        expr_value = evaluate_arithmetic_expr(s->assign.expr);
+      } else if (s->assign.expr->type == EXPR_VAR || s->assign.expr->type == EXPR_LITERAL) {
+        expr_value = evaluate_factor_expr(s->assign.expr);
       }
-
-      char val_type = expr_value.type;
+      
+      int val_type = expr_value.type;
 
       switch (symb_table[attrib_si].type) {
         case TYPE_INT:
           if (val_type == TYPE_INT) {
-            symb_table[attrib_si].i = expr_value.i;
+            symb_table[attrib_si].data.i = expr_value.data.i;
           } else {
             snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch", s->attrib_stmt.var_name);
+                    "Semantic Error: Variable '%s' type mismatch", s->assign.var_name);
             yyerror(buffer);
           }
           break;
         case TYPE_BOOL:
-          printf("val_type: %d\n", val_type);
           if (val_type == TYPE_BOOL) {
-            symb_table[attrib_si].b = expr_value.b;
-          } /*else {
+            symb_table[attrib_si].data.b = expr_value.data.b;
+          } else {
             snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch", s->attrib_stmt.var_name);
+                    "Semantic Error: Variable '%s' type mismatch", s->assign.var_name);
             yyerror(buffer);
-          }*/
+          }
           break;
         case TYPE_CHAR:
           if (val_type == TYPE_CHAR) {
-            symb_table[attrib_si].c = expr_value.c;
+            symb_table[attrib_si].data.c = expr_value.data.c;
           } else {
             snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch", s->attrib_stmt.var_name);
+                    "Semantic Error: Variable '%s' type mismatch", s->assign.var_name);
             yyerror(buffer);
           }
           break;
         case TYPE_FLOAT:
           if (val_type == TYPE_FLOAT) {
-            symb_table[attrib_si].f = expr_value.f;
+            symb_table[attrib_si].data.f = expr_value.data.f;
           } else {
             snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch", s->attrib_stmt.var_name);
+                    "Semantic Error: Variable '%s' type mismatch", s->assign.var_name);
             yyerror(buffer);
           }
           break;
@@ -730,19 +737,19 @@ void execute_stmt_list(StmtList* list) {
 void print_symbol(Symbol symb) {
   switch (symb.type) {
     case TYPE_INT:
-      printf("%d\n", symb.i);
+      printf("%d\n", symb.data.i);
       break;
     case TYPE_FLOAT:
-      printf("%.2f\n", symb.f);
+      printf("%.2f\n", symb.data.f);
       break;
     case TYPE_BOOL:
-      printf("%s\n", symb.b == 1 ? "true" : "false");
+      printf("%s\n", symb.data.b == 1 ? "true" : "false");
       break;
     case TYPE_CHAR:
-      printf("%c\n", symb.c);
+      printf("%c\n", symb.data.c);
       break;
     case TYPE_STRING:
-      printf("%s\n", symb.s);
+      printf("%s\n", symb.data.s);
       break;
   }
 }
@@ -750,13 +757,13 @@ void print_symbol(Symbol symb) {
 void print_value(Value v) {
   switch (v.type) {
     case TYPE_FLOAT:
-      printf("%.2f\n", v.f);
+      printf("%.2f\n", v.data.f);
       break;
     case TYPE_CHAR:
-      printf("%c\n", v.c);
+      printf("%c\n", v.data.c);
       break;
     case TYPE_STRING:
-      printf("%s\n", v.s);
+      printf("%s\n", v.data.s);
       break;
     default:
       fprintf(stderr, "Erro: tipo de valor desconhecido\n");

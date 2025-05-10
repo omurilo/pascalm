@@ -96,6 +96,58 @@
           "store_path": "/nix/store/alnp7ki4l517wf6crdka0mn34y5f01q8-flex-2.6.4"
         }
       }
+    },
+    "gdb@latest": {
+      "last_modified": "2025-04-17T05:47:26Z",
+      "resolved": "github:NixOS/nixpkgs/ebe4301cbd8f81c4f8d3244b3632338bbeb6d49c#gdb",
+      "source": "devbox-search",
+      "version": "16.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/l42qlg5fg64rjpfy76wzjfhmsff0ibc8-gdb-16.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/l42qlg5fg64rjpfy76wzjfhmsff0ibc8-gdb-16.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/y4ak502sawyw8llhnd2bs7lvvjkgfv46-gdb-16.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/y4ak502sawyw8llhnd2bs7lvvjkgfv46-gdb-16.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/hlbpi3zi6alxb72xglrr57w40vfqw1vl-gdb-16.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/hlbpi3zi6alxb72xglrr57w40vfqw1vl-gdb-16.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/v2gw1fvvp3fpsvdj04s363zb36hs411k-gdb-16.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/v2gw1fvvp3fpsvdj04s363zb36hs411k-gdb-16.2"
+        }
+      }
+    },
+    "github:NixOS/nixpkgs/nixpkgs-unstable": {
+      "last_modified": "2025-04-17T05:47:26Z",
+      "resolved": "github:NixOS/nixpkgs/ebe4301cbd8f81c4f8d3244b3632338bbeb6d49c?lastModified=1744868846&narHash=sha256-5RJTdUHDmj12Qsv7XOhuospjAjATNiTMElplWnJE9Hs%3D"
     }
   }
 }

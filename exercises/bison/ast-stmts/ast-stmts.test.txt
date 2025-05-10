@@ -42,10 +42,10 @@ if (((c > 2 AND c >= 10 / 2) OR (c > -1 AND c = 5))) then {
   b := 4 - 2;
   write(b);
 }
-
-while (c <= 5 AND c >= 0) do
+c:=0;
+while c <= 5 do
   begin
     write("entrou no begin, valor de c:");
     write(c);
-    c := c - 1;
+    c := c + 1;
   end;

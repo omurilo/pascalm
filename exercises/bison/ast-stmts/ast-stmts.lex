@@ -56,10 +56,10 @@ void yyerror(char *message);
 "float"         {yylval.type = TYPE_FLOAT; return TYPE;}
 "char"          {yylval.type = TYPE_CHAR; return TYPE;}
 
-{CHAR}          {yylval.value.type = TYPE_CHAR; yylval.value.c = yytext[1]; return VAL;}
-[0-9]+          {yylval.value.type = TYPE_INT; yylval.value.i = atoi(yytext); return VAL;}
-{NUMBER}        {yylval.value.type = TYPE_FLOAT; yylval.value.f = atof(yytext); return VAL;}
-"false"|"true"  {yylval.value.type = TYPE_BOOL; yylval.value.b = strcmp(yytext, "true"); return VAL;}
+{CHAR}          {yylval.value.type = TYPE_CHAR; yylval.value.data.c = yytext[1]; return VAL;}
+[0-9]+          {yylval.value.type = TYPE_INT; yylval.value.data.i = atoi(yytext); return VAL;}
+{NUMBER}        {yylval.value.type = TYPE_FLOAT; yylval.value.data.f = atof(yytext); return VAL;}
+"false"|"true"  {yylval.value.type = TYPE_BOOL; yylval.value.data.b = strcmp(yytext, "true"); return VAL;}
 
 "while" { return WHILE; }
 "do" { return WHILE_DO; }
@@ -85,9 +85,9 @@ void yyerror(char *message);
 }
 <W>{NUMBER} {
   yylval.value.type = TYPE_FLOAT;
-  yylval.value.f = atof(yytext);
+  yylval.value.data.f = atof(yytext);
 }
-<W>{CHAR} { yylval.value.type = TYPE_CHAR; yylval.value.c = yytext[1]; }
+<W>{CHAR} { yylval.value.type = TYPE_CHAR; yylval.value.data.c = yytext[1]; }
 <W>[\'\"]?\) {
   BEGIN(INITIAL);
   return WRITE;
@@ -95,7 +95,7 @@ void yyerror(char *message);
 <W>\"  BEGIN(W_S);
 <W_S>[^\"\n]* {
   yylval.value.type = TYPE_STRING;
-  yylval.value.s = strdup(yytext);
+  yylval.value.data.s = strdup(yytext);
   BEGIN(W);
 }
 
