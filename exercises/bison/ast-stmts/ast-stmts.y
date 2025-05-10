@@ -86,6 +86,7 @@ static int symb_count = 0;
 %nonassoc GT GTE LT LTE DIFF EQUALS
 
 %define parse.error verbose
+%locations
 
 %%
 
@@ -126,34 +127,48 @@ stmt:
 while:
     WHILE logical_expr WHILE_DO WHILE_BEGIN stmt_list WHILE_END {
       $$ = make_stmt_while($2, $5);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
 
 write:
     WRITE_ID {
         $$ = make_stmt_write($1, NULL);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
     }
     | WRITE {
         Expr* e = (Expr*) malloc(sizeof(Expr));
         e->type = EXPR_LITERAL;
         e->literal = $1;
         $$ = make_stmt_write(NULL, e);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
     }
 
 read:
     READ {
       $$ = make_stmt_read($1);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
 
 if_stmt:
     IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE {
       $$ = make_stmt_if($3, $7, NULL);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
     | IF L_PAREN logical_expr R_PAREN THEN L_CBRACE stmt_list R_CBRACE ELSE L_CBRACE stmt_list R_CBRACE {
       $$ = make_stmt_if($3, $7, $11);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
 
 atrib: VARIABLE ATTRIB expr_value {
       $$ = make_stmt_attrib($1, $3);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
 
 expr_value:
@@ -163,47 +178,75 @@ expr_value:
 logical_expr:
     arithmetic_expr GT arithmetic_expr {
       $$ = make_logic_expr($1, $3, OP_GT);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
     | arithmetic_expr GTE arithmetic_expr {
         $$ = make_logic_expr($1, $3, OP_GTE);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
     | arithmetic_expr LT arithmetic_expr {
         $$ = make_logic_expr($1, $3, OP_LT);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
     | arithmetic_expr LTE arithmetic_expr {
         $$ = make_logic_expr($1, $3, OP_LTE);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
     | arithmetic_expr EQUALS arithmetic_expr {
         $$ = make_logic_expr($1, $3, OP_EQUALS);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
     | arithmetic_expr DIFF arithmetic_expr {
         $$ = make_logic_expr($1, $3, OP_DIFF);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
     | L_PAREN logical_expr AND logical_expr R_PAREN {
         $$ = make_logic_expr($2, $4, OP_AND);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
     | L_PAREN logical_expr OR logical_expr R_PAREN {
         $$ = make_logic_expr($2, $4, OP_OR);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
     | L_PAREN NOT logical_expr R_PAREN {
         $$ = make_logic_expr(NULL, $3, OP_NOT);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
 
 arithmetic_expr: 
     arithmetic_expr PLUS arithmetic_expr {
       $$ = make_arith_expr($1, $3, AOP_PLUS);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
     | arithmetic_expr MINUS arithmetic_expr  {
       $$ = make_arith_expr($1, $3, AOP_MINUS);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
     | arithmetic_expr TIMES arithmetic_expr  {
       $$ = make_arith_expr($1, $3, AOP_TIMES);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
     | arithmetic_expr DIVIDE arithmetic_expr  {
       $$ = make_arith_expr($1, $3, AOP_DIVIDE);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
     | arithmetic_expr EXPONENT arithmetic_expr {
       $$ = make_arith_expr($1, $3, AOP_EXPONENT);
+      $$->lineno = @1.first_line;
+      $$->col = @1.first_column;
     }
     | L_PAREN arithmetic_expr R_PAREN { $$ = $2; }
     | factor_literal { $$ = $1; }
@@ -212,14 +255,20 @@ arithmetic_expr:
 factor_literal: 
       VAL {
         $$ = make_literal_expr($1.type, $1, false);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
       | MINUS VAL %prec NEG {
         $$ = make_literal_expr($2.type, $2, true);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
 
 factor_var:
       VARIABLE {
         $$ = make_var_expr($1);
+        $$->lineno = @1.first_line;
+        $$->col = @1.first_column;
       }
 %%
 
@@ -408,11 +457,14 @@ Value evaluate_factor_expr(Expr* e) {
       "  Tipo da expressão: %d\n"
       "  Ponteiro da expressão: %p\n"
       "  var_name: %s\n"
-      "  literal.type: %d\n",
+      "  literal.type: %d\n"
+      "  line: %d and column: %d\n",
       e->type,
       (void*)e,
       e->var_name ? e->var_name : "(null)",
-      e->literal.type
+      e->literal.type,
+      e->lineno,
+      e->col
     );
     exit(1);
   }
@@ -614,7 +666,7 @@ void execute_stmt(Stmt* s) {
       } else {
           int i = get_symbol_index(s->write.var_name);
           if (i == -1) {
-            fprintf(stderr, "Error: undeclared variable '%s'\n", s->write.var_name);
+            fprintf(stderr, "Error: undeclared variable '%s' at line: %d and column: %d\n", s->write.var_name, s->lineno, s->col);
             exit(1);
           }
 
@@ -625,7 +677,7 @@ void execute_stmt(Stmt* s) {
       int read_si = add_symbol(s->read.var_name, TYPE_STRING);
 
       if (read_si == -1) {
-        fprintf(stderr, "Error to declare variable '%s'\n", s->read.var_name);
+        fprintf(stderr, "Error to declare variable '%s' at line: %d and column: %d\n", s->read.var_name, s->lineno, s->col);
         exit(1);
       }
 
@@ -634,13 +686,13 @@ void execute_stmt(Stmt* s) {
       if (read_symb->data.s == NULL) {
         read_symb->data.s = (char*) calloc(100, sizeof(char));
         if (!read_symb->data.s) {
-          fprintf(stderr, "Error on allocate memory to variable '%s'\n", read_symb->name);
+          fprintf(stderr, "Error on allocate memory to variable '%s' at line: %d and column: %d\n", read_symb->name, s->lineno, s->col);
           exit(1);
         }
       }
 
       if (fgets(read_symb->data.s, 100, stdin) == NULL) {
-        fprintf(stderr, "Error on read value for '%s'\n", read_symb->name);
+        fprintf(stderr, "Error on read value for '%s' at line: %d and column: %d\n", read_symb->name, s->lineno, s->col);
         exit(1); 
       }
 
@@ -666,7 +718,7 @@ void execute_stmt(Stmt* s) {
       
       if (attrib_si == -1) {
         snprintf(buffer, sizeof(buffer),
-          "Undefined declaration of identifier '%s'", s->assign.var_name);
+          "Undefined declaration of identifier '%s' at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
         yyerror(buffer);
       }
 
@@ -688,7 +740,7 @@ void execute_stmt(Stmt* s) {
             symb_table[attrib_si].data.i = expr_value.data.i;
           } else {
             snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch", s->assign.var_name);
+                    "Semantic Error: Variable '%s' type mismatch at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
             yyerror(buffer);
           }
           break;
@@ -697,7 +749,7 @@ void execute_stmt(Stmt* s) {
             symb_table[attrib_si].data.b = expr_value.data.b;
           } else {
             snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch", s->assign.var_name);
+                    "Semantic Error: Variable '%s' type mismatch at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
             yyerror(buffer);
           }
           break;
@@ -706,7 +758,7 @@ void execute_stmt(Stmt* s) {
             symb_table[attrib_si].data.c = expr_value.data.c;
           } else {
             snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch", s->assign.var_name);
+                    "Semantic Error: Variable '%s' type mismatch at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
             yyerror(buffer);
           }
           break;
@@ -715,7 +767,7 @@ void execute_stmt(Stmt* s) {
             symb_table[attrib_si].data.f = expr_value.data.f;
           } else {
             snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch", s->assign.var_name);
+                    "Semantic Error: Variable '%s' type mismatch at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
             yyerror(buffer);
           }
           break;
