@@ -25,45 +25,48 @@ jobs:
       run: |
         find exercises/bison/ -type f \( -name "*.lex" -or -name "*.l" -or -name "*.y" \) -exec dirname {} \; | sort -u | while read module; do
           echo "Testing module: $module"
+          
+          cd "$module" || continue
 
-          mkdir -p $HOME/bison_build
-          lfiles=$(find "$module" -maxdepth 1 \( -name "*.l" -or -name "*.lex" \))
-          yfiles=$(find "$module" -maxdepth 1 \( -name "*.y" \))
-          hfiles=$(find "$module" -maxdepth 1 \( -name "*.h" \))
+          lfiles=$(find . -maxdepth 1 \( -name "*.l" -or -name "*.lex" \))
+          yfiles=$(find . -maxdepth 1 -name "*.y")
+          hfiles=$(find . -maxdepth 1 -name "*.h")
 
           if [ -z "$lfiles" ] || [ -z "$yfiles" ]; then
-            echo "No .l or .lex or .y files found in module $module, skipping this module."
+            echo "No .l or .y files found in $module, skipping"
+            cd - >/dev/null
             continue
           fi
 
-          filename=$(echo $yfiles | rev | cut -d '/' -f 1 | rev | cut -d '.' -f 1)
+          filename=$(basename "$yfiles" .y)
 
-          bison -d $yfiles -o $filename.tab.c
-          flex $lfiles
-          
+          bison -d "$yfiles" -o "$filename.tab.c"
+          flex "$lfiles"
+
           if [ ! -f "lex.yy.c" ] || [ ! -f "$filename.tab.c" ]; then
-            echo "lex.yy.c or $filename.tab.c not generated, skipping this module."
+            echo "Bison/Flex output missing, skipping $module"
+            cd - >/dev/null
             continue
           fi
 
-          g++ -I. -o $HOME/bison_build/parser lex.yy.c $filename.tab.c
+          g++ -I. -o parser lex.yy.c "$filename.tab.c"
 
-          rm -rf lex.yy.c $filename.tab.c $filename.tab.h
-
-          input_file=$(find "$module" -maxdepth 1 \( -name "*.test.txt" \))
-          expected_output=$(find "$module" -maxdepth 1 \( -name "*.output.txt" \))
+          input_file=$(find . -maxdepth 1 -name "*.test.txt")
+          expected_output=$(find . -maxdepth 1 -name "*.output.txt")
 
           if [ ! -f "$input_file" ] || [ ! -f "$expected_output" ]; then
-            echo "Test files not found in module $module, skipping this module."
+            echo "Missing test files in $module, skipping"
+            cd - >/dev/null
             continue
           fi
 
-          $HOME/bison_build/parser < "$input_file" > $HOME/bison_build/output.txt
+          ./parser < "$input_file" > output.txt
+          diff output.txt "$expected_output" || exit 1
 
-          diff $HOME/bison_build/output.txt "$expected_output" || exit 1
-          cd -
+          # Clean up
+          rm -f parser lex.yy.c "$filename.tab.c" "$filename.tab.h" output.txt
+          cd - >/dev/null
         done
-
     - name: Check test results
       run: |
         if [ $? -eq 0 ]; then
