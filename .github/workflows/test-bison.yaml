@@ -48,7 +48,7 @@ jobs:
             continue
           fi
 
-          g++ -o $HOME/bison_build/parser lex.yy.c $filename.tab.c
+          g++ -I $module -o $HOME/bison_build/parser lex.yy.c $filename.tab.c
 
           rm -rf lex.yy.c $filename.tab.c $filename.tab.h
 
