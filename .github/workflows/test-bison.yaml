@@ -28,9 +28,10 @@ jobs:
           
           cd "$module" || continue
 
-          lfiles=$(find . -maxdepth 1 \( -name "*.l" -or -name "*.lex" \))
-          yfiles=$(find . -maxdepth 1 -name "*.y")
-          hfiles=$(find . -maxdepth 1 -name "*.h")
+          mkdir -p $HOME/bison_build
+
+          lfiles=$(find "$module" -maxdepth 1 \( -name "*.l" -or -name "*.lex" \))
+          yfiles=$(find "$module" -maxdepth 1 \( -name "*.y" \))
 
           if [ -z "$lfiles" ] || [ -z "$yfiles" ]; then
             echo "No .l or .y files found in $module, skipping"
