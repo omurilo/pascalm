@@ -8,16 +8,18 @@
 int yywrap();
 int yylex();
 void yyerror(const char* str);
-extern FILE* yyin;
+extern FILE *yyin;
+int yyparse();
 
 int add_symbol(const char* id, VarType type);
 int get_symbol_index(const char* id);
-TAC* execute_stmt_list(StmtList* list);
+void print_value(Value v);
+void print_symbol(Symbol s);
+void print_expr(Expr* e);
+
 Value evaluate_arithmetic_expr(Expr* expr);
 Value evaluate_logical_expr(Expr* expr);
 Value evaluate_factor_expr(Expr* expr);
-void print_value(Value v);
-void print_symbol(Symbol s);
 
 Stmt* make_stmt_read(char* var_name);
 Stmt* make_stmt_if(Expr* cond, StmtList* then_block, StmtList* else_block);
@@ -41,8 +43,6 @@ TAC* tac_append(TAC* list, TAC* new_code);
 
 void tac_print(TAC* code);
 void print_symbol_table();
-
-void print_expr(Expr* e);
 
 char* new_temp();
 char* new_label();
@@ -108,7 +108,7 @@ int label_count = 0;
 
 progexec:
         declarations stmt_list {
-          tac_print(execute_stmt_list($2));
+          tac_print(generate_stmt_list_tac($2));
         }
         |
         ;
@@ -383,7 +383,6 @@ Expr* make_literal_expr(VarType type, Value val, bool uminus) {
   memset(e, 0, sizeof(Expr));
 
   e->type = EXPR_LITERAL;
-  e->uminus = uminus;
   e->literal.type = type;
 
   switch (type) {
@@ -391,13 +390,13 @@ Expr* make_literal_expr(VarType type, Value val, bool uminus) {
       e->literal.data.b = val.data.b;
       break;
     case TYPE_INT:
-      e->literal.data.i = val.data.i;
+      e->literal.data.i = uminus ? -val.data.i : val.data.i;
       break;
     case TYPE_CHAR:
       e->literal.data.c = val.data.c;
       break;
     case TYPE_FLOAT:
-      e->literal.data.f = val.data.f;
+      e->literal.data.f = uminus ? -val.data.f : val.data.f;
       break;
     case TYPE_STRING:
       e->literal.data.s = strdup(val.data.s);
@@ -659,129 +658,6 @@ Value evaluate_logical_expr(Expr* e) {
   }
 }
 
-void execute_stmt(Stmt* s) {
-  switch (s->type) {
-    case STMT_WRITE:
-      if (!s->write.var_name) {
-          // print_value(s->write.expr->literal);
-      } else {
-          int i = get_symbol_index(s->write.var_name);
-          if (i == -1) {
-            fprintf(stderr, "Error: undeclared variable '%s' at line: %d and column: %d\n", s->write.var_name, s->lineno, s->col);
-            exit(1);
-          }
-
-          // print_symbol(symb_table[i]);
-      }
-      break;
-    case STMT_READ: {
-      int read_si = add_symbol(s->read.var_name, TYPE_STRING);
-
-      if (read_si == -1) {
-        fprintf(stderr, "Error to declare variable '%s' at line: %d and column: %d\n", s->read.var_name, s->lineno, s->col);
-        exit(1);
-      }
-
-      Symbol* read_symb = &symb_table[read_si];
-
-      if (read_symb->data.s == NULL) {
-        read_symb->data.s = (char*) calloc(100, sizeof(char));
-        if (!read_symb->data.s) {
-          fprintf(stderr, "Error on allocate memory to variable '%s' at line: %d and column: %d\n", read_symb->name, s->lineno, s->col);
-          exit(1);
-        }
-      }
-
-      // if (fgets(read_symb->data.s, 100, stdin) == NULL) {
-      //   fprintf(stderr, "Error on read value for '%s' at line: %d and column: %d\n", read_symb->name, s->lineno, s->col);
-      //   exit(1); 
-      // }
-      //
-      // read_symb->data.s[strcspn(read_symb->data.s, "\n")] = '\0';
-      // break;
-    }
-    case STMT_IF:
-      if (evaluate_logical_expr(s->if_stmt.cond).data.b) {
-        execute_stmt_list(s->if_stmt.then_block);
-      } else if (s->if_stmt.else_block) {
-        execute_stmt_list(s->if_stmt.else_block);
-      }
-      break;
-    case STMT_WHILE: {
-      while (evaluate_logical_expr(s->while_stmt.cond).data.b) {
-        execute_stmt_list(s->while_stmt.body);
-      }
-      break;
-    }
-    case STMT_ATTRIB: {
-      int attrib_si = get_symbol_index(s->assign.var_name);
-      char buffer[256];
-      
-      if (attrib_si == -1) {
-        snprintf(buffer, sizeof(buffer),
-          "Undefined declaration of identifier '%s' at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
-        yyerror(buffer);
-      }
-
-      Value expr_value;
-
-      if (s->assign.expr->type == EXPR_LOGIC) {
-        expr_value = evaluate_logical_expr(s->assign.expr);
-      } else if (s->assign.expr->type == EXPR_ARITH){
-        expr_value = evaluate_arithmetic_expr(s->assign.expr);
-      } else if (s->assign.expr->type == EXPR_VAR || s->assign.expr->type == EXPR_LITERAL) {
-        expr_value = evaluate_factor_expr(s->assign.expr);
-      }
-
-      int val_type = expr_value.type;
-
-      switch (symb_table[attrib_si].type) {
-        case TYPE_INT:
-          if (val_type == TYPE_INT) {
-            symb_table[attrib_si].data.i = expr_value.data.i;
-          } else {
-            snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
-            yyerror(buffer);
-          }
-          break;
-        case TYPE_BOOL:
-          if (val_type == TYPE_BOOL) {
-            symb_table[attrib_si].data.b = expr_value.data.b;
-          } else {
-            snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
-            yyerror(buffer);
-          }
-          break;
-        case TYPE_CHAR:
-          if (val_type == TYPE_CHAR) {
-            symb_table[attrib_si].data.c = expr_value.data.c;
-          } else {
-            snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
-            yyerror(buffer);
-          }
-          break;
-        case TYPE_FLOAT:
-          if (val_type == TYPE_FLOAT) {
-            symb_table[attrib_si].data.f = expr_value.data.f;
-          } else if (val_type == TYPE_INT) {
-            symb_table[attrib_si].data.f = (double)expr_value.data.i;
-          } else {
-            snprintf(buffer, sizeof(buffer),
-                    "Semantic Error: Variable '%s' type mismatch at line: %d and column: %d", s->assign.var_name, s->lineno, s->col);
-            yyerror(buffer);
-          }
-          break;
-        default:
-          break;
-      }
-      break;
-    }
-  }
-}
-
 void verify_assign_types(Stmt* s) {
   int attrib_si = get_symbol_index(s->assign.var_name);
   char buffer[256];
@@ -838,20 +714,12 @@ void verify_assign_types(Stmt* s) {
   }
 }
 
-TAC* execute_stmt_list(StmtList* list) {
-  return generate_stmt_list_tac(list);
-  // while (list) {
-  //   execute_stmt(list->stmt);
-  //   list = list->next;
-  // }
-}
-
 ExprResult generate_expr_tac(Expr* e) {
   ExprResult res = {NULL, NULL};
 
   if (e->type == EXPR_ARITH) {
-    ExprResult left = generate_expr_tac(e->arith.left);
-    ExprResult right;
+    ExprResult left;
+    ExprResult right = generate_expr_tac(e->arith.right);
     char* temp = new_temp();
     char op;
     char buffer[128];
@@ -866,12 +734,13 @@ ExprResult generate_expr_tac(Expr* e) {
       default: op = '?'; break;
     }
 
+    
     if (e->arith.op == AOP_UMINUS) {
-      snprintf(buffer, sizeof(buffer), "%s = -%s", temp, left.temp);
+      snprintf(buffer, sizeof(buffer), "%s = -%s", temp, right.temp);
       res.code = left.code;
     } else {
-      right = generate_expr_tac(e->arith.right);
-      snprintf(buffer, sizeof(buffer), "%s = %s %c %s", temp, left.temp, op, right.temp);
+      left = generate_expr_tac(e->arith.left);
+      snprintf(buffer, sizeof(buffer), "%s = %s + %s", temp, left.temp, right.temp);
       res.code = tac_append(left.code, right.code);
     }
 
@@ -1153,16 +1022,22 @@ void yyerror(const char* str) {
 
 int main(int argc, char** argv) {
   if (argc > 1) {
-    yyin = fopen(argv[1], "r");
-    if (!yyin) {
-        fprintf(stderr, "Error on open file");
+      yyin = fopen(argv[1], "r");
+      if (!yyin) {
+        perror("Error open file");
         return 1;
+      }
+    } else {
+      yyin = stdin;
     }
-  }
 
-  yyparse();
-  return 0;
-}
+    yyparse();
+
+    if (yyin != stdin) {
+        fclose(yyin);
+    }
+
+    return 0;}
 
 void print_expr(Expr* e) {
   if (!e) {

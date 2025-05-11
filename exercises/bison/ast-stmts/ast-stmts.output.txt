@@ -16,9 +16,9 @@ ifFalse t4 goto L1
 t6 = entrou no begin, valor de c:
 print t6
 print c
-t8 = 1
-t7 = c + t8
-c = t7
+t7 = 1
+t8 = c + t7
+c = t8
 goto L0
 L1:
 t10 = 10

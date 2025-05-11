@@ -117,6 +117,7 @@ void yyerror(char *message);
 [\n(\r\n)]      { YY_USER_ACTION; YYCOLUMN = 1; yylineno++; }
 .               { YY_USER_ACTION; YYCOLUMN += yyleng; yyerror((char*)"Illegal input"); }
 
+<<EOF>>    return 0;
 %%
 
 void yyerror(char *message) {
