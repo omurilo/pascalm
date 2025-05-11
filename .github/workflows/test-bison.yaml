@@ -26,6 +26,8 @@ jobs:
         find exercises/bison/ -type f \( -name "*.lex" -or -name "*.l" -or -name "*.y" \) -exec dirname {} \; | sort -u | while read module; do
           echo "Testing module: $module"
 
+          cd "$module"
+
           mkdir -p $HOME/bison_build
 
           lfiles=$(find "$module" -maxdepth 1 \( -name "*.l" -or -name "*.lex" \))
@@ -48,7 +50,7 @@ jobs:
             continue
           fi
 
-          g++ -I $module -o $HOME/bison_build/parser lex.yy.c $filename.tab.c
+          g++ -o $HOME/bison_build/parser lex.yy.c $filename.tab.c
 
           rm -rf lex.yy.c $filename.tab.c $filename.tab.h
 
@@ -63,6 +65,8 @@ jobs:
           $HOME/bison_build/parser < "$input_file" > $HOME/bison_build/output.txt
 
           diff $HOME/bison_build/output.txt "$expected_output" || exit 1
+
+          cd - > /dev/null
         done
 
     - name: Check test results
