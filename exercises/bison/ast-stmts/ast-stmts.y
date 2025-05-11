@@ -751,8 +751,8 @@ ExprResult generate_expr_tac(Expr* e) {
   }
 
   if (e->type == EXPR_LOGIC) {
-    ExprResult left = generate_expr_tac(e->logic.left);
-    ExprResult right;
+    ExprResult left;
+    ExprResult right = generate_expr_tac(e->logic.right);
     char* temp = new_temp();
     const char* op;
     char buffer[128];
@@ -771,10 +771,10 @@ ExprResult generate_expr_tac(Expr* e) {
     }
 
     if (e->logic.op == OP_NOT) {
-      snprintf(buffer, sizeof(buffer), "%s = !%s", temp, left.temp);
+      snprintf(buffer, sizeof(buffer), "%s = !%s", temp, right.temp);
       res.code = left.code;
     } else {
-      right = generate_expr_tac(e->logic.right);
+      left = generate_expr_tac(e->logic.left);
       snprintf(buffer, sizeof(buffer), "%s = %s %s %s", temp, left.temp, op, right.temp);
       res.code = tac_append(left.code, right.code);
     }
