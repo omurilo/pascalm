@@ -10,9 +10,9 @@ print inteiro3
 t3 = 0
 c = t3
 L0:
-t5 = 5
-t4 = c <= t5
-ifFalse t4 goto L1
+t4 = 5
+t5 = c <= t4
+ifFalse t5 goto L1
 t6 = entrou no begin, valor de c:
 print t6
 print c
@@ -21,15 +21,15 @@ t8 = c + t7
 c = t8
 goto L0
 L1:
-t10 = 10
-t9 = inteiro == t10
-t13 = 5
-t12 = c == t13
-t16 = 5
-t15 = c < t16
-t14 = t12 || t15
-t11 = t9 && t14
-ifFalse t11 goto L2
+t15 = 10
+t16 = inteiro == t15
+t12 = 5
+t13 = c == t12
+t9 = 5
+t10 = c < t9
+t11 = t13 || t10
+t14 = t16 && t11
+ifFalse t14 goto L2
 t17 = entrou
 print t17
 goto L3
