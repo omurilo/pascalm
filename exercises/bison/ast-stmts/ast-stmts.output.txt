@@ -1,22 +1,39 @@
-10
-true
-a
-1.00
-19683
-b
-uma string
-true
-true
-45
-entrou no begin, valor de c:
-0
-entrou no begin, valor de c:
-1
-entrou no begin, valor de c:
-2
-entrou no begin, valor de c:
-3
-entrou no begin, valor de c:
-4
-entrou no begin, valor de c:
-5
+t0 = 10
+inteiro = t0
+t1 = 15
+inteiro2 = t1
+t2 = inteiro + inteiro2
+real = t2
+print real
+read inteiro3
+print inteiro3
+t3 = 0
+c = t3
+L0:
+t5 = 5
+t4 = c <= t5
+ifFalse t4 goto L1
+t6 = entrou no begin, valor de c:
+print t6
+print c
+t8 = 1
+t7 = c + t8
+c = t7
+goto L0
+L1:
+t10 = 10
+t9 = inteiro == t10
+t13 = 5
+t12 = c == t13
+t16 = 5
+t15 = c < t16
+t14 = t12 || t15
+t11 = t9 && t14
+ifFalse t11 goto L2
+t17 = entrou
+print t17
+goto L3
+L2:
+t18 = não entrou
+print t18
+L3:

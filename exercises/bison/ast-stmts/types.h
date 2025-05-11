@@ -131,4 +131,14 @@ struct StmtList {
   StmtList* next;
 };
 
+typedef struct {
+  char* temp;
+  struct TAC* code;
+} ExprResult;
+
+typedef struct TAC {
+  char* code;
+  struct TAC* next;
+} TAC;
+
 #endif

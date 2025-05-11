@@ -1,51 +1,25 @@
 int inteiro;
-boolean bool;
-char character;
-float double;
-int exponent;
-boolean dois_bool;
-boolean different;
+int inteiro2;
+int itneiro3;
 int c;
-int a;
-int d;
-int b;
-
+float real;
 inteiro := 10;
-bool := 10 < 20;
-character := 'a';
-double := 1.0;
-exponent := 3^(4+5);
-different := 3 <> 3.01;
+inteiro2 := 15;
+real := inteiro + inteiro2;
+write(real);
+read("inteiro3");
+write(inteiro3);
 
-dois_bool := 10 = inteiro;
-
-write(inteiro);
-write(bool);
-write(character);
-write(double);
-write(exponent);
-write('b');
-write("uma string");
-write(dois_bool);
-write(different);
-
-c := 5;
-if (((c > 2 AND c >= 10 / 2) OR (c > -1 AND c = 5))) then {
-  a := 4 + 5;
-  if (a = 9) then {
-    d := a * c;
-    write(d);
-  } else {
-    write(c);
-  }
-} else {
-  b := 4 - 2;
-  write(b);
-}
 c:=0;
-while c <= 5 do
+while (c <= 5) do
   begin
     write("entrou no begin, valor de c:");
     write(c);
     c := c + 1;
   end;
+
+if ((inteiro = 10 AND (c = 5 OR c < 5))) then {
+  write("entrou");
+} else {
+  write("não entrou");
+}
