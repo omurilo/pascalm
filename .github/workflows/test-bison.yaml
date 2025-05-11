@@ -30,6 +30,7 @@ jobs:
 
           lfiles=$(find "$module" -maxdepth 1 \( -name "*.l" -or -name "*.lex" \))
           yfiles=$(find "$module" -maxdepth 1 \( -name "*.y" \))
+          hfiles=$(find "$module" -maxdepth 1 \( -name "*.h" \))
 
           if [ -z "$lfiles" ] || [ -z "$yfiles" ]; then
             echo "No .l or .lex or .y files found in module $module, skipping this module."
