@@ -27,6 +27,7 @@ jobs:
           echo "Testing module: $module"
 
           mkdir -p $HOME/bison_build
+
           lfiles=$(find "$module" -maxdepth 1 \( -name "*.l" -or -name "*.lex" \))
           yfiles=$(find "$module" -maxdepth 1 \( -name "*.y" \))
 
@@ -37,7 +38,9 @@ jobs:
 
           filename=$(echo $yfiles | rev | cut -d '/' -f 1 | rev | cut -d '.' -f 1)
 
+          echo "build bison files"
           bison -d $yfiles -o $filename.tab.c
+          echo "builind flex filex"
           flex $lfiles
           
           if [ ! -f "lex.yy.c" ] || [ ! -f "$filename.tab.c" ]; then
@@ -45,8 +48,12 @@ jobs:
             continue
           fi
 
-          g++ -I. -o $HOME/bison_build/parser lex.yy.c $filename.tab.c
+          echo "build g++ -o $HOME/bison_build/parser"
+          g++ -I $module -o $HOME/bison_build/parser lex.yy.c $filename.tab.c
 
+          echo "Files:"
+          ls -la .
+          echo "removing lex.yy.c $filename.tav.c $filename.tab.h"
           rm -rf lex.yy.c $filename.tab.c $filename.tab.h
 
           input_file=$(find "$module" -maxdepth 1 \( -name "*.test.txt" \))
@@ -57,10 +64,10 @@ jobs:
             continue
           fi
 
+          echo "Exex parser with $input_file"
           $HOME/bison_build/parser < "$input_file" > $HOME/bison_build/output.txt
 
           diff $HOME/bison_build/output.txt "$expected_output" || exit 1
-          cd -
         done
 
     - name: Check test results
