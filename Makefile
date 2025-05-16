@@ -20,7 +20,7 @@ debug: $(TARGET).tab.c lex.yy.c
 	@$(LD) -g -O0 -o $(TARGET) $?
 	@lldb ./$(TARGET)
 
-build: $(TARGET).tab.c lex.yy.c
+build: $(TARGET).tab.c lex.yy.c *.c
 	@$(LD) -o $(TARGET) $?
 	@printf "✅$(BG_GREEN)$(FG_BLACK) Build program finish $(NC)\n"
 
@@ -42,7 +42,7 @@ $(filter %.tab.c,$(TARGET).y): %.tab.c: %.y
 	@printf  "$(RED)target: $@ prereq: $<$(NC)"
 
 %.tab.c: $(TARGET).y
-	@$(BISON) -o $@ -d $< -Wcounterexamples
+	@$(BISON) -o $@ -d $<  -Wcounterexamples
 
 lex.yy.c: $(TARGET).lex $(TARGET).tab.c
 	@$(FLEX) $<
