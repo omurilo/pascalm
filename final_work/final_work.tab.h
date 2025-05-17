@@ -44,6 +44,12 @@
 #if YYDEBUG
 extern int yydebug;
 #endif
+/* "%code requires" blocks.  */
+#line 16 "final_work.y"
+
+  #include "types.h"
+
+#line 53 "final_work.tab.h"
 
 /* Token kinds.  */
 #ifndef YYTOKENTYPE
@@ -134,7 +140,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 18 "final_work.y"
+#line 20 "final_work.y"
 
   int ival;
   double fval;
@@ -142,19 +148,34 @@ union YYSTYPE
   char* sval;
   bool bval;
 
-  TypeInfo type;
-  Field *field_list;
-  Param *param_list;
+  long int integer;
+  bool boolean;
+  char character;
+  double number;
+  char* string;
+
+  struct Field *field_list;
+  struct Param *param_list;
+  struct ArgList *arg_list;
+
+  struct TypeInfo *type;
 
   char** strlist;
 
-  Constant constant;
+  struct Constant constant;
 
-  Expr* expr;
-  Stmt* stmt;
-  StmtList* stmt_list;
+  struct Expr       *expr;
+  struct VarRefExpr *var_ref;
+  struct Decl       *decl;
+  struct FuncDecl   *func_decl;
+  struct TypeDecl   *type_decl;
+  struct VarDecl    *var_decl;
+  struct ProcDecl   *proc_decl;
+  struct ConstDecl  *cons_decl;
+  struct LabelDecl  *label_decl;
+  struct ProcCall   *proc_call;
 
-#line 158 "final_work.tab.h"
+#line 179 "final_work.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
@@ -163,18 +184,7 @@ typedef union YYSTYPE YYSTYPE;
 #endif
 
 /* Location type.  */
-#if ! defined YYLTYPE && ! defined YYLTYPE_IS_DECLARED
-typedef struct YYLTYPE YYLTYPE;
-struct YYLTYPE
-{
-  int first_line;
-  int first_column;
-  int last_line;
-  int last_column;
-};
-# define YYLTYPE_IS_DECLARED 1
-# define YYLTYPE_IS_TRIVIAL 1
-#endif
+typedef YYLTYPE YYLTYPE;
 
 
 extern YYSTYPE yylval;

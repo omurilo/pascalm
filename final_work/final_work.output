@@ -1,4 +1,10 @@
-': ''Total x2 = 100''Total x2 = ' [INTEGER: 0] 
-'Imprimindo lista de alunos:'
-
-'Digite 0 para sair: 'read: opt
+Tipo custom: TAluno at line 17 col 28
+Tipo do TAluno: record
+fields:
+ nome of type string
+ nota of type integer
+Tipo custom: TAluno at line 27 col 27
+Tipo do TAluno: record
+fields:
+ nome of type string
+ nota of type integer

@@ -16,7 +16,7 @@ NC=\033[0m
 
 all: build run test clean
 
-debug: $(TARGET).tab.c lex.yy.c
+debug: $(TARGET).tab.c lex.yy.c *.c
 	@$(LD) -g -O0 -o $(TARGET) $?
 	@lldb ./$(TARGET)
 

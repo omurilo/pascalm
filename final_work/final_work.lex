@@ -1,3 +1,33 @@
+%option noyywrap nounput noinput batch yylineno
+%{
+#include <stdio.h>
+#include <string.h>
+#include "final_work.tab.h"
+#include "types.h"
+
+#define SAVE_INTEGER yylval.integer = atoi(yytext)
+#define SAVE_NUMBER yylval.number = atof(yytext)
+#define SAVE_CHAR yylval.character = yytext[1]
+#define SAVE_STRING yylval.string = strdup(yytext)
+#define SAVE_BOOLEAN yylval.boolean = strcmp(yytext, "true") ? 1 : 0
+#define TOKEN(t) (yylval.token = t)
+
+int yycolumn = 1;
+
+#define YYERROR_VERBOSE 1
+
+#define YY_USER_ACTION do { \
+    if (yylloc.last_line < yylineno) \
+        yycolumn = 1; \
+    yylloc.first_line = yylloc.last_line = yylineno; \
+    yylloc.first_column = yycolumn; \
+    yylloc.last_column = yycolumn + (int)yyleng - 1; \
+    yycolumn += (int)yyleng; \
+} while(0);
+
+int comment_nesting = 0;
+%}
+
 DIGIT [0-9]
 ALPHA [a-zA-Z\_]
 ALPHANUM ({ALPHA}|{DIGIT})
@@ -6,19 +36,21 @@ UINT {DIGIT}+
 REAL {UINT}(\.{UINT})?([eE][+-]{UINT})?
 CHAR \'[a-zA-Z]\'
 STRING \'([^\\\n]|(\\.))*?\'
-COMMENTS \(\*([^*]|\*+[^*)])*\*+\)|\{[^}]*\}
 
-%{
-#include <stdio.h>
-#include <string.h>
-#include "types.h"
-#include "final_work.tab.h"
-
-%}
-
-%option noyywrap
+%x COMMENT
 
 %%
+\{[^}]*\}       {}
+"(*"            { BEGIN(COMMENT); comment_nesting = 1; }
+<COMMENT>"(*"   { comment_nesting++; }
+<COMMENT>"*)"   {
+                  if (--comment_nesting == 0) BEGIN(INITIAL);
+                }
+<COMMENT>[^\n]+ {}
+<COMMENT>\n     { yycolumn = 1; }
+[ \t]+
+[\r\n]+         { yycolumn = 1; }
+
 "+"             {return PLUS;}
 "-"             {return MINUS;}
 "/"             {return DIVIDE;}
@@ -83,21 +115,16 @@ COMMENTS \(\*([^*]|\*+[^*)])*\*+\)|\{[^}]*\}
 "read"          { return READ; }
 "readln"        { return READLN; }
 
-"false"|"true"  {yylval.bval = strcmp(yytext, "true"); return BOOLEAN_LITERAL;}
-{CHAR}          {yylval.cval = yytext[1]; return CHAR_LITERAL;}
-{UINT}          {yylval.ival = atoi(yytext); return INTEGER_LITERAL;}
-{REAL}          {yylval.fval = atof(yytext); return REAL_LITERAL;}
-{ID}            {yylval.sval = strdup(yytext); return IDENTIFIER;}
-{STRING}        {yylval.sval = strdup(yytext); return STRING_LITERAL;}
+"false"|"true"  {SAVE_BOOLEAN; return BOOLEAN_LITERAL;}
+{CHAR}          {SAVE_CHAR; return CHAR_LITERAL;}
+{UINT}          {SAVE_INTEGER; return INTEGER_LITERAL;}
+{REAL}          {SAVE_NUMBER; return REAL_LITERAL;}
+{ID}            {SAVE_STRING; return IDENTIFIER;}
+{STRING}        {SAVE_STRING; return STRING_LITERAL;}
 
-[ \t]
-[\n(\r\n)]      { yylineno++; }
-{COMMENTS}      {}
 .               { yyerror((const char*)"Illegal input in"); }
 %%
 
-void yyerror(const char *message) {
-   fprintf(stderr, "Error: \"%s\" in line %d. Token = %s\n",
-           message, yylineno, yytext);
-   exit(1);
+int yywrap(void) {
+  return 1;
 }

@@ -1,19 +1,21 @@
+%require "3.8.2"
+
 %{
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include "symbol_table.h"
 #include "types.h"
-#include "tac.h"
-#include "symbol-table.h"
-
-int yywrap();
-int yylex();
-extern FILE *yyin;
-int yyparse();
-void yyerror(const char *str);
-
 %}
+
+%define api.location.type {YYLTYPE}
+%define parse.assert
+%define parse.error verbose
+%locations
+
+%code requires {
+  #include "types.h"
+}
 
 %union {
   int ival;
@@ -22,17 +24,32 @@ void yyerror(const char *str);
   char* sval;
   bool bval;
 
-  TypeInfo type;
-  Field *field_list;
-  Param *param_list;
+  long int integer;
+  bool boolean;
+  char character;
+  double number;
+  char* string;
+
+  struct Field *field_list;
+  struct Param *param_list;
+  struct ArgList *arg_list;
+
+  struct TypeInfo *type;
 
   char** strlist;
 
-  Constant constant;
+  struct Constant constant;
 
-  Expr* expr;
-  Stmt* stmt;
-  StmtList* stmt_list;
+  struct Expr       *expr;
+  struct VarRefExpr *var_ref;
+  struct Decl       *decl;
+  struct FuncDecl   *func_decl;
+  struct TypeDecl   *type_decl;
+  struct VarDecl    *var_decl;
+  struct ProcDecl   *proc_decl;
+  struct ConstDecl  *cons_decl;
+  struct LabelDecl  *label_decl;
+  struct ProcCall   *proc_call;
 }
 
 /* Keywords */
@@ -48,23 +65,36 @@ void yyerror(const char *str);
 %token DOT DOTDOT
 %token ASSIGN SEMICOLON COMMA COLON L_PAREN R_PAREN L_BRACE R_BRACE L_BRACKET R_BRACKET
 
-%token <cval> CHAR_LITERAL
-%token <ival> INTEGER_LITERAL
-%token <sval> STRING_LITERAL
-%token <fval> REAL_LITERAL
-%token <bval> BOOLEAN_LITERAL
-%token <sval> IDENTIFIER
+%token <character> CHAR_LITERAL
+%token <integer> INTEGER_LITERAL
+%token <string> STRING_LITERAL
+%token <number> REAL_LITERAL
+%token <boolean> BOOLEAN_LITERAL
+%token <string> IDENTIFIER
 
-// %type <stmt_list> stmt_list
-// %type <stmt> stmt if_stmt write read while atrib
-// %type <expr> logical_expr arithmetic_expr expr_value factor_literal factor_var
+%type <long int> INTEGER;
+%type <double> REAL;
+%type <bool> BOOLEAN;
+%type <char> CHAR;
+%type <string> STRING;
+%type <array> ARRAY;
+%type <struct> RECORD;
+%type <expr> const_numbers literals term expr procedure_stmt func_call array_access record_access;
+%type <var_ref> var_access;
+%type <decl> declarations declaration;
+%type <func_decl> function_declaration;
+%type <type_decl> type_declaration;
+%type <var_decl> variable_declaration;
+%type <cons_decl> constant_declaration;
+%type <label_decl> label_declaration;
+%type <proc_decl> procedure_declaration;
+%type <proc_call> read write;
+%type <arg_list> write_args write_arg;
 
 %type <type> type
 %type <field_list> field_decl field_list
 %type <param_list> param_list param_seq
-// %type <identifier> variable_declaration variable_list
-%type <strlist> variable_list
-%type <type> primary // refatorar para ser do tipo expr e não typeinfo
+%type <strlist> variable_list variable_list_type variable_declaration_list type_assignment_list
 %type <constant> constant
 
 %left PLUS MINUS
@@ -75,9 +105,6 @@ void yyerror(const char *str);
 %nonassoc LOWER_THAN_ELSE
 %nonassoc ELSE
 
-%define parse.error verbose
-%locations
-
 %start program
 
 %%
@@ -87,7 +114,7 @@ program:
 ;
 
 heading:
-  /* empty */
+    %empty {}
   |  L_PAREN identifier_list R_PAREN
 ;
 
@@ -101,17 +128,24 @@ block:
 ;
 
 declarations:
-      /* empty */ 
-    | declarations label_declaration
-    | declarations constant_declaration
-    | declarations type_declaration 
-    | declarations variable_declaration
-    | declarations procedure_declaration SEMICOLON
-    | declarations function_declaration SEMICOLON
+    %empty { $$ = NULL; }
+  | declarations declaration {}
+;
+
+declaration:
+    label_declaration { $$ = (struct Decl*)$1; }
+  | constant_declaration { $$ = (struct Decl*)$1; }
+  | type_declaration { $$ = (struct Decl*)$1; }
+  | variable_declaration { $$ = (struct Decl*)$1; }
+  | procedure_declaration SEMICOLON { $$ = (struct Decl*)$1; }
+  | function_declaration SEMICOLON { $$ = (struct Decl*)$1; }
 ;
 
 label_declaration:
-    LABEL unsigned_integer_list SEMICOLON
+    LABEL unsigned_integer_list SEMICOLON {
+      struct LabelDecl *lb = (LabelDecl*)malloc(sizeof *lb);
+      $$ = lb;
+    }
 ;
 
 unsigned_integer_list: 
@@ -120,7 +154,11 @@ unsigned_integer_list:
 ;
 
 constant_declaration:
-  CONST const_assignment_list SEMICOLON 
+  CONST const_assignment_list SEMICOLON {
+      struct ConstDecl *cd = (ConstDecl*)malloc(sizeof *cd);
+      $$ = cd;
+    }
+
 ;
 
 const_assignment_list:
@@ -137,38 +175,38 @@ const_assignment:
 constant:
     INTEGER_LITERAL {
       Constant c;
-      c.kind = TYPE_INT;
+      c.kind = C_INTEGER;
       c.ival = $1;
       $$ = c;
     }
   | REAL_LITERAL {
       Constant c;
-      c.kind = TYPE_REAL;
+      c.kind = C_REAL;
       c.fval = $1;
       $$ = c;
   }
   | STRING_LITERAL {
       Constant c;
-      c.kind = TYPE_STRING;
+      c.kind = C_STRING;
       c.sval = $1;
       $$ = c;
   }
   | IDENTIFIER {
       Constant c;
-      c.kind = TYPE_STRING;
+      c.kind = C_ID;
       c.id = strdup($1);
       $$ = c;
     }
   | PLUS IDENTIFIER {
       Constant c;
-      c.kind = TYPE_STRING;
+      c.kind = C_ID;
       c.op = '+';
       c.id = strdup($2);
       $$ = c;
     }
   | MINUS IDENTIFIER {
       Constant c;
-      c.kind = TYPE_STRING;
+      c.kind = C_ID;
       c.op = '-';
       c.id = strdup($2);
       $$ = c;
@@ -176,32 +214,73 @@ constant:
 ;
 
 type_declaration:
-    TYPE type_assignment_list SEMICOLON
+    TYPE type_assignment_list SEMICOLON {
+      struct TypeDecl *tp = (TypeDecl*)malloc(sizeof *tp);
+      tp->list = $2;
+      $$ = tp;
+      free($2);
+    }
+
 ;
 
 type_assignment_list:
-    IDENTIFIER EQ type
-  | type_assignment_list SEMICOLON IDENTIFIER EQ type
+    IDENTIFIER EQ type {
+      if (add_symbol($1, SKIND_TYPE, $3) == -1) {
+        fprintf(stderr, "Error to declare variable %s\n", $1);
+      }
+      $$[0] = strdup($1);
+      $$[1] = NULL;
+      free($1);
+    }
+  | type_assignment_list SEMICOLON IDENTIFIER EQ type {
+      int i;
+      for (i = 0; $1[i] != NULL; i++);
+      if (add_symbol($3, SKIND_TYPE, $5) == -1) {
+        fprintf(stderr, "Error to declare variable %s\n", $3);
+      }
+      $1[i] = strdup($3);
+      $1[1+1] = NULL;
+      free($3);
+      $$ = $1;
+    }
 ;
 
 variable_declaration:
-    VAR variable_declaration_list SEMICOLON
+    VAR variable_declaration_list SEMICOLON {
+      struct VarDecl *vd = (VarDecl*)malloc(sizeof *vd);
+      vd->list = $2;
+      $$ = vd;
+    }
 ;
 
 variable_declaration_list:
-    variable_list_type
-  | variable_declaration_list SEMICOLON variable_list_type
+    variable_list_type { $$ = $1; }
+  | variable_declaration_list SEMICOLON variable_list_type {
+    int i;
+    for (i = 0; $1[i] != NULL; i++);
+    int j = 0;
+    $$ = (char**)malloc(i * sizeof(char*));
+    $$ = $1;
+    while($3[j] != NULL) {
+      char** tmp = (char**)realloc($$, (i+2) * sizeof(char*));
+      tmp[i+j] = $3[j];
+      tmp[i+j+1] = NULL;
+      j++;
+      $$ = tmp;
+    }
+  }
 ;
 
 variable_list_type: 
     variable_list COLON type {
-      TypeInfo t = $3;
+      TypeInfo *t = $3;
       for (int i = 0; $1[i] != NULL; i++) {
-        if (add_symbol($1[i], t) == -1) {
+        if (add_symbol($1[i], SKIND_VAR, t) == -1) {
           fprintf(stderr, "Error to declare variable %s\n", $1[i]);
         }
         free($1[i]);
       }
+      $$ = $1;
       free($1);
     }
 ;
@@ -225,57 +304,59 @@ variable_list:
 
 type: 
     INTEGER {
-      TypeInfo tmp;
-      tmp.type = TYPE_INT;
+      TypeInfo *tmp = (TypeInfo*)malloc(sizeof *tmp);
+      tmp->kind = KIND_INT;
       $$ = tmp;
     }
   | STRING {
-    TypeInfo tmp;
-    tmp.type = TYPE_STRING;
-    $$ = tmp;
+      TypeInfo *tmp = (TypeInfo*)malloc(sizeof *tmp);
+      tmp->kind = KIND_STRING;
+      $$ = tmp;
   }
   | REAL {
-    TypeInfo tmp;
-    tmp.type = TYPE_REAL;
-    $$ = tmp;
+      TypeInfo *tmp = (TypeInfo*)malloc(sizeof *tmp);
+      tmp->kind = KIND_REAL;
+      $$ = tmp;
   }
   | CHAR {
-    TypeInfo tmp;
-    tmp.type = TYPE_CHAR;
-    $$ = tmp;
+      TypeInfo *tmp = (TypeInfo*)malloc(sizeof *tmp);
+      tmp->kind = KIND_CHAR;
+      $$ = tmp;
   }
   | BOOLEAN {
-    TypeInfo tmp;
-    tmp.type = TYPE_BOOL;
-    $$ = tmp;
+      TypeInfo *tmp = (TypeInfo*)malloc(sizeof *tmp);
+      tmp->kind = KIND_BOOL;
+      $$ = tmp;
   }
   | ARRAY L_BRACKET constant DOTDOT constant R_BRACKET OF type {
-      TypeInfo tmp;
-      tmp.type = TYPE_ARRAY;
-      tmp.arrayInfo.type=$8.type;
-      tmp.arrayInfo.low=$3.ival;
-      if ($5.kind == TYPE_STRING) {
+      TypeInfo *tmp = (TypeInfo*)malloc(sizeof *tmp);
+      tmp->kind = KIND_ARRAY;
+      tmp->arrayInfo.type=$8;
+      tmp->arrayInfo.low=$3.ival;
+      if ($5.kind == C_STRING) {
         // Symbol* s = get_symbol_by_name($5.id);
         // tmp.arrayInfo.high=s->data.i;
       }
       $$ = tmp;
   }
   | RECORD field_list END {
-      TypeInfo tmp;
-      tmp.type = TYPE_RECORD;
-      tmp.recordFields = $2;
+      TypeInfo *tmp = (TypeInfo*)malloc(sizeof *tmp);
+      tmp->kind = KIND_RECORD;
+      tmp->recordFields = $2;
       $$ = tmp;
   }
   | IDENTIFIER {
-    TypeInfo tmp;
-    tmp.type = TYPE_STRING;
+      TypeInfo *tmp = (TypeInfo*)malloc(sizeof *tmp);
+      tmp->kind = KIND_CUSTOM;
+      tmp->custom = $1;
   
-    // Symbol* s = get_symbol_by_name($1);
-    // if (s->skind == KIND_TYPE) {
-    //   //TODO: rescue custom type
-    // }
-    $$ = tmp;
-  }
+      // Symbol *s = get_symbol_by_name($1);
+      // if (s != NULL && s->skind == SKIND_TYPE) {
+      //   printf("Tipo custom: %s at line %d col %d\n", s->name, yylloc.first_line, yylloc.first_column);
+      //   printf("Tipo do %s: %s\n", s->name, describeType(s->type));
+      // }
+      $$ = tmp;
+    }
 ;
 
 field_list:
@@ -292,22 +373,28 @@ field_decl:
     IDENTIFIER COLON type {
       Field* f = (Field*)malloc(sizeof(Field));
       f->name = strdup($1);
-      f->type = &$3;
+      f->type = $3;
       f->next = NULL;
       $$=f;
     }
 ;
 
 procedure_declaration:
-    PROCEDURE IDENTIFIER L_PAREN param_list R_PAREN SEMICOLON block
+    PROCEDURE IDENTIFIER L_PAREN param_list R_PAREN SEMICOLON block {
+      struct ProcDecl *pd = (ProcDecl*)malloc(sizeof *pd);
+      $$ = pd;
+    }
 ;
 
 function_declaration:
-    FUNCTION IDENTIFIER L_PAREN param_list R_PAREN COLON type SEMICOLON block
+    FUNCTION IDENTIFIER L_PAREN param_list R_PAREN COLON type SEMICOLON block {
+      struct FuncDecl *fd = (FuncDecl*)malloc(sizeof *fd);
+      $$ = fd;
+    }
 ;
 
 param_list:
-  { $$ = NULL; }
+    %empty { $$ = NULL; }
   | param_seq { $$ = $1; }
 ;
 
@@ -344,35 +431,54 @@ statement:
   | repeat_stmt
   | case_stmt
   | compound_stmt
+  // | func_call
   | procedure_stmt
   | goto_stmt
-  | /* empty */
+  | %empty {}
 ;
 
 assign:
-    IDENTIFIER ASSIGN expression
-  | IDENTIFIER DOT IDENTIFIER ASSIGN expression
-  | IDENTIFIER L_BRACKET expression R_BRACKET ASSIGN expression
-  | IDENTIFIER L_BRACKET expression R_BRACKET DOT IDENTIFIER ASSIGN expression
-;
-
-procedure_stmt:
-    IDENTIFIER L_PAREN expression_list R_PAREN
-  | read
-  | write
+    IDENTIFIER ASSIGN expr
+  | record_access ASSIGN expr
+  | array_access ASSIGN expr
 ;
 
 compound_stmt:
   BEGIN_TOK statement_list END
 ;
 
+procedure_stmt:
+    read {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind = EXPR_PROC;
+      e->proc = $1;
+      $$ = e;
+    }
+  | write {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind = EXPR_PROC;
+      e->proc = $1;
+      $$ = e;
+    }
+  | IDENTIFIER L_PAREN expression_list R_PAREN {
+      struct ProcCall *proc = (ProcCall*)malloc(sizeof *proc);
+      proc->method = $1;
+      proc->list = $<arg_list>3;
+  
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind = EXPR_PROC;
+      e->proc = proc;
+      $$ = e;
+  }
+;
+
 if_stmt:
-    IF expression THEN statement %prec LOWER_THAN_ELSE
-  | IF expression THEN statement ELSE statement
+    IF expr THEN statement %prec LOWER_THAN_ELSE
+  | IF expr THEN statement ELSE statement
 ;
 
 case_stmt:
-  CASE expression OF case_list END
+  CASE expr OF case_list END
 ;
 
 case_list:
@@ -387,7 +493,7 @@ case_elem:
 ;
 
 repeat_stmt:
-  REPEAT statement_list UNTIL expression
+  REPEAT statement_list UNTIL expr
 ;
 
 goto_stmt:
@@ -395,186 +501,353 @@ goto_stmt:
 ;
 
 while_stmt:
-  WHILE expression DO statement
+  WHILE expr DO statement
 ;
 
 for_stmt:
-    FOR IDENTIFIER ASSIGN expression TO expression DO statement
-  | FOR IDENTIFIER ASSIGN expression DOWNTO expression DO statement
+    FOR IDENTIFIER ASSIGN expr TO expr DO statement
+  | FOR IDENTIFIER ASSIGN expr DOWNTO expr DO statement
 ;
 
 expression_list:
-    expression
-  | expression_list COMMA expression
+    expr
+  | expression_list COMMA expr
+  | %empty {}
 ;
 
-expression:
-    simple_expr
-  | simple_expr relational_op simple_expr
-;
-
-primary:
-    IDENTIFIER {
-      TypeInfo tmp;
-      tmp.type = TYPE_STRING;
-      tmp.data.s = $1;
-      $$ = tmp;
-      // TODO: criado o tipo para var
+expr: 
+    L_PAREN expr R_PAREN {
+      $$ = $2;
     }
-  | INTEGER_LITERAL {
-      TypeInfo tmp;
-      tmp.type = TYPE_INT;
-      tmp.data.i = $1;
-      $$ = tmp;
-    }
-  | REAL_LITERAL {
-      TypeInfo tmp;
-      tmp.type = TYPE_REAL;
-      tmp.data.f = $1;
-      $$ = tmp;
-    }
-  | CHAR_LITERAL {
-      TypeInfo tmp;
-      tmp.type = TYPE_CHAR;
-      tmp.data.c = $1;
-      $$ = tmp;
-    }
-  | STRING_LITERAL {
-      TypeInfo tmp;
-      tmp.type = TYPE_STRING;
-      tmp.data.s = $1;
-      $$ = tmp;
-    }
-  | BOOLEAN_LITERAL {
-      TypeInfo tmp;
-      tmp.type = TYPE_BOOL;
-      tmp.data.b = $1;
-      $$ = tmp;
-    }
-  | L_PAREN expression R_PAREN {
-    $$ = $<type>2;
-  } 
-
-postfix:
-    primary
-  | postfix DOT IDENTIFIER
-  | postfix L_BRACKET expression R_BRACKET
-  | IDENTIFIER L_PAREN expression_list R_PAREN
-
-simple_expr:
-    term
-  | simple_expr add_op term
+  | expr PLUS expr {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_ADD;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr MINUS expr {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_SUB;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr TIMES expr {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_MUL;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr DIVIDE expr {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_DIV;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr DIV expr {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_DIVR;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr MOD expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_MOD;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr NEQ expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_NEQ;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr EQ expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_EQ;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr LT expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_LT;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr LTE expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_LTE;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr GT expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_GT;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr GTE expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_GTE;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr OR expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_OR;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | expr AND expr{
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_AND;
+      e->left   = $1;
+      e->right  = $3;
+      $$ = e;
+  }
+  | NOT expr {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_NOT;
+      e->left   = NULL;
+      e->right  = $2;
+      $$ = e;
+  }
+  | MINUS expr %prec NEG {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_UMINUS;
+      e->left   = NULL;
+      e->right  = $2;
+      $$ = e;
+  }
+  | func_call { $$ = $1; }
+  | term { $$ = $1; }
 ;
 
 term:
-    factor
-  | term mul_op factor
+    literals { $$ = $1; }
+  | IDENTIFIER {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_ID;
+      e->string = $1;
+      $$ = e;
+  }
+  | array_access { $$ = $1; }
+  | record_access { $$ = $1; }
+  | var_access {
+    struct Expr *e = (Expr*)malloc(sizeof *e);
+    e->kind = EXPR_VAR;
+    e->var_ref = $1;
+    $$ = e;
+  }
 ;
 
-factor:
-    postfix
-  | NOT factor
-  | PLUS factor
-  | MINUS factor %prec NEG
+var_access:
+    IDENTIFIER {
+      struct VarRefExpr *vr = (VarRefExpr*)malloc(sizeof *vr);
+      vr->string = $1;
+      $$ = vr;
+      // TODO: adicionar o ponteiro da symbol_table
+    }
 ;
 
-relational_op:
-    EQ
-  | NEQ
-  | GT
-  | GTE
-  | LT
-  | LTE
+func_call:
+    IDENTIFIER L_PAREN expression_list R_PAREN {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_FUNC;
+      e->string = $1;
+      e->list = $<expr>3;
+      $$ = e;
+    }
+  | SQRT L_PAREN expr R_PAREN {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_SQRT;
+      e->right  = $3;
+      e->method = "sqrt";
+      $$ = e;
+  }
 ;
 
-add_op:
-    PLUS
-  | MINUS
-  | OR
+array_access:
+    IDENTIFIER L_BRACKET expr R_BRACKET {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_ARRCE;
+      e->string = $1;
+      e->expr = $3;
+      $$ = e;
+    }
+  | IDENTIFIER L_BRACKET INTEGER_LITERAL R_BRACKET {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_ARRCL;
+      e->string = $1;
+      e->integer = $3;
+      $$ = e;
+  }
 ;
 
-mul_op:
-    TIMES
-  | DIVIDE
-  | AND
+record_access:
+    IDENTIFIER DOT IDENTIFIER {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_RCD;
+      e->string = $3;
+      e->record = $1;
+      $$ = e;
+    }
+  | array_access DOT IDENTIFIER {
+      struct Expr *e = (Expr*)malloc(sizeof *e);
+      e->kind   = EXPR_ARCD;
+      e->string = $3;
+      e->expr = $1;
+      $$ = e;
+  }
+;
+
+literals:
+    const_numbers {
+      $$ = $1;
+    }
+  | STRING_LITERAL{
+        struct Expr *e = (Expr*)malloc(sizeof *e);
+        e->kind   = EXPR_STR;
+        e->string = $1;
+        $$ = e;
+      }
+
+  | BOOLEAN_LITERAL{
+        struct Expr *e = (Expr*)malloc(sizeof *e);
+        e->kind   = EXPR_BOOL;
+        e->boolean = $1;
+        $$ = e;
+      }
+
+  | CHAR_LITERAL{
+        struct Expr *e = (Expr*)malloc(sizeof *e);
+        e->kind   = EXPR_CHAR;
+        e->character = $1;
+        $$ = e;
+      }
+
+;
+
+const_numbers: 
+      INTEGER_LITERAL {
+        struct Expr *e = (Expr*)malloc(sizeof *e);
+        e->kind   = EXPR_INT;
+        e->integer = $1;
+        $$ = e;
+      }
+    | REAL_LITERAL {
+        struct Expr *e = (Expr*)malloc(sizeof *e);
+        e->kind   = EXPR_REAL;
+        e->number = $1;
+        $$ = e;
+      }
 ;
 
 write:
-    WRITE L_PAREN write_args R_PAREN
+    WRITE L_PAREN write_args R_PAREN {
+      struct ProcCall *proc = (ProcCall*)malloc(sizeof *proc);
+      proc->method = "write";
+      proc->list = $3;
+      $$ = proc;
+    }
   | WRITELN L_PAREN write_args R_PAREN {
-    printf("\n");
+      struct ProcCall *proc = (ProcCall*)malloc(sizeof *proc);
+      proc->method = "writeln";
+      proc->list = $3;
+      $$ = proc;
   }
   | WRITELN {
-    printf("\n");
+      struct ProcCall *proc = (ProcCall*)malloc(sizeof *proc);
+      proc->method = "writeln";
+      proc->list = NULL;
+      $$ = proc;
   }
 ;
 
 write_args:
-    write_arg
-  | write_args COMMA write_arg
+    write_arg { $$ = $1; }
+  | write_args COMMA write_arg {
+    $1->next = $3;
+  }
 ;
 
 write_arg:
-    STRING_LITERAL { printf("%s", $1); }
+    STRING_LITERAL {
+      struct ArgList *ag = (ArgList*)malloc(sizeof *ag);
+      ag->next = NULL;
+      ag->string = $1;
+      $$ = ag;
+    }
     | IDENTIFIER COLON INTEGER_LITERAL COLON INTEGER_LITERAL {
-        printf(" [FORMAT: %s:%d:%d] ", $1, $3, $5);
+        // printf(" [FORMAT: %s:%d:%d] ", $1, $3, $5);
+        struct VarRefExpr *vr = (VarRefExpr*)malloc(sizeof *vr);
+        vr->string = $1;
+
+
+        struct ArgList *ag = (ArgList*)malloc(sizeof *ag);
+        ag->next = NULL;
+        ag->var = vr;
+        ag->width = $3;
+        ag->length = $5;
+        $$ = ag;
     }
     | IDENTIFIER {
-        Symbol* s = get_symbol_by_name($1);
-        if (s->type == TYPE_INT) {
-          printf(" [INTEGER: %d] ", s->data.i);
-        } else if (s->type == TYPE_REAL) {
-          printf(" [REAL: %.2f] ", s->data.f);
-        } else if (s->type == TYPE_CHAR) {
-          printf(" [CHAR: %c] ", s->data.c);
-        } else if (s->type == TYPE_BOOL) {
-          printf(" [BOOL: %s] ", s->data.b ? "true" : "false");
-        } else {
-          printf(" [VARIAVEL: %s] ", $1);
-        }
+        // Symbol* s = get_symbol_by_name($1);
+        // if (s->type == TYPE_INT) {
+        //   printf(" [INTEGER: %d] ", s->data.i);
+        // } else if (s->type == TYPE_REAL) {
+        //   printf(" [REAL: %.2f] ", s->data.f);
+        // } else if (s->type == TYPE_CHAR) {
+        //   printf(" [CHAR: %c] ", s->data.c);
+        // } else if (s->type == TYPE_BOOL) {
+        //   printf(" [BOOL: %s] ", s->data.b ? "true" : "false");
+        // } else {
+        //   printf(" [VARIAVEL: %s] ", $1);
+        // }
+
+        struct VarRefExpr *vr = (VarRefExpr*)malloc(sizeof *vr);
+        vr->string = $1;
+
+        struct ArgList *ag = (ArgList*)malloc(sizeof *ag);
+        ag->next = NULL;
+        ag->var = vr;
+        $$ = ag;
     }
-    | IDENTIFIER DOT IDENTIFIER
+    | record_access {
+        struct ArgList *ag = (ArgList*)malloc(sizeof *ag);
+        ag->next = NULL;
+        ag->expr = $1;
+        $$ = ag;
+    }
 ;
 
 read:
     READ L_PAREN IDENTIFIER R_PAREN {
+      struct ProcCall *proc = (ProcCall*)malloc(sizeof *proc);
+      proc->method = "read";
+      proc->var = $<var_ref>3;
+      $$ = proc;
     }
-;
+  | READLN L_PAREN IDENTIFIER R_PAREN {
+      struct ProcCall *proc = (ProcCall*)malloc(sizeof *proc);
+      proc->method = "readln";
+      proc->var = $<var_ref>3;
+      $$ = proc;
 
-literal:
-    const_numbers
-  | STRING_LITERAL
-  | BOOLEAN_LITERAL
-  | CHAR_LITERAL
-;
-
-const_numbers: 
-      INTEGER_LITERAL
-    | REAL_LITERAL
+      // TODO: adicionar ref a var $3 da symbol_table
+  }
 ;
 
 %%
-
-int yywrap( ) {
-  return 1;
-}
-
-int main(int argc, char** argv) {
-  if (argc > 1) {
-      yyin = fopen(argv[1], "r");
-      if (!yyin) {
-        perror("Error open file");
-        return 1;
-      }
-    } else {
-      yyin = stdin;
-    }
-
-    yyparse();
-
-    if (yyin != stdin) {
-        fclose(yyin);
-    }
-
-    return 0;
-}

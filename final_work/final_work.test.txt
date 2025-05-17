@@ -1,5 +1,5 @@
 program TesteParser;
-  
+
 { Declaração de constantes }
 const
   MAX = 5;
