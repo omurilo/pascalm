@@ -1,22 +1,25 @@
 #include "symbol_table.h"
-#include "types.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int add_symbol(char *id, SymbolKind skind, struct TypeInfo *type) {
+Symbol* add_symbol(char *id, SymbolKind kind, TypeInfo *type, SymbolValue value, Param *params, Symbol *next) {
   for (int i = 0; i < symb_count; i++) {
     if (strcmp(symb_table[i].name, id) == 0) {
-      return i;
+      return NULL;
     }
   }
 
   Symbol *sym = &symb_table[symb_count];
   sym->name = strdup(id);
-  sym->skind = skind;
+  sym->kind = kind;
   sym->type = type;
+  sym->params = params;
+  sym->value = value;
+  sym->next = next;
   sym->name[sizeof(sym->name) - 1] = '\0';
-  return symb_count++;
+  symb_count++;
+  return sym;
 }
 
 int get_symbol_index(const char *id) {

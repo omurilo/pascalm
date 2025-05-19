@@ -3,7 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "final_work.tab.h"
-#include "types.h"
+#include "final_work_types.h"
 
 #define SAVE_INTEGER yylval.integer = atoi(yytext)
 #define SAVE_NUMBER yylval.number = atof(yytext)
@@ -71,8 +71,10 @@ STRING \'([^\\\n]|(\\.))*?\'
 ","             {return COMMA;}
 ":"             {return COLON;}
 ";"             {return SEMICOLON;}
+"..."           {return DOTDOTDOT;}
 ".."            {return DOTDOT;}
 "."             {return DOT;}
+"^"             {return CARET;}
 
 "program"       { return PROGRAM; }
 "var"           { return VAR; }
@@ -114,8 +116,8 @@ STRING \'([^\\\n]|(\\.))*?\'
 "writeln"       { return WRITELN; }
 "read"          { return READ; }
 "readln"        { return READLN; }
+"nil"           { return NIL; }
 
-"false"|"true"  {SAVE_BOOLEAN; return BOOLEAN_LITERAL;}
 {CHAR}          {SAVE_CHAR; return CHAR_LITERAL;}
 {UINT}          {SAVE_INTEGER; return INTEGER_LITERAL;}
 {REAL}          {SAVE_NUMBER; return REAL_LITERAL;}

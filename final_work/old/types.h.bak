@@ -57,16 +57,10 @@ typedef enum {
   KIND__COUNT
 } TypeKind;
 
-static const char * const KindNames[KIND__COUNT] = {
-    [KIND_INT]    = "integer",
-    [KIND_CHAR]   = "char",
-    [KIND_ARRAY]  = "array",
-    [KIND_RECORD] = "record",
-    [KIND_REAL]   = "real",
-    [KIND_STRING] = "string",
-    [KIND_CUSTOM] = "custom",
-    [KIND_BOOL]   = "boolean"
-};
+static const char *const KindNames[KIND__COUNT] = {
+    [KIND_INT] = "integer",   [KIND_CHAR] = "char",   [KIND_ARRAY] = "array",
+    [KIND_RECORD] = "record", [KIND_REAL] = "real",   [KIND_STRING] = "string",
+    [KIND_CUSTOM] = "custom", [KIND_BOOL] = "boolean"};
 
 struct TypeInfo {
   TypeKind kind;
@@ -96,6 +90,19 @@ typedef struct Symbol {
   struct Symbol *next;
 } Symbol;
 
+typedef enum { AOP_ADD, AOP_SUB, AOP_MUL, AOP_DIV, AOP_NEG } ArithmeticOp;
+
+typedef enum {
+  OP_EQ,
+  OP_NEQ,
+  OP_LT,
+  OP_LTE,
+  OP_GT,
+  OP_GTE,
+  OP_AND,
+  OP_OR
+} LogicalOp;
+
 // struct Expr {
 //   ExprType type;
 //   int lineno;
@@ -120,56 +127,68 @@ typedef struct Symbol {
 //   };
 // };
 //
-// typedef enum StmtType {
-//   STMT_WRITE,
-//   STMT_IF,
-//   STMT_READ,
-//   STMT_WHILE,
-//   STMT_ASSIGN,
-//   STMT_FUNC,
-//   STMT_PROC
-// } StmtType;
-//
-// struct Stmt {
-//   StmtType type;
-//   int lineno;
-//   int col;
-//   union {
-//     struct {
-//       char *var_name;
-//       Expr *expr;
-//     } write;
-//
-//     struct {
-//       const char *var_name;
-//     } read;
-//
-//     struct {
-//       Expr *cond;
-//       StmtList *then_block;
-//       StmtList *else_block;
-//     } if_stmt;
-//
-//     struct {
-//       Expr *cond;
-//       StmtList *body;
-//     } while_stmt;
-//
-//     struct {
-//       const char *var_name;
-//       Expr *expr;
-//     } assign;
-//   };
-// };
-//
-// struct StmtList {
-//   Stmt *stmt;
-//   StmtList *next;
-// };
-//
+typedef enum StmtKind {
+  STMT_WRITE,
+  STMT_IF,
+  STMT_READ,
+  STMT_WHILE,
+  STMT_ASSIGN,
+  STMT_FUNC,
+  STMT_PROC
+} StmtKind;
+
+struct Stmt {
+  StmtKind kind;
+  union {
+    struct {
+      struct Expr *cond;
+      Stmt *then_block;
+      Stmt *else_block;
+    } if_stmt;
+
+    struct {
+      Expr *cond;
+      Stmt *body;
+    } while_stmt;
+
+    struct {
+      const char *var_name;
+      Expr *expr;
+    } assign;
+
+    struct {
+      char *name;
+      struct Expr *start;
+      struct Expr *end;
+      bool downto;
+      struct Stmt *body;
+    } for_stmt;
+
+    struct {
+      struct Expr *expr;
+    } proc_stmt;
+  };
+  Stmt *next;
+};
+
+struct StmtList {
+  Stmt *stmt;
+  StmtList *next;
+};
 
 typedef struct Decl {
+  Decl *next;
 } Decl;
+
+typedef enum {
+  EXPR_LITERAL,
+  EXPR_VARIABLE,
+  EXPR_BINARY,
+  EXPR_UNARY,
+  EXPR_CALL,
+  EXPR_INDEX,
+  EXPR_FIELD
+} ExprType;
 
 typedef enum {
   EXPR_ADD,
@@ -204,26 +223,90 @@ typedef enum {
   EXPR_PROC
 } ExprKind;
 
+struct ExprList {
+    Expr *expr;
+    ExprList *next;
+};
+
 typedef struct Expr {
   ExprKind kind;
-  struct Expr *left;
-  struct Expr *right;
+  ExprType type;
+
+  union {
+    struct {
+      ArithmeticOp op;
+      Expr *operand;
+    } unary;
+    struct {
+      Expr *left;
+      union {
+        ArithmeticOp aop;
+        LogicalOp lop;
+      };
+      Expr *right;
+    } binary;
+    struct {
+      char *name;
+      ExprList *args;
+    } call;
+    struct {
+      Expr *array;
+      Expr *index;
+    } index;
+    struct {
+      Expr *record;
+      char *field;
+    } field;
+    struct {
+      VarType type;
+      union {
+        int i_val;
+        double f_val;
+        bool b_val;
+        char c_val;
+        char *s_val;
+      };
+    } literal;
+    char *var_name;
+  }
+
   long int integer;
   double number;
   char character;
   char *string;
   bool boolean;
   struct Expr *expr;
-  struct VarRefExpr *var_ref;
-  const char *method;
-  struct Expr *list;
   char *record;
-  struct ProcCall *proc;
-} Expr;
 
-typedef struct VarRefExpr {
-  char *string;
-} VarRefExpr;
+  struct Expr *next;
+
+  union {
+    struct {
+      const char *method;
+      struct ArgList *list;
+      struct VarRefExpr *var;
+    } proc_call;
+
+    struct {
+      const char *string;
+    } var_ref;
+
+    struct {
+      struct Expr *left;
+      struct Expr *right;
+    } binop_epxr;
+
+    struct {
+      ArithmeticOp op;
+      struct Expr *operand;
+    } unary;
+
+    struct {
+      struct Expr *left;
+      struct Expr *right;
+    } relop_expr;
+  };
+} Expr;
 
 typedef struct LabelDecl {
 } LabelDecl;
@@ -247,12 +330,6 @@ typedef struct ArgList {
   struct VarRefExpr *var;
   struct ArgList *next;
 } ArgList;
-
-typedef struct ProcCall {
-  char *method;
-  struct ArgList *list;
-  struct VarRefExpr *var;
-} ProcCall;
 
 typedef enum { C_INTEGER, C_STRING, C_REAL, C_ID } ConstKind;
 

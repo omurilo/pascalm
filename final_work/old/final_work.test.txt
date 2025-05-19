@@ -45,6 +45,7 @@ begin
   { Testa case }
   case opt of
     100: write('Total x2 = 100');
+    50: write('Total /2 = 50');
   else
     write('Total x2 = ', opt);
   end;
