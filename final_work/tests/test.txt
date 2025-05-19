@@ -1,0 +1,71 @@
+program TesteParser (input, output);
+
+{ Declaração de constantes }
+const
+  MAX = 5;
+
+{ Declaração de tipos }
+type
+  TAluno = record
+    nome: string;
+    nota: integer;
+  end;
+
+{ Declaração de variáveis }
+var
+  i, soma: integer;
+  alunos: array[1..MAX] of TAluno;
+  opt: integer;
+
+{ Função simples }
+function Dobro(x: integer): integer;
+begin
+  Dobro := x * 2;
+end;
+
+{ Procedimento simples }
+procedure ImprimeAluno(a: TAluno);
+begin
+  write(a.nome, ': ', a.nota);
+end;
+
+begin
+  { Inicializa }
+  soma := 0;
+  for i := 1 to MAX do
+  begin
+    alunos[i].nome := 'Aluno' + Chr(48 + i);
+    alunos[i].nota := i * 10;
+    soma := soma + alunos[i].nota;
+  end;
+
+  { Testa função }
+  opt := Dobro(soma);
+
+  { Testa case }
+  case opt of
+    100: write('Total x2 = 100');
+    50: write('Total /2 = 50');
+  else
+    write('Total x2 = ', opt);
+  end;
+
+  writeln;
+  write('Imprimindo lista de alunos:');
+  writeln;
+  
+  { Testa while }
+  i := 1;
+  while i <= MAX do
+  begin
+    ImprimeAluno(alunos[i]);
+    writeln;
+    i := i + 1;
+  end;
+  
+  { Testa repeat }
+  repeat
+    write('Digite 0 para sair: ');
+    read(opt);
+  until opt = 0;
+end.
