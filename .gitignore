@@ -1,5 +1,6 @@
 **/*.yy.c
 
+temp
 .DS_Store
 test
 exercises/flex/ip-address/ip-address
