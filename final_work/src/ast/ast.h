@@ -80,6 +80,7 @@ typedef struct SourceLocation SourceLocation;
 typedef enum {
   /* Estrutura do programa */
   NODE_PROGRAM,
+  NODE_HEADING,
   NODE_BLOCK,
   NODE_USES,
 
@@ -96,6 +97,7 @@ typedef enum {
   NODE_SCALAR_TYPE,
   NODE_SUBRANGE_TYPE,
   NODE_TYPE_IDENTIFIER,
+  NODE_STRUCTURED_TYPE,
   NODE_ARRAY_TYPE,
   NODE_RECORD_TYPE,
   NODE_SET_TYPE,
@@ -120,12 +122,7 @@ typedef enum {
   /* Expressões */
   NODE_BINARY_EXPR,
   NODE_UNARY_EXPR,
-  NODE_INTEGER_LITERAL,
-  NODE_REAL_LITERAL,
-  NODE_STRING_LITERAL,
-  NODE_BOOLEAN_LITERAL,
-  NODE_CHAR_LITERAL,
-  NODE_NIL_LITERAL,
+  NODE_LITERAL,
   NODE_IDENTIFIER,
   NODE_MEMBER_ACCESS,
   NODE_ARRAY_ACCESS,
@@ -133,6 +130,10 @@ typedef enum {
   NODE_SET_CONSTRUCTOR,
 
   /* Auxiliares */
+
+  NODE_FIELD_LIST,
+  NODE_PARAMETER,
+  NODE_VARIANT_RECORD,
   NODE_LIST,
   NODE_ERROR
 } NodeType;
@@ -150,7 +151,101 @@ struct ASTNode {
   SourceLocation location;
   void (*print)(struct ASTNode *,
                 int); // Função para imprimir o nó (para debug)
+  /*
+  int data_type; // tipo dos dados (INTEGER, REAL, STRING, etc.)
+  int scope_level; // Nível de escopo para análise de visibilidade
+  void *symbol_entry; // ponteiro para entrada na tabela de símbolos
+  void *pass_info;  // Informações específicas para diferentes passes
+  */
 };
+
+/*
+// auxiliar na verificação semântica:
+struct BinaryOperationNode {
+    ASTNode base;
+    int operator;                // Operator type (ADD, SUB, MUL, etc.)
+    ASTNode *left;               // Left operand
+    ASTNode *right;              // Right operand
+    int result_type;             // Result type after operation
+    int is_constant;             // Flag if result is constant
+};
+
+struct IdentifierNode {
+    ASTNode base;
+    char *name;                  // Identifier name
+    void *symbol_entry;          // Reference to symbol table entry
+    int is_lvalue;               // Is this usable as an l-value?
+};
+
+struct VariantRecordNode {
+    ASTNode base;
+    IdentifierNode *tag_field;   // Tag field name
+    TypeIdentifierNode *tag_type;// Tag field type
+    ListNode *variants;          // List of variant parts
+    int has_runtime_checks;      // Flag if runtime checks are needed
+};
+
+// expandir para suportar diferentes tipos
+typedef enum {
+    LITERAL_INTEGER,
+    LITERAL_REAL,
+    LITERAL_BOOLEAN,
+    LITERAL_STRING,
+    LITERAL_CHAR,
+    LITERAL_NIL
+} LiteralType;
+
+struct LiteralNode {
+    ASTNode base;
+    LiteralType literal_type;    // Type of literal
+    union {
+        int int_val;             // Integer value
+        double real_val;         // Real value
+        int bool_val;            // Boolean value (0/1)
+        char *str_val;           // String value
+        char char_val;           // Character value
+    } value;
+};
+
+// Campos Para Verificação de Escopo em Nós de Declaração
+
+struct VarDeclarationNode {
+    ASTNode base;
+    ListNode *var_list;          // List of variables
+    ASTNode *type_node;          // Type of the variables
+    int scope_level;             // Scope level of declaration
+    VarDeclarationNode *next;    // Next var declaration
+};
+
+// Para implementar o suporte ao tipo string nativo:
+
+struct SimpleTypeNode {
+    ASTNode base;
+    int type_kind;               // INTEGER, REAL, BOOLEAN, CHAR, STRING, etc.
+    union {
+        struct {
+            int max_length;      // Maximum string length (for string)
+        } string;
+        // Outros campos específicos para outros tipos
+    } info;
+};
+
+
+// flags para indicar quando são necessárias verificações em tempo de execução:
+
+struct ArrayAccessNode {
+    ASTNode base;
+    ASTNode *array;              // Array being accessed
+    ListNode *indices;           // List of indices
+    int needs_bounds_check;      // Flag if bounds checking is needed
+};
+
+struct PointerDerefNode {
+    ASTNode base;
+    ASTNode *pointer;            // Pointer being dereferenced
+    int needs_nil_check;         // Flag if nil check is needed
+};
+*/
 
 struct ProgramNode {
   ASTNode base;
@@ -412,3 +507,34 @@ void print_program_node(ASTNode *node, int indent);
 // void print_binary_expr_node(ASTNode *node, int indent);
 // void print_heading(ASTNode *node, int indent);
 #endif
+
+/*
+//  funções auxiliares para facilitar o trabalho com a AST:
+ASTNode* clone_ast_node(ASTNode *node);  // Função para clonar um nó (útil para otimizações)
+
+// Funções de verificação semântica
+int check_type_compatibility(ASTNode *left_type, ASTNode *right_type, int context);
+int is_assignment_valid(ASTNode *left, ASTNode *right);
+void verify_array_bounds(ArrayAccessNode *node);
+void verify_case_labels(CaseNode *node);
+int is_constant_expression(ASTNode *expr);
+
+*/
+
+/**
+// Implemente funções de limpeza para cada tipo de nó
+// Considere o uso de um sistema de garbage collection ou referência contada
+
+
+// Estrutura de Visitante:
+// Implementar um padrão visitante para percorrer a AST, facilitando diferentes fases de análise:
+
+typedef struct Visitor {
+    void (*visit_program)(Visitor *self, ProgramNode *node);
+    void (*visit_block)(Visitor *self, BlockNode *node);
+    // Funções para todos os tipos de nós
+    void *context;  // Contexto de visita
+} Visitor;
+};
+
+*/

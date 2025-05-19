@@ -111,7 +111,7 @@ ASTNode *create_block_node(ASTNode *labels, ASTNode *constants, ASTNode *types,
 
 ASTNode *create_heading_node(ASTNode *list, SourceLocation loc) {
   HeadingNode *node = (HeadingNode *)malloc(sizeof(HeadingNode));
-  node->base.type = NODE_LIST;
+  node->base.type = NODE_HEADING;
   node->base.location = loc;
   node->base.print = print_heading;
   node->list = list;
@@ -297,7 +297,7 @@ ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {};
 ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {};
 ASTNode *create_integer_literal(int integer, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
-  node->base.type = NODE_INTEGER_LITERAL;
+  node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value.integer = integer;
@@ -305,7 +305,7 @@ ASTNode *create_integer_literal(int integer, SourceLocation loc) {
 };
 ASTNode *create_real_literal(double real, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
-  node->base.type = NODE_REAL_LITERAL;
+  node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value.real = real;
@@ -313,7 +313,7 @@ ASTNode *create_real_literal(double real, SourceLocation loc) {
 };
 ASTNode *create_string_literal(char *string, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
-  node->base.type = NODE_STRING_LITERAL;
+  node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value.string = string;
@@ -321,7 +321,7 @@ ASTNode *create_string_literal(char *string, SourceLocation loc) {
 };
 ASTNode *create_char_literal(char character, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
-  node->base.type = NODE_CHAR_LITERAL;
+  node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value.character = character;
@@ -329,7 +329,7 @@ ASTNode *create_char_literal(char character, SourceLocation loc) {
 };
 ASTNode *create_boolean_literal(bool boolean, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
-  node->base.type = NODE_BOOLEAN_LITERAL;
+  node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value.boolean = boolean;
@@ -393,7 +393,7 @@ ASTNode *create_with_record_list_node(ASTNode *record_var_list, ASTNode *stmt,
 
 ASTNode *create_identifier_node(char *id, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
-  node->base.type = NODE_STRING_LITERAL;
+  node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value.string = strdup(id);
@@ -402,7 +402,7 @@ ASTNode *create_identifier_node(char *id, SourceLocation loc) {
 
 ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
-  node->base.type = NODE_INTEGER_LITERAL;
+  node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value.integer = integer;
@@ -411,7 +411,7 @@ ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc) {
 
 ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
-  node->base.type = NODE_REAL_LITERAL;
+  node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value.real = real;
