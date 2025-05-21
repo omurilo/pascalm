@@ -1,5 +1,8 @@
 program TesteParser (input, output);
 
+{ Declaração de labels }
+label 100, 200, 300;
+
 { Declaração de constantes }
 const
   MAX = 5;

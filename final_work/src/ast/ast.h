@@ -29,6 +29,7 @@ typedef struct StructuredTypeNode StructuredTypeNode; // Tipos estruturados
 /**/ typedef struct RecordTypeNode RecordTypeNode;    // Tipo record
 /**/ typedef struct SetTypeNode SetTypeNode;          // Tipo set
 /**/ typedef struct FileTypeNode FileTypeNode;        // Tipo file
+typedef struct RepeatUntilNode RepeatUntilNode;
 typedef struct PointerTypeNode PointerTypeNode;       // Tipo ponteiro
 typedef struct PointerDerefNode PointerDerefNode;
 
@@ -37,14 +38,18 @@ typedef struct CompoundStatementNode
 typedef struct AssignmentNode AssignmentNode; // Atribuição (:=)
 typedef struct ProcedureCallNode ProcedureCallNode; // Chamada de procedimento
 typedef struct IfNode IfNode; // Estrutura condicional if-then-else
-
+typedef struct LabeledStmtNode LabeledStmtNode;
 typedef struct CaseNode CaseNode;           // Estrutura de seleção case
+typedef struct CaseItemNode CaseItemNode;
 typedef struct CaseLabelNode CaseLabelNode; // Cada label dentro de um case
 typedef struct CaseElseNode CaseElseNode;   // Cláusula else do case (extensão)
 
 typedef struct WhileNode WhileNode;   // Laço while
+typedef struct WhileStmtNode WhileStmtNode;
+typedef struct RepeatUntilNode RepeatUntilNode;
 typedef struct RepeatNode RepeatNode; // Laço repeat until
-typedef struct ForNode ForNode;       // Laço for
+typedef struct ForStmtNode ForStmtNode;       // Laço for
+typedef struct ForListNode ForListNode;
 typedef struct WithNode WithNode;     // Estrutura with
 typedef struct GotoNode GotoNode;     // Comando goto
 
@@ -115,13 +120,15 @@ typedef enum {
   NODE_PROC_CALL,
   NODE_IF_STMT,
   NODE_CASE_STMT,
-  NODE_CASE_ELEMENT,
+  NODE_CASE_ITEM,
   NODE_CASE_ELSE,
   NODE_WHILE_STMT,
   NODE_REPEAT_STMT,
   NODE_FOR_STMT,
+  NODE_FOR_LIST,
   NODE_WITH_STMT,
   NODE_GOTO_STMT,
+  NODE_LABELED_STMT,
 
   /* Expressões */
   NODE_BINARY_EXPR,
@@ -427,7 +434,7 @@ struct AssignmentNode {
   ASTNode base;
     ASTNode *target;     // Variável alvo (lado esquerdo)
     ASTNode *expression; // Expressão (lado direito) fm
-}
+};
 
 struct IfNode {
     ASTNode base;
@@ -460,9 +467,15 @@ struct CaseNode {
   ASTNode *else_part;
 };
 
+struct CaseItemNode {
+  ASTNode base;
+  ASTNode *value_list;
+  ASTNode *statement;
+};
+
 struct CaseLabelNode {
   ASTNode base;
-  ASTNode *valie_list;
+  ASTNode *value_list;
   ASTNode *label;
   ASTNode *stmt;
 };
@@ -560,9 +573,8 @@ ASTNode *create_heading_node(ASTNode *list, SourceLocation loc);
 ASTNode *create_identifier_list_node(ASTNode *element, SourceLocation loc);
 ASTNode *create_case_stmt_node(ASTNode *expr, ASTNode *elements,
                                ASTNode *else_part, SourceLocation loc);
-ASTNode *create_case_element_node(ASTNode *label, ASTNode *stmt,
-                                  SourceLocation loc);
 ASTNode *create_case_else_node(ASTNode *stmt, SourceLocation loc);
+ASTNode *create_case_item_node(ASTNode *value_list, ASTNode *stmt, SourceLocation loc);
 ASTNode *create_label_declaration_node(ASTNode *labels, SourceLocation loc);
 ASTNode *create_constant_declaration_node(ASTNode *id, ASTNode *constant,
                                           SourceLocation loc);
@@ -586,12 +598,13 @@ ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
 ASTNode *create_assign_node(ASTNode *variable, ASTNode *expression,
                             SourceLocation loc);
 ASTNode *create_case_list_node(ASTNode *element, SourceLocation loc);
-ASTNode *create_case_range_node(ASTNode* constant, ASTNode *constant, SourceLocation loc);
+ASTNode *create_case_range_node(ASTNode* constant, ASTNode *constant2, SourceLocation loc);
 ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
                                      SourceLocation loc);
 ASTNode *create_case_stmt_with_else_node(ASTNode *expression, ASTNode *list,
                                          ASTNode *else_part,
                                          SourceLocation loc);
+ASTNode *create_case_label_list(ASTNode* case_label, SourceLocation loc);
 ASTNode *create_constant_declaration_node(ASTNode *identifier,
                                           ASTNode *constant,
                                           SourceLocation loc);
@@ -614,6 +627,7 @@ ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
                                 SourceLocation loc);
 ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_list,
                               ASTNode *stmt, SourceLocation loc);
+ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto, SourceLocation loc);
 ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
                                             SourceLocation loc);
 ASTNode *create_function_param_node(ASTNode *identifier, ASTNode *params,
@@ -669,6 +683,8 @@ ASTNode *create_with_record_list_node(ASTNode *record_var_list, ASTNode *stmt,
 /* APPENDING */
 ASTNode *append_case_list_node(ASTNode *list, ASTNode *element,
                                SourceLocation loc);
+ASTNode *append_case_label_list(ASTNode *list, ASTNode *case_label, SourceLocation loc);
+ASTNode *append_case_item(ASTNode *list, ASTNode *case_item, SourceLocation loc);
 ASTNode *append_subscript_list_node(ASTNode *list, ASTNode *element,
                                     SourceLocation loc);
 ASTNode *append_identifier_list_node(ASTNode *list, ASTNode *element,
@@ -685,8 +701,10 @@ ASTNode *append_variable_identifier_list(ASTNode *list, ASTNode *var_id,
                                           SourceLocation loc);
 ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
                              SourceLocation loc);
+ASTNode *create_record_variable_list_node(ASTNode *record_var, SourceLocation loc);
 ASTNode *append_stmt_list(ASTNode *list, ASTNode *stmt, SourceLocation loc);
 ASTNode *append_proc_and_func_declarations(ASTNode* list, ASTNode* proc_and_func, SourceLocation loc);
+ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var, SourceLocation loc);
 ASTNode *add_labels_to_block(ASTNode *block, ASTNode *proc_funcs);
 ASTNode *add_constants_to_block(ASTNode *block, ASTNode *constants);
 ASTNode *add_types_to_block(ASTNode *block, ASTNode *types);
