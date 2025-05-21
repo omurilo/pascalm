@@ -49,11 +49,7 @@ typedef struct WithNode WithNode;     // Estrutura with
 typedef struct GotoNode GotoNode;     // Comando goto
 
 typedef struct BinaryOperationNode
-    BinaryOperationNode; // Operações binárias (+, -, *, /, div, mod, and, or, et
-                         // 
-                         //
-                         //
-                         // .)
+    BinaryOperationNode; // Operações binárias (+, -, *, /, div, mod, and, or, etc.)
 typedef struct UnaryOperationNode
     UnaryOperationNode;                 // Operações unárias (-, not, etc.)
 typedef struct LiteralNode LiteralNode; // Valores literais
@@ -76,6 +72,14 @@ typedef struct ErrorNode ErrorNode; // Nó para representar erros sintáticos
 
 typedef struct ASTNode ASTNode;
 typedef struct SourceLocation SourceLocation;
+
+struct SourceLocation {
+  int first_line;
+  int first_column;
+  int last_line;
+  int last_column;
+  char *file_name;
+};
 
 typedef enum {
   /* Estrutura do programa */
@@ -138,13 +142,67 @@ typedef enum {
   NODE_ERROR
 } NodeType;
 
-struct SourceLocation {
-  int first_line;
-  int first_column;
-  int last_line;
-  int last_column;
-  char *file_name;
-};
+typedef enum {
+    SYMBOL_UNKNOWN,       // Ainda não resolvido
+    
+    // Tipos de identificadores primários
+    SYMBOL_VARIABLE,      // Variável
+    SYMBOL_CONSTANT,      // Constante
+    SYMBOL_PARAMETER,     // Parâmetro de função/procedimento
+    SYMBOL_FUNCTION,      // Função
+    SYMBOL_PROCEDURE,     // Procedimento
+    SYMBOL_TYPE,          // Tipo definido pelo usuário
+    
+    // Tipos específicos de variáveis
+    SYMBOL_FIELD,         // Campo de um record
+    SYMBOL_LOCAL_VAR,     // Variável local
+    SYMBOL_GLOBAL_VAR,    // Variável global
+    
+    // Tipos específicos de parâmetros
+    SYMBOL_VALUE_PARAM,   // Parâmetro por valor
+    SYMBOL_VAR_PARAM,     // Parâmetro por referência (var)
+    
+    // Tipos específicos para tipos
+    SYMBOL_ENUM_VALUE,    // Valor de enumeração
+    SYMBOL_LABEL,         // Rótulo (label)
+    
+    // Para escopos internos
+    SYMBOL_PROGRAM,       // Nome do programa
+    SYMBOL_UNIT,          // Nome da unit (para Pascal modular)
+    
+    // Tipos especiais
+    SYMBOL_FORWARD_DECL,  // Declaração forward de função/procedimento
+    SYMBOL_BUILTIN        // Funções/procedimentos/tipos built-in
+} SymbolKind;
+
+typedef struct SymbolEntry {
+    char *name;             // Nome do símbolo
+    SymbolKind kind;        // Tipo do símbolo
+    
+    union {
+        struct {
+            ASTNode *type;  // Tipo da variável/parâmetro/constante
+            int offset;     // Offset na stack/frame (para variáveis)
+            bool is_ref;    // Se é parâmetro por referência
+        } var_info;
+        
+        struct {
+            ASTNode *return_type;     // Tipo de retorno (NULL para void/procedure)
+            ASTNode *params;          // Lista de parâmetros
+            ASTNode *body;            // Corpo da função
+            bool is_forward;          // Se é declaração forward
+        } func_info;
+        
+        struct {
+            ASTNode *definition;      // Definição do tipo
+            size_t size;              // Tamanho do tipo (em bytes)
+        } type_info;
+    } info;
+    
+    int scope_level;        // Nível de escopo para verificação de visibilidade
+    SourceLocation location; // Localização da declaração para mensagens de erro
+    struct SymbolEntry *next; // Para implementação de lista encadeada na tabela
+} SymbolEntry;
 
 struct ASTNode {
   NodeType type;
@@ -177,6 +235,21 @@ struct IdentifierNode {
     int is_lvalue;               // Is this usable as an l-value?
 };
 
+void resolve_identifier(ASTNode *node, SymbolTable *table) {
+    if (node->type != NODE_IDENTIFIER) return;
+    
+    IdentifierNode *id = (IdentifierNode *)node;
+    SymbolEntry *entry = lookup_symbol(table, id->name);
+    
+    if (entry) {
+        id->kind = entry->kind;
+        id->symbol_entry = entry;
+    } else {
+        // Erro: identificador não declarado
+        report_error("Undeclared identifier: %s", id->name);
+    }
+}
+
 struct VariantRecordNode {
     ASTNode base;
     IdentifierNode *tag_field;   // Tag field name
@@ -206,6 +279,40 @@ struct LiteralNode {
         char char_val;           // Character value
     } value;
 };
+
+void check_assignment(ASTNode *target, ASTNode *value) {
+    if (target->type == NODE_IDENTIFIER) {
+        IdentifierNode *id = (IdentifierNode *)target;
+        
+        // Verificar se o identificador pode receber um valor
+        switch (id->kind) {
+            case SYMBOL_VARIABLE:
+            case SYMBOL_LOCAL_VAR:
+            case SYMBOL_GLOBAL_VAR:
+            case SYMBOL_PARAMETER:
+            case SYMBOL_VAR_PARAM:
+            case SYMBOL_FIELD:
+                // OK, pode ser destino de atribuição
+                break;
+                
+            case SYMBOL_CONSTANT:
+            case SYMBOL_FUNCTION:
+            case SYMBOL_TYPE:
+            case SYMBOL_ENUM_VALUE:
+                report_error("Cannot assign to %s (not a variable)", 
+                             get_symbol_kind_name(id->kind));
+                break;
+                
+            case SYMBOL_UNKNOWN:
+                report_error("Identifier not resolved: %s", id->name);
+                break;
+                
+            default:
+                report_error("Invalid assignment target");
+        }
+    }
+    // Outras verificações de tipo...
+}
 
 // Campos Para Verificação de Escopo em Nós de Declaração
 
@@ -271,32 +378,62 @@ struct BlockNode {
 
 struct LabelDeclarationNode {
   ASTNode base;
-  ASTNode *labels; // ListNode
+  ASTNode *value;
 };
 
 struct ConstDeclarationNode {
   ASTNode base;
-  ASTNode *constants; // ListNode
+  ASTNode *identifier;
+  ASTNode *const_expr;
 };
 
 struct TypeDeclarationNode {
   ASTNode base;
-  ASTNode *types;
+  ASTNode *identifier;
+  ASTNode *type_expr;
 };
 
 struct VarDeclarationNode {
-  ASTNode base;
-  ASTNode *vars;
+    ASTNode base;
+    ASTNode *var_list;          // List of variables
+    ASTNode *type_node;          // Type of the variables
+    int scope_level;             // Scope level of declaration
 };
 
 struct ProcDeclarationNode {
   ASTNode base;
-  ASTNode *procs;
+  ASTNode *identifier;
+  ASTNode *parameters;
+  ASTNode *block_or_forward;
 };
 
 struct FuncDeclarationNode {
   ASTNode base;
-  ASTNode *funcs;
+  ASTNode *identifier;
+  ASTNode *parameters;
+  ASTNode *type;
+  ASTNode *block_or_forward;
+};
+
+struct IdentifierNode {
+    ASTNode base;
+    char *name;                  // Identifier name
+    SymbolKind kind;             // Inicialmente SYMBOL_UNKNOWN
+    void *symbol_entry;          // Reference to symbol table entry
+    // int is_lvalue;               // Is this usable as an l-value?
+};
+
+struct AssignmentNode {
+  ASTNode base;
+    ASTNode *target;     // Variável alvo (lado esquerdo)
+    ASTNode *expression; // Expressão (lado direito) fm
+}
+
+struct IfNode {
+    ASTNode base;
+    ASTNode *condition;     // Expressão de condição
+    ASTNode *then_stmt;     // Statement a executar se verdadeiro
+    ASTNode *else_stmt;     // Statement a executar se falso (pode ser NULL)
 };
 
 struct MemberAccessNode {
@@ -319,12 +456,13 @@ struct PointerDerefNode {
 struct CaseNode {
   ASTNode base;
   ASTNode *expr;
-  ASTNode *elements;
+  ASTNode *case_list;
   ASTNode *else_part;
 };
 
 struct CaseLabelNode {
   ASTNode base;
+  ASTNode *valie_list;
   ASTNode *label;
   ASTNode *stmt;
 };
@@ -334,19 +472,56 @@ struct CaseElseNode {
   ASTNode *stmt;
 };
 
-typedef struct ConstItemNode {
-  ASTNode base;
-  char *name;
-  ASTNode *value;
-  struct ConstItemNode *next;
-} ConstItemNode;
+struct WhileStmtNode {
+    ASTNode base;
+    ASTNode *condition;     // Expressão de condição
+    ASTNode *body;          // Statement a executar enquanto verdadeiro
+};
 
-typedef struct TypeItemNode {
-  ASTNode base;
-  char *name;
-  ASTNode *value;
-  struct TypeItemNode *next;
-} TypeItemNode;
+struct RepeatUntilNode {
+    ASTNode base;
+    ASTNode *body;          // Lista de statements a executar
+    ASTNode *condition;     // Condição para sair do loop
+};
+
+struct ForStmtNode {
+    ASTNode base;
+    ASTNode *variable;      // Variável de controle
+    ASTNode *for_list;      // Informações do intervalo (inicial, final, step)
+    ASTNode *body;          // Statement a executar
+    bool is_downto;         // true se for downto, false se for to
+};
+
+struct ForListNode {
+    ASTNode base;
+    ASTNode *start_expr;    // Expressão inicial
+    ASTNode *end_expr;      // Expressão final
+    bool is_downto;         // true se for downto, false se for to
+};
+
+struct ProcedureCallNode {
+    ASTNode base;
+    ASTNode *procedure;     // Identificador do procedimento
+    ASTNode *params;        // Lista de parâmetros (pode ser NULL)
+};
+
+struct GotoNode {
+    ASTNode base;
+    ASTNode *label;         // Rótulo de destino
+};
+
+struct WithNode {
+    ASTNode base;
+    ASTNode *record_list;   // Lista de variáveis record
+    ASTNode *body;          // Statement a executar
+};
+
+struct LabeledStmtNode {
+    ASTNode base;
+    ASTNode *label;         // Rótulo
+    ASTNode *statement;     // Statement
+};
+
 
 struct ListNode {
   ASTNode base;
@@ -354,16 +529,25 @@ struct ListNode {
   ASTNode *next;
 };
 
+typedef enum {
+    LITERAL_INTEGER,
+    LITERAL_REAL,
+    LITERAL_BOOLEAN,
+    LITERAL_STRING,
+    LITERAL_CHAR,
+    LITERAL_NIL
+} LiteralType;
+
 struct LiteralNode {
-  ASTNode base;
-  union {
-    int integer;  // Literais inteiros
-    double real;  // Literais reais
-    char *string; // Literais string
-    bool boolean; // Literais booleanos (true, false)
-    char character;
-    // NULL nil; //TODO: como implementar o literal nil
-  } value;
+    ASTNode base;
+    LiteralType literal_type;    // Type of literal
+    union {
+        int int_val;             // Integer value
+        double real_val;         // Real value
+        int bool_val;            // Boolean value (0/1)
+        char *str_val;           // String value
+        char char_val;           // Character value
+    } value;
 };
 
 SourceLocation create_location(YYLTYPE loc);
@@ -386,8 +570,14 @@ ASTNode *create_type_declaration_node(ASTNode *id, ASTNode *types,
                                       SourceLocation loc);
 ASTNode *create_variable_declaration_node(ASTNode *id, ASTNode *variables,
                                           SourceLocation loc);
-ASTNode *create_proc_and_func_declaration_node(ASTNode *id,
-                                               ASTNode *procs_funcs,
+ASTNode *create_variable_identifier_list_node(ASTNode *identifier, SourceLocation loc);
+ASTNode *create_proc_and_func_declarations_node(ASTNode* procs_and_funcs, SourceLocation loc);
+ASTNode *create_proc_declaration_node(ASTNode *id,
+    ASTNode *parameters,
+                                               ASTNode *block_or_forward,
+                                               SourceLocation loc);
+ASTNode *create_func_declaration_node(ASTNode *id,
+     ASTNode *parameters, ASTNode *type, ASTNode *block_or_forward,
                                                SourceLocation loc);
 ASTNode *create_array_access_node(ASTNode *variable, ASTNode *sub_list,
                                   SourceLocation loc);
@@ -396,6 +586,7 @@ ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
 ASTNode *create_assign_node(ASTNode *variable, ASTNode *expression,
                             SourceLocation loc);
 ASTNode *create_case_list_node(ASTNode *element, SourceLocation loc);
+ASTNode *create_case_range_node(ASTNode* constant, ASTNode *constant, SourceLocation loc);
 ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
                                      SourceLocation loc);
 ASTNode *create_case_stmt_with_else_node(ASTNode *expression, ASTNode *list,
@@ -411,6 +602,7 @@ ASTNode *create_real_literal(double real, SourceLocation loc);
 ASTNode *create_string_literal(char *string, SourceLocation loc);
 ASTNode *create_char_literal(char character, SourceLocation loc);
 ASTNode *create_boolean_literal(bool boolean, SourceLocation loc);
+ASTNode *create_nil_literal(SourceLocation loc);
 ASTNode *create_constant_signed_identifier(ASTNode *value, char *op,
                                            SourceLocation loc);
 ASTNode *create_field_identifier_list_node(ASTNode *list, ASTNode *identifier,
@@ -457,7 +649,7 @@ ASTNode *create_repeat_until_stmt_list_node(ASTNode *list, ASTNode *expression,
                                             SourceLocation loc);
 ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc);
 ASTNode *create_simple_type_node(ASTNode *type, SourceLocation loc);
-ASTNode *create_stmt_list_node(ASTNode *stmt_list, SourceLocation loc);
+ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc);
 ASTNode *create_structure_type_node(ASTNode *type, SourceLocation loc);
 ASTNode *create_subscript_list_node(ASTNode *expr, SourceLocation loc);
 ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
@@ -487,17 +679,19 @@ ASTNode *append_constant_declaration(ASTNode *list, ASTNode *id,
                                      ASTNode *constant, SourceLocation loc);
 ASTNode *append_type_declaration(ASTNode *list, ASTNode *id, ASTNode *type,
                                  SourceLocation loc);
-ASTNode *append_variable_declaration(ASTNode *list, ASTNode *id, ASTNode *vars,
+ASTNode *append_variable_declaration(ASTNode *list, ASTNode *vars, ASTNode *type,
                                      SourceLocation loc);
-ASTNode *append_variable_identifiers_list(ASTNode *list, ASTNode *var_id,
+ASTNode *append_variable_identifier_list(ASTNode *list, ASTNode *var_id,
                                           SourceLocation loc);
 ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
                              SourceLocation loc);
 ASTNode *append_stmt_list(ASTNode *list, ASTNode *stmt, SourceLocation loc);
-ASTNode *add_constant_to_block(ASTNode *block, ASTNode *constants);
-ASTNode *add_type_to_block(ASTNode *block, ASTNode *types);
-ASTNode *add_variable_to_block(ASTNode *block, ASTNode *variables);
-ASTNode *add_proc_func_to_block(ASTNode *block, ASTNode *proc_funcs);
+ASTNode *append_proc_and_func_declarations(ASTNode* list, ASTNode* proc_and_func, SourceLocation loc);
+ASTNode *add_labels_to_block(ASTNode *block, ASTNode *proc_funcs);
+ASTNode *add_constants_to_block(ASTNode *block, ASTNode *constants);
+ASTNode *add_types_to_block(ASTNode *block, ASTNode *types);
+ASTNode *add_variables_to_block(ASTNode *block, ASTNode *variables);
+ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *proc_funcs);
 
 /* UTILS */
 ASTNode *get_statements_from_block(ASTNode *block);
@@ -527,7 +721,8 @@ int is_constant_expression(ASTNode *expr);
 
 
 // Estrutura de Visitante:
-// Implementar um padrão visitante para percorrer a AST, facilitando diferentes fases de análise:
+// Implementar um padrão visitante para percorrer a AST, facilitando diferentes 
+ases de análise:
 
 typedef struct Visitor {
     void (*visit_program)(Visitor *self, ProgramNode *node);

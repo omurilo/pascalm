@@ -86,6 +86,7 @@ ASTNode *root = NULL;
 %type <node> variant_list
 %type <node> variant
 %type <node> case_label_list
+%type <node> case_label
 
 %type <node> statement_list
 %type <node> statement
@@ -155,39 +156,33 @@ identifier_list:
     }
 
 block:  
-    block1 {  
-      $$ = create_block_node(NULL, NULL, NULL, NULL, NULL, 
-                               get_statements_from_block($1), 
-                               create_location(@$));
-    } 
+    block1 { $$ = $1; } 
   | label_declaration SEMICOLON block1 {
-      $$ = create_block_node($1, NULL, NULL, NULL, NULL, 
-                               get_statements_from_block($3), 
-                               create_location(@$));
+      $$ = add_labels_to_block($3, $1);
     }
 
 block1:  
     block2  { $$ = $1; }
   | constant_declaration SEMICOLON block2 {
-    $$ = add_constant_to_block($3, $1);
+    $$ = add_constants_to_block($3, $1);
   }
 
 block2:  
     block3 { $$ = $1; }
   | type_declaration SEMICOLON block3 {
-     $$ = add_type_to_block($3, $1);
+     $$ = add_types_to_block($3, $1);
   }
 
 block3:  
     block4 { $$ = $1; }
   | variable_declaration SEMICOLON block4 {
-      $$ = add_variable_to_block($3, $1);
+      $$ = add_variables_to_block($3, $1);
     }
 
 block4:  
     block5 { $$ = $1; }
   | proc_and_func_declaration SEMICOLON block5 {
-      $$ = add_proc_func_to_block($3, $1);
+      $$ = add_procs_funcs_to_block($3, $1);
     }
 
 block5:  
@@ -222,9 +217,9 @@ variable_declaration:
     }
 
 variableid_list:  
-    identifier  { $$ = $1; }
+    identifier  { $$ = create_variable_identifier_list_node($1, create_location(@$)); }
   | variableid_list COMMA identifier {
-      $$ = append_variable_identifiers_list($1, $3, create_location(@$));
+      $$ = append_variable_identifier_list($1, $3, create_location(@$));
     }
 
 constant:  
@@ -320,21 +315,35 @@ variant:
       $$ = create_variant_node($1, $4, create_location(@$));
     }
 
-case_label_list:  
-    constant  { $$ = $1; }
-  | case_label_list COMMA constant { $$ = append_case_list_node($1, $3, create_location(@$)); }  
+case_label_list:
+    case_label { $$ = create_case_label_list($1, create_location(@$)); }
+  | case_label_list COMMA case_label { 
+      $$ = append_case_label_list($1, $3, create_location(@$)); 
+    }
+
+case_label:
+    constant { $$ = $1; }
+  | constant DOTDOT constant { 
+      $$ = create_case_range_node($1, $3, create_location(@$)); 
+    }
 
 proc_and_func_declaration:  
-    proc_or_func  
-  | proc_and_func_declaration SEMICOLON proc_or_func 
+    proc_or_func { $$ = create_proc_and_func_declarations_node($1, create_location(@$)); }
+  | proc_and_func_declaration SEMICOLON proc_or_func {
+      $$ = append_proc_and_func_declarations($1, $3, create_location(@$));
+    }
 
 proc_or_func:  
-    PROCEDURE identifier parameters SEMICOLON block_or_forward { /* identifier of func/proc declaration */ }
-  | FUNCTION identifier parameters COLON typeid SEMICOLON block_or_forward 
+    PROCEDURE identifier parameters SEMICOLON block_or_forward { /* identifier of func/proc declaration */ 
+      $$ = create_proc_declaration_node($2, $3, $5, create_location(@$));
+    }
+  | FUNCTION identifier parameters COLON typeid SEMICOLON block_or_forward {
+      $$ = create_func_declaration_node($2, $3, $5, $7, create_location(@$));
+    }
 
 block_or_forward:  
     block { $$ = $1; }
-  | FORWARD  { /* descobrir o que fazer com forward */}
+  | FORWARD  { /* descobrir o que fazer com forward */ }
 
 parameters:  
    L_PAREN formal_parameter_list R_PAREN { $$ = create_parameters_node($2, create_location(@$)); }
@@ -356,7 +365,7 @@ parameterid_list:
   | parameterid_list COMMA identifier  { $$ = create_parameter_identifier_list_node($1, $3, create_location(@$)); /* identifier of func parameter */ }
 
 statement_list:  
-    statement { $$ = $1; }
+    statement { $$ = create_stmt_list_node($1, create_location(@$)); }
   | statement_list SEMICOLON statement { $$ = append_stmt_list($1, $3, create_location(@$)); }  
 
 statement:  
@@ -394,12 +403,12 @@ case_list:
     case_element {
       $$ = create_case_list_node($1, create_location(@$));
     }
-  | case_list case_element {
+  | case_list SEMICOLON case_element {
       $$ = append_case_list_node($1, $2, create_location(@$));
     }
 
 case_element:
-    case_label_list COLON statement SEMICOLON {
+    case_label_list COLON statement  {
       $$ = create_case_element_node($1, $3, create_location(@$));
     }
 
@@ -408,9 +417,13 @@ case_else:
       $$ = create_case_else_node($2, create_location(@$));
     }
 
-for_list:  
-    expression TO expression  
-  | expression DOWNTO expression  
+for_list:
+    expression TO expression { 
+      $$ = create_for_list_node($1, $3, false, create_location(@$)); 
+    }
+  | expression DOWNTO expression { 
+      $$ = create_for_list_node($1, $3, true, create_location(@$)); 
+    }  
 
 
 expression_list:  
@@ -418,11 +431,13 @@ expression_list:
   | expression_list COMMA expression  
 
 label:  
-   unsigned_integer 
+   unsigned_integer { $$ = $1; }
 
-record_variable_list:  
-    variable  
-  | record_variable_list COMMA variable  
+record_variable_list:
+    variable { $$ = create_record_variable_list_node($1, create_location(@$)); }
+  | record_variable_list COMMA variable { 
+      $$ = append_record_variable_list($1, $3, create_location(@$)); 
+    } 
 
 expression: 
     expression relational_op additive_expression 
@@ -471,7 +486,9 @@ primary_expression:
   | unsigned_integer  
   | unsigned_real  
   | STRING_LITERAL  
-  | NIL  
+  | NIL {
+      $$ = create_nil_literal(create_location(@$));
+    }
   | funcid L_PAREN expression_list R_PAREN  
   | L_BRACKET element_list R_BRACKET  
   | L_PAREN expression R_PAREN  
