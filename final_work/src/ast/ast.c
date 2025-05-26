@@ -1,5 +1,8 @@
 #include "ast.h"
 #include <string.h>
+#include "../symbol-table/symbol-table.h"
+
+extern ht *HashTable;
 
 SourceLocation create_location(YYLTYPE loc) {
   SourceLocation result;
@@ -153,51 +156,51 @@ void print_stmt_list(ASTNode *node, int indent) {
   while (current) {
     if (current->element) {
       switch (current->element->type) {
-      case NODE_COMPOUND_STMT:{
+      case NODE_COMPOUND_STMT: {
         printf("%*sNODE_COMPOUND_STMT!\n", indent, "");
         break;
       }
-      case NODE_ASSIGN_STMT:{
+      case NODE_ASSIGN_STMT: {
         printf("%*sNODE_ASSIGN_STMT!\n", indent, "");
         break;
       }
-      case NODE_PROC_CALL:{
+      case NODE_PROC_CALL: {
         printf("%*sNODE_PROC_CALL!\n", indent, "");
         break;
       }
-      case NODE_IF_STMT:{
+      case NODE_IF_STMT: {
         printf("%*sNODE_IF_STMT!\n", indent, "");
         break;
       }
-      case NODE_CASE_STMT:{
+      case NODE_CASE_STMT: {
         printf("%*sNODE_CASE_STMT!\n", indent, "");
         break;
       }
       case NODE_CASE_ITEM: {
-        printf("%*NODE_CASE_ITEM!\n", indent, "");
+        printf("%*sNODE_CASE_ITEM!\n", indent, "");
         break;
       }
-      case NODE_CASE_ELSE:{
+      case NODE_CASE_ELSE: {
         printf("%*sNODE_CASE_ELSE!\n", indent, "");
         break;
       }
-      case NODE_WHILE_STMT:{
+      case NODE_WHILE_STMT: {
         printf("%*sNODE_WHILE!\n", indent, "");
         break;
       }
-      case NODE_REPEAT_STMT:{
+      case NODE_REPEAT_STMT: {
         printf("%*sNODE_REPEATE!\n", indent, "");
         break;
       }
-      case NODE_FOR_STMT:{
+      case NODE_FOR_STMT: {
         printf("%*sNODE_FOR!\n", indent, "");
         break;
       }
-      case NODE_WITH_STMT:{
+      case NODE_WITH_STMT: {
         printf("%*sNODE_WITH!\n", indent, "");
         break;
       }
-      case NODE_GOTO_STMT:{
+      case NODE_GOTO_STMT: {
         printf("%*sNODE_GOTO!\n", indent, "");
         break;
       }
@@ -322,6 +325,40 @@ ASTNode *create_type_declaration_node(ASTNode *id, ASTNode *type,
   return (ASTNode *)list;
 }
 
+ASTNode *create_type_identifier(ASTNode *id, SourceLocation loc) {
+  TypeIdentifierNode *typeid =
+      (TypeIdentifierNode *)malloc(sizeof(TypeIdentifierNode));
+  typeid->base.type = NODE_TYPE_IDENTIFIER;
+  typeid->base.location = loc;
+  typeid->base.print = print_todo;
+  typeid->id = (IdentifierNode *)id;
+  typeid->is_base_type = false;
+
+  return (ASTNode *)typeid;
+}
+
+ASTNode *create_builtin_type_identifier(char *name, SourceLocation loc) {
+  TypeIdentifierNode *typeid =
+      (TypeIdentifierNode *)malloc(sizeof(TypeIdentifierNode));
+  typeid->base.type = NODE_TYPE_IDENTIFIER;
+  typeid->base.location = loc;
+  typeid->base.print = print_todo;
+  typeid->name = name;
+  typeid->kind = SYMBOL_BUILTIN;
+  typeid->is_base_type = true;
+
+  return (ASTNode *)typeid;
+}
+
+ASTNode *create_builtin_identifier(char *name, SourceLocation loc) {
+  IdentifierNode *built = (IdentifierNode *)malloc(sizeof(IdentifierNode));
+  built->base.type = NODE_IDENTIFIER;
+  built->base.location = loc;
+  built->base.print = print_todo;
+  built->name = name;
+  built->kind = SYMBOL_PROCEDURE;
+}
+
 ASTNode *create_identifier_list_node(ASTNode *element, SourceLocation loc) {
   ListNode *node = (ListNode *)malloc(sizeof(ListNode));
   node->base.type = NODE_LIST;
@@ -344,8 +381,8 @@ ASTNode *create_case_stmt_node(ASTNode *expr, ASTNode *case_list,
   return (ASTNode *)node;
 }
 
-ASTNode *create_case_stmt_with_else_node(ASTNode *expression, ASTNode *case_list,
-                                         ASTNode *else_part,
+ASTNode *create_case_stmt_with_else_node(ASTNode *expression,
+                                         ASTNode *case_list, ASTNode *else_part,
                                          SourceLocation loc) {
   return create_case_stmt_node(expression, case_list, else_part, loc);
 }
@@ -360,22 +397,22 @@ ASTNode *create_case_list_node(ASTNode *element, SourceLocation loc) {
   return (ASTNode *)list;
 }
 
-ASTNode *create_case_item_node(ASTNode *value_list, ASTNode *stmt, SourceLocation loc) {
-    CaseItemNode *node = (CaseItemNode *)malloc(sizeof(CaseItemNode));
-    node->base.type = NODE_CASE_ITEM;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->value_list = value_list;
-    node->statement = stmt;
+ASTNode *create_case_item_node(ASTNode *value_list, ASTNode *stmt,
+                               SourceLocation loc) {
+  CaseItemNode *node = (CaseItemNode *)malloc(sizeof(CaseItemNode));
+  node->base.type = NODE_CASE_ITEM;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->value_list = value_list;
+  node->statement = stmt;
 
-
-    ListNode *list = (ListNode *)malloc(sizeof(ListNode));
-    list->base.type = NODE_LIST;
-    list->base.location = loc;
-    list->base.print = print_todo;
-    list->element = (ASTNode *)node;
-    list->next = NULL;
-    return (ASTNode *)list;
+  ListNode *list = (ListNode *)malloc(sizeof(ListNode));
+  list->base.type = NODE_LIST;
+  list->base.location = loc;
+  list->base.print = print_todo;
+  list->element = (ASTNode *)node;
+  list->next = NULL;
+  return (ASTNode *)list;
 }
 
 ASTNode *create_case_else_node(ASTNode *stmt, SourceLocation loc) {
@@ -387,7 +424,7 @@ ASTNode *create_case_else_node(ASTNode *stmt, SourceLocation loc) {
   return (ASTNode *)node;
 };
 
-ASTNode *create_case_label_list(ASTNode* case_label, SourceLocation loc) {
+ASTNode *create_case_label_list(ASTNode *case_label, SourceLocation loc) {
   ListNode *new_list = (ListNode *)malloc(sizeof(ListNode));
   new_list->base.type = NODE_LIST;
   new_list->base.location = loc;
@@ -397,8 +434,17 @@ ASTNode *create_case_label_list(ASTNode* case_label, SourceLocation loc) {
   return (ASTNode *)new_list;
 }
 
-ASTNode *create_case_range_node(ASTNode *constant, ASTNode *constant2, SourceLocation loc) {
-  // TODO
+ASTNode *create_constant_range_node(ASTNode *constant1, ASTNode *constant2,
+                                    SourceLocation loc) {
+  // TODO: In a semantic analysis, the type of lower and upper must be equal
+  CaseLabelNode *label = (CaseLabelNode *)malloc(sizeof(CaseLabelNode));
+  label->base.type = NODE_CASE_LABEL;
+  label->base.location = loc;
+  label->base.print = print_todo;
+  label->lower = constant1;
+  label->upper = constant2;
+
+  return (ASTNode *)label;
 }
 
 ASTNode *create_array_access_node(ASTNode *array, ASTNode *subscripts,
@@ -453,6 +499,24 @@ ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
   decl->type_node = type;
   decl->scope_level = 0;
 
+  ListNode *curr = (ListNode *)list;
+  int offset = 0;
+  while (curr) {
+    if (curr->element) {
+      IdentifierNode *id_node = (IdentifierNode *)curr->element;
+      id_node->kind = SYMBOL_VARIABLE;
+      SymbolEntry *symb = ht_get(HashTable, id_node->symbol_entry_key);
+      symb->kind = SYMBOL_VARIABLE;
+      symb->info.var_info.type = type;
+      symb->info.var_info.offset = offset;
+      symb->scope_level = decl->scope_level;
+
+      ht_set(HashTable, symb->name, symb);
+      offset += 1;
+    }
+    curr = (ListNode *)curr->next;
+  }
+
   ListNode *new_list = (ListNode *)malloc(sizeof(ListNode));
   new_list->base.type = NODE_LIST;
   new_list->base.location = loc;
@@ -464,6 +528,7 @@ ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
 
 ASTNode *create_variable_identifier_list_node(ASTNode *id, SourceLocation loc) {
   ListNode *list = (ListNode *)malloc(sizeof(ListNode));
+
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_todo;
@@ -524,6 +589,20 @@ ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc) {
   return (ASTNode *)new_list;
 };
 
+ASTNode *create_expression_range_node(ASTNode *expression1,
+                                      ASTNode *expression2,
+                                      SourceLocation loc) {
+  // TODO: In Semantic analysis, the expressions must match types
+  ElementNode *element = (ElementNode *)malloc(sizeof(ElementNode));
+  element->base.type = NODE_SET_CONSTRUCTOR;
+  element->base.location = loc;
+  element->base.print = print_todo;
+  element->lower = expression1;
+  element->upper = expression2;
+
+  return (ASTNode *)element;
+}
+
 ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
                                 SourceLocation loc) {};
 ASTNode *create_assign_node(ASTNode *variable, ASTNode *expression,
@@ -532,6 +611,46 @@ ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
                                      SourceLocation loc) {};
 ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {};
 ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {};
+
+ASTNode *create_relational_op(char *op, SourceLocation loc) {
+  OperationNode *node = (OperationNode *)malloc(sizeof(OperationNode));
+  node->base.type = NODE_OPERATION;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->op = op;
+  node->precedence = 0;
+  return (ASTNode *)node;
+}
+
+ASTNode *create_additive_op(char *op, SourceLocation loc) {
+  OperationNode *node = (OperationNode *)malloc(sizeof(OperationNode));
+  node->base.type = NODE_OPERATION;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->op = op;
+  node->precedence = 0;
+  return (ASTNode *)node;
+}
+
+ASTNode *create_multiplicative_node(char *op, SourceLocation loc) {
+  OperationNode *node = (OperationNode *)malloc(sizeof(OperationNode));
+  node->base.type = NODE_OPERATION;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->op = op;
+  node->precedence = 0;
+  return (ASTNode *)node;
+}
+ASTNode *create_unary_node(char *op, int precedence, SourceLocation loc) {
+  OperationNode *node = (OperationNode *)malloc(sizeof(OperationNode));
+  node->base.type = NODE_OPERATION;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->op = op;
+  node->precedence = precedence;
+  return (ASTNode *)node;
+}
+
 ASTNode *create_integer_literal(int integer, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
@@ -600,64 +719,71 @@ ASTNode *create_field_list(ASTNode *fixed, ASTNode *variant,
                            SourceLocation loc) {};
 ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
                                 SourceLocation loc) {};
-ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_list, ASTNode *body, SourceLocation loc) {
-    ForStmtNode *node = (ForStmtNode *)malloc(sizeof(ForStmtNode));
-    node->base.type = NODE_FOR_STMT;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->variable = variable;
-    node->for_list = for_list;
-    node->body = body;
-    
-    // Extrair o is_downto do for_list
-    ForListNode *fl = (ForListNode *)for_list;
-    node->is_downto = fl->is_downto;
-    
-    return (ASTNode *)node;
+ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_list,
+                              ASTNode *body, SourceLocation loc) {
+  ForStmtNode *node = (ForStmtNode *)malloc(sizeof(ForStmtNode));
+  node->base.type = NODE_FOR_STMT;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->variable = variable;
+  node->for_list = for_list;
+  node->body = body;
+
+  // Extrair o is_downto do for_list
+  ForListNode *fl = (ForListNode *)for_list;
+  node->is_downto = fl->is_downto;
+
+  return (ASTNode *)node;
 }
-ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto, SourceLocation loc) {
-    ForListNode *node = (ForListNode *)malloc(sizeof(ForListNode));
-    node->base.type = NODE_FOR_LIST;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->start_expr = start;
-    node->end_expr = end;
-    node->is_downto = is_downto;
-    return (ASTNode *)node;
+ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto,
+                              SourceLocation loc) {
+  ForListNode *node = (ForListNode *)malloc(sizeof(ForListNode));
+  node->base.type = NODE_FOR_LIST;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->start_expr = start;
+  node->end_expr = end;
+  node->is_downto = is_downto;
+  return (ASTNode *)node;
 }
 ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
                                             SourceLocation loc) {};
 ASTNode *create_function_param_node(ASTNode *identifier, ASTNode *params,
                                     ASTNode *type, SourceLocation loc) {};
+ASTNode *create_function_call_node(ASTNode *id, ASTNode *params,
+                                   SourceLocation loc) {};
 ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc) {
-    GotoNode *node = (GotoNode *)malloc(sizeof(GotoNode));
-    node->base.type = NODE_GOTO_STMT;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->label = label;
-    return (ASTNode *)node;
+  GotoNode *node = (GotoNode *)malloc(sizeof(GotoNode));
+  node->base.type = NODE_GOTO_STMT;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->label = label;
+  return (ASTNode *)node;
 }
-ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt, ASTNode *else_stmt, SourceLocation loc) {
-    IfNode *node = (IfNode *)malloc(sizeof(IfNode));
-    node->base.type = NODE_IF_STMT;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->condition = condition;
-    node->then_stmt = then_stmt;
-    node->else_stmt = else_stmt;
-    return (ASTNode *)node;
+ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt,
+                             ASTNode *else_stmt, SourceLocation loc) {
+  IfNode *node = (IfNode *)malloc(sizeof(IfNode));
+  node->base.type = NODE_IF_STMT;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->condition = condition;
+  node->then_stmt = then_stmt;
+  node->else_stmt = else_stmt;
+  return (ASTNode *)node;
 }
 ASTNode *create_index_list_node(ASTNode *list, ASTNode *type,
                                 SourceLocation loc) {};
-ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt, SourceLocation loc) {
-    LabeledStmtNode *node = (LabeledStmtNode *)malloc(sizeof(LabeledStmtNode));
-    node->base.type = NODE_LABELED_STMT;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->label = label;
-    node->statement = stmt;
-    return (ASTNode *)node;
+ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
+                                SourceLocation loc) {
+  LabeledStmtNode *node = (LabeledStmtNode *)malloc(sizeof(LabeledStmtNode));
+  node->base.type = NODE_LABELED_STMT;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->label = label;
+  node->statement = stmt;
+  return (ASTNode *)node;
 }
+
 ASTNode *create_packed_type(ASTNode *type, SourceLocation loc) {};
 ASTNode *create_parameter_identifier_list_node(ASTNode *list, ASTNode *element,
                                                SourceLocation loc) {};
@@ -665,22 +791,26 @@ ASTNode *create_parameter_list_types_node(ASTNode *list, ASTNode *type,
                                           SourceLocation loc) {};
 ASTNode *create_parameters_node(ASTNode *parameter, SourceLocation loc) {};
 ASTNode *create_poniter_type_node(ASTNode *type, SourceLocation loc) {};
-ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params, SourceLocation loc) {
-    ProcedureCallNode *node = (ProcedureCallNode *)malloc(sizeof(ProcedureCallNode));
-    node->base.type = NODE_PROC_CALL;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->procedure = proc;
-    node->params = params;  // Pode ser NULL se não houver parâmetros
-    
-    // Definir o tipo do identificador como procedimento
-    if (proc->type == NODE_IDENTIFIER) {
-        IdentifierNode *id = (IdentifierNode *)proc;
-        id->kind = SYMBOL_PROCEDURE;  // Será verificado durante análise semântica
-    }
-    
-    return (ASTNode *)node;
+
+ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params,
+                                    SourceLocation loc) {
+  ProcedureCallNode *node =
+      (ProcedureCallNode *)malloc(sizeof(ProcedureCallNode));
+  node->base.type = NODE_PROC_CALL;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->procedure = proc;
+  node->params = params; // Pode ser NULL se não houver parâmetros
+
+  // Definir o tipo do identificador como procedimento
+  if (proc->type == NODE_IDENTIFIER) {
+    IdentifierNode *id = (IdentifierNode *)proc;
+    id->kind = SYMBOL_PROCEDURE; // Será verificado durante análise semântica
+  }
+
+  return (ASTNode *)node;
 }
+
 ASTNode *create_procedure_param_node(ASTNode *identifier, ASTNode *params,
                                      SourceLocation loc) {};
 ASTNode *create_record_access_type(ASTNode *identifier, ASTNode *field,
@@ -688,52 +818,60 @@ ASTNode *create_record_access_type(ASTNode *identifier, ASTNode *field,
 ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,
                                   SourceLocation loc) {};
 ASTNode *create_record_type_node(ASTNode *field_list, SourceLocation loc) {};
-ASTNode *create_repeat_until_stmt_list_node(ASTNode *body, ASTNode *condition, SourceLocation loc) {
-    RepeatUntilNode *node = (RepeatUntilNode *)malloc(sizeof(RepeatUntilNode));
-    node->base.type = NODE_REPEAT_STMT;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->body = body;
-    node->condition = condition;
-    return (ASTNode *)node;
+
+ASTNode *create_repeat_until_stmt_list_node(ASTNode *body, ASTNode *condition,
+                                            SourceLocation loc) {
+  RepeatUntilNode *node = (RepeatUntilNode *)malloc(sizeof(RepeatUntilNode));
+  node->base.type = NODE_REPEAT_STMT;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->body = body;
+  node->condition = condition;
+  return (ASTNode *)node;
 }
+
 ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc) {};
 ASTNode *create_simple_type_node(ASTNode *type, SourceLocation loc) {};
 ASTNode *create_structure_type_node(ASTNode *type, SourceLocation loc) {};
 ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
                                SourceLocation loc) {};
-ASTNode *create_type_identifier(ASTNode *identifier, SourceLocation loc) {};
 ASTNode *create_variant_node(ASTNode *label_list, ASTNode *field_list,
                              SourceLocation loc) {};
-ASTNode *create_while_stmt_node(ASTNode *condition, ASTNode *body, SourceLocation loc) {
-    WhileStmtNode *node = (WhileStmtNode *)malloc(sizeof(WhileStmtNode));
-    node->base.type = NODE_WHILE_STMT;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->condition = condition;
-    node->body = body;
-    return (ASTNode *)node;
+
+ASTNode *create_while_stmt_node(ASTNode *condition, ASTNode *body,
+                                SourceLocation loc) {
+  WhileStmtNode *node = (WhileStmtNode *)malloc(sizeof(WhileStmtNode));
+  node->base.type = NODE_WHILE_STMT;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->condition = condition;
+  node->body = body;
+  return (ASTNode *)node;
 };
 
-ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body, SourceLocation loc) {
-    WithNode *node = (WithNode *)malloc(sizeof(WithNode));
-    node->base.type = NODE_WITH_STMT;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->record_list = record_list;
-    node->body = body;
-    return (ASTNode *)node;
+ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body,
+                                      SourceLocation loc) {
+  WithNode *node = (WithNode *)malloc(sizeof(WithNode));
+  node->base.type = NODE_WITH_STMT;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->record_list = record_list;
+  node->body = body;
+  return (ASTNode *)node;
 }
 
 ASTNode *create_identifier_node(char *name, SourceLocation loc) {
   IdentifierNode *node = (IdentifierNode *)malloc(sizeof(IdentifierNode));
+
+  SymbolEntry *s = create_symbol_entry(name, SYMBOL_UNKNOWN, -1, loc);
+  const char *key = ht_set(HashTable, s->name, s);
 
   node->base.type = NODE_IDENTIFIER;
   node->base.location = loc;
   node->base.print = print_todo;
   node->name = strdup(name);
   node->kind = SYMBOL_UNKNOWN;
-  node->symbol_entry = NULL;
+  node->symbol_entry_key = key;
   return (ASTNode *)node;
 };
 
@@ -757,67 +895,81 @@ ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
   return (ASTNode *)node;
 }
 
-ASTNode *create_record_variable_list_node(ASTNode *record_var, SourceLocation loc) {
-    ListNode *node = (ListNode *)malloc(sizeof(ListNode));
-    node->base.type = NODE_LIST;
-    node->base.location = loc;
-    node->base.print = print_todo;
-    node->element = record_var;
-    node->next = NULL;
-    return (ASTNode *)node;;
+ASTNode *create_record_variable_list_node(ASTNode *record_var,
+                                          SourceLocation loc) {
+  ListNode *node = (ListNode *)malloc(sizeof(ListNode));
+  node->base.type = NODE_LIST;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->element = record_var;
+  node->next = NULL;
+  return (ASTNode *)node;
+  ;
 }
 
-ASTNode *append_case_item(ASTNode *list, ASTNode *case_item, SourceLocation loc) {
-    ListNode *head = (ListNode *)list;
-    
-    if (head) {
-        ListNode *cur = head;
-        while (cur->next)
-            cur = (ListNode *)cur->next;
-        cur->next = (ASTNode *)case_item;
-        return (ASTNode *)head;
-    } else {
-        return case_item;
-    }
-}
-
-ASTNode *append_case_label_list(ASTNode *list, ASTNode *case_label, SourceLocation loc) {
+ASTNode *append_case_item(ASTNode *list, ASTNode *case_item,
+                          SourceLocation loc) {
   ListNode *head = (ListNode *)list;
-  
+
   if (head) {
-      ListNode *cur = head;
-      while (cur->next)
-          cur = (ListNode *)cur->next;
-      cur->next = (ASTNode *)case_label;
-      return (ASTNode *)head;
+    ListNode *cur = head;
+    while (cur->next)
+      cur = (ListNode *)cur->next;
+    cur->next = (ASTNode *)case_item;
+    return (ASTNode *)head;
   } else {
-      return case_label;
+    return case_item;
+  }
+}
+
+ASTNode *append_case_label_list(ASTNode *list, ASTNode *case_label,
+                                SourceLocation loc) {
+  ListNode *head = (ListNode *)list;
+
+  if (head) {
+    ListNode *cur = head;
+    while (cur->next)
+      cur = (ListNode *)cur->next;
+    cur->next = (ASTNode *)case_label;
+    return (ASTNode *)head;
+  } else {
+    return case_label;
   }
 }
 
 // Adiciona um record à lista de records no with
-ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var, SourceLocation loc) {
-    ListNode *head = (ListNode *)list;
-    
-    ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
-    new_node->base.type = NODE_LIST;
-    new_node->base.location = loc;
-    new_node->base.print = print_todo;
-    new_node->element = record_var;
-    new_node->next = NULL;
-    
-    if (head) {
-        ListNode *cur = head;
-        while (cur->next)
-            cur = (ListNode *)cur->next;
-        cur->next = (ASTNode *)new_node;
-        return (ASTNode *)head;
-    } else {
-        return (ASTNode *)new_node;
-    }
+ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var,
+                                     SourceLocation loc) {
+  ListNode *head = (ListNode *)list;
+
+  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  new_node->base.type = NODE_LIST;
+  new_node->base.location = loc;
+  new_node->base.print = print_todo;
+  new_node->element = record_var;
+  new_node->next = NULL;
+
+  if (head) {
+    ListNode *cur = head;
+    while (cur->next)
+      cur = (ListNode *)cur->next;
+    cur->next = (ASTNode *)new_node;
+    return (ASTNode *)head;
+  } else {
+    return (ASTNode *)new_node;
+  }
 }
 
+ASTNode *create_expression_list(ASTNode *list, ASTNode *element,
+                                SourceLocation loc) {}
+ASTNode *create_expression(ASTNode *expr, ASTNode *add_op, ASTNode *add_expr,
+                           SourceLocation loc) {}
 /* APPENDS */
+ASTNode *append_expression_list(ASTNode *list, ASTNode *element,
+                                SourceLocation loc) {
+  return create_expression_list(list, element, loc);
+}
+
 ASTNode *append_identifier_list_node(ASTNode *list, ASTNode *element,
                                      SourceLocation loc) {
   ListNode *head = (ListNode *)list;
@@ -938,6 +1090,33 @@ ASTNode *append_case_list_node(ASTNode *list, ASTNode *expr,
   }
 }
 
+ASTNode *create_element_list(ASTNode *list, ASTNode *element,
+                             SourceLocation loc) {
+  ListNode *head = (ListNode *)list;
+
+  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  new_node->base.type = NODE_LIST;
+  new_node->base.location = loc;
+  new_node->base.print = print_todo;
+  new_node->element = element;
+  new_node->next = NULL;
+
+  if (head) {
+    ListNode *cur = head;
+    while (cur->next)
+      cur = (ListNode *)cur->next;
+    cur->next = (ASTNode *)new_node;
+    return (ASTNode *)head;
+  } else {
+    return (ASTNode *)new_node;
+  }
+}
+
+ASTNode *append_element_list(ASTNode *list, ASTNode *element,
+                             SourceLocation loc) {
+  return create_element_list(list, element, loc);
+}
+
 ASTNode *append_variable_declaration(ASTNode *list, ASTNode *vars,
                                      ASTNode *type, SourceLocation loc) {
   ListNode *new_node =
@@ -972,8 +1151,10 @@ ASTNode *append_variable_identifier_list(ASTNode *list, ASTNode *var_id,
   current->next = (ASTNode *)new_node;
   return list;
 }
+
 ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
                              SourceLocation loc) {}
+
 ASTNode *append_stmt_list(ASTNode *list, ASTNode *stmt, SourceLocation loc) {
   ListNode *new_node = (ListNode *)create_stmt_list_node(stmt, loc);
 
@@ -1048,7 +1229,28 @@ ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *procs_funcs) {
                            blk->base.location);
 }
 
+ASTNode *create_additive_expression(ASTNode *expr, ASTNode *relop,
+                                    ASTNode *mult_expr, SourceLocation loc) {}
+ASTNode *create_multiplicative_expression(ASTNode *mul_expr, ASTNode *mult_op,
+                                          ASTNode *unary_expr,
+                                          SourceLocation loc) {}
+ASTNode *create_unary_expression(ASTNode *unary_op, ASTNode *expr,
+                                 SourceLocation loc) {}
+
 /* UTILS */
+
+ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind symb_kind,
+                                     bool update_symbol) {
+  IdentifierNode *id_node = (IdentifierNode *)id;
+  id_node->kind = symb_kind;
+  if (update_symbol) {
+    SymbolEntry *symb = ht_get(HashTable, id_node->symbol_entry_key);
+    symb->kind = symb_kind;
+    ht_set(HashTable, symb->name, symb);
+  }
+
+  return (ASTNode *)id_node;
+}
 
 ASTNode *get_statements_from_block(ASTNode *block) {
   if (!block)
@@ -1097,9 +1299,6 @@ void free_node(ASTNode *node) {
     break;
   }
   case NODE_FUNC_DECL: {
-    break;
-  }
-  case NODE_CONST_ITEM: {
     break;
   }
   case NODE_SCALAR_TYPE: {

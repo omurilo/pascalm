@@ -74,7 +74,6 @@ STRING \'([^\\\n]|(\\.))*?\'
 ","             {return COMMA;}
 ":"             {return COLON;}
 ";"             {return SEMICOLON;}
-"..."           {return DOTDOTDOT;}
 ".."            {return DOTDOT;}
 "."             {return DOT;}
 "^"             {return CARET;}

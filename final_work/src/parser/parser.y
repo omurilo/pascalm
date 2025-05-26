@@ -3,10 +3,12 @@
 %{
 #include <stdlib.h>
 #include <string.h>
+#include "../commons.h"
 #include "../ast/ast.h"
-#include "types.h"
+#include "../symbol-table/symbol-table.h"
 
 ASTNode *root = NULL;
+extern ht *HashTable;
 %}
 
 %define api.location.type {YYLTYPE}
@@ -37,7 +39,7 @@ ASTNode *root = NULL;
 %token GT GTE LT LTE NEQ EQ
 %token AND OR NOT
 %token PLUS MINUS TIMES DIVIDE DIV MOD
-%token DOT DOTDOT DOTDOTDOT CARET
+%token DOT DOTDOT CARET
 %token ASSIGN SEMICOLON COMMA COLON L_PAREN R_PAREN L_BRACE R_BRACE L_BRACKET R_BRACKET
 
 /* Literals */
@@ -197,7 +199,7 @@ label_declaration:
     }  
 
 constant_declaration:  
-    CONST identifier EQ constant {
+    CONST constid EQ constant {
       $$ = create_constant_declaration_node($2, $4, create_location(@$));
     }
   | constant_declaration SEMICOLON  identifier EQ constant {
@@ -205,8 +207,8 @@ constant_declaration:
     }  
 
 type_declaration:  
-    TYPE identifier EQ type { $$ = create_type_declaration_node($2, $4, create_location(@$)); }
-  | type_declaration SEMICOLON identifier EQ type {
+    TYPE typeid EQ type { $$ = create_type_declaration_node($2, $4, create_location(@$)); }
+  | type_declaration SEMICOLON typeid EQ type {
       $$ = append_type_declaration($1, $3, $5, create_location(@$));
     } 
 
@@ -250,10 +252,10 @@ type:
 simple_type:  
     L_PAREN  identifier_list R_PAREN { $$ = create_identifier_list_node($2, create_location(@$)); }
   | constant DOTDOT constant {
-      $$ = create_record_access_type($1, $3, create_location(@$));
+      $$ = create_constant_range_node($1, $3, create_location(@$));
     }
   | typeid {
-      $$ = create_type_identifier($1, create_location(@$));
+      $$ = $1;
     }
 
 structured_type:  
@@ -293,8 +295,8 @@ record_field:
   | fieldid_list COLON type { $$ = create_record_field_node($1, $3, create_location(@$)); }
 
 fieldid_list:  
-    identifier { $$ = $1; /* Identifier of field identifier list (problably func or proc) */ }
-  | fieldid_list COMMA identifier { $$ = create_field_identifier_list_node($1, $3, create_location(@$)); }  
+    fieldid { $$ = $1; /* Identifier of field identifier list (problably func or proc) */ }
+  | fieldid_list COMMA fieldid { $$ = create_field_identifier_list_node($1, $3, create_location(@$)); }  
 
 variant_part: 
     CASE tag_field OF variant_list { $$ = create_case_of_variant_node($2, $4, create_location(@$)); }
@@ -315,18 +317,6 @@ variant:
       $$ = create_variant_node($1, $4, create_location(@$));
     }
 
-case_label_list:
-    case_label { $$ = create_case_label_list($1, create_location(@$)); }
-  | case_label_list COMMA case_label { 
-      $$ = append_case_label_list($1, $3, create_location(@$)); 
-    }
-
-case_label:
-    constant { $$ = $1; }
-  | constant DOTDOT constant { 
-      $$ = create_case_range_node($1, $3, create_location(@$)); 
-    }
-
 proc_and_func_declaration:  
     proc_or_func { $$ = create_proc_and_func_declarations_node($1, create_location(@$)); }
   | proc_and_func_declaration SEMICOLON proc_or_func {
@@ -334,10 +324,10 @@ proc_and_func_declaration:
     }
 
 proc_or_func:  
-    PROCEDURE identifier parameters SEMICOLON block_or_forward { /* identifier of func/proc declaration */ 
+    PROCEDURE procid parameters SEMICOLON block_or_forward { /* identifier of func/proc declaration */ 
       $$ = create_proc_declaration_node($2, $3, $5, create_location(@$));
     }
-  | FUNCTION identifier parameters COLON typeid SEMICOLON block_or_forward {
+  | FUNCTION funcid parameters COLON typeid SEMICOLON block_or_forward {
       $$ = create_func_declaration_node($2, $3, $5, $7, create_location(@$));
     }
 
@@ -362,7 +352,10 @@ formal_parameter_section:
 
 parameterid_list:  
     identifier  { $$ = $1; /* identifier of func parameter */ }
-  | parameterid_list COMMA identifier  { $$ = create_parameter_identifier_list_node($1, $3, create_location(@$)); /* identifier of func parameter */ }
+  | parameterid_list COMMA identifier  { 
+      $$ = create_parameter_identifier_list_node($1, $3, create_location(@$));
+      /* identifier of func parameter */
+    }
 
 statement_list:  
     statement { $$ = create_stmt_list_node($1, create_location(@$)); }
@@ -386,7 +379,7 @@ statement:
   | label COLON statement { $$ = create_label_stmt_node($1, $3, create_location(@$)); }
 
 variable:  
-    identifier { $$ = $1; }
+    varid { $$ = $1; }
   | variable L_BRACKET subscript_list R_BRACKET { $$ = create_array_access_node($1, $3, create_location(@$)); }  
   | variable DOT fieldid { $$ = create_record_access_node($1, $3, create_location(@$)); }
   | variable CARET { $$ = create_pointer_deref_node($1, create_location(@$)); } 
@@ -419,7 +412,7 @@ case_label_list:
 case_label:
     constant { $$ = $1; }
   | constant DOTDOT constant { 
-      $$ = create_case_range_node($1, $3, create_location(@$)); 
+      $$ = create_constant_range_node($1, $3, create_location(@$)); 
     }
 
 case_else:
@@ -437,8 +430,8 @@ for_list:
 
 
 expression_list:  
-    expression  
-  | expression_list COMMA expression  
+    expression { $$ = create_expression_list(NULL, $1, create_location(@$)); }
+  | expression_list COMMA expression { $$ = append_expression_list($1, $3, create_location(@$)); }
 
 label:  
    unsigned_integer { $$ = $1; }
@@ -450,94 +443,113 @@ record_variable_list:
     } 
 
 expression: 
-    expression relational_op additive_expression 
-  | additive_expression  
+    expression relational_op additive_expression  { $$ = create_expression($1, $2, $3, create_location(@$)); }
+  | additive_expression { $$ = $1; }
 
 relational_op:
-    LT
-  | LTE
-  | EQ
-  | NEQ
-  | GTE
-  | GT
+    LT { $$ = create_relational_op("<", create_location(@$)); }
+  | LTE { $$ = create_relational_op("<=", create_location(@$)); }
+  | EQ { $$ = create_relational_op("=", create_location(@$)); }
+  | NEQ { $$ = create_relational_op("<>", create_location(@$)); }
+  | GTE { $$ = create_relational_op(">=", create_location(@$)); }
+  | GT { $$ = create_relational_op(">", create_location(@$)); }
 
 additive_expression: 
-    additive_expression additive_op multiplicative_expression 
-  | multiplicative_expression  
+    additive_expression additive_op multiplicative_expression { $$ = create_additive_expression($1, $2, $3, create_location(@$)); }
+  | multiplicative_expression { $$ = $1; }
 
 additive_op:
-    PLUS
-  | MINUS
-  | OR
+    PLUS { $$ = create_additive_op("+", create_location(@$)); }
+  | MINUS { $$ = create_additive_op("-", create_location(@$)); }
+  | OR { $$ = create_additive_op("or", create_location(@$)); }
 
 multiplicative_expression: 
-    multiplicative_expression multiplicative_op unary_expression 
-  | unary_expression  
+    multiplicative_expression multiplicative_op unary_expression { $$ = create_multiplicative_expression($1, $2, $3, create_location(@$)); }
+  | unary_expression { $$ = $1; }
 
 multiplicative_op:
-    TIMES
-  | DIVIDE
-  | DIV
-  | MOD
-  | AND
-  | IN
+    TIMES { $$ = create_multiplicative_node("*", create_location(@$)); }
+  | DIVIDE { $$ = create_multiplicative_node("/", create_location(@$)); }
+  | DIV { $$ = create_multiplicative_node("div", create_location(@$)); }
+  | MOD { $$ = create_multiplicative_node("mod", create_location(@$)); }
+  | AND { $$ = create_multiplicative_node("and", create_location(@$)); }
+  | IN { $$ = create_multiplicative_node("in", create_location(@$)); }
 
 unary_expression: 
-    unary_op unary_expression  
-  | primary_expression  
+    unary_op unary_expression { $$ = create_unary_expression($1, $2, create_location(@$)); }
+  | primary_expression { $$ = $1; }
 
 unary_op:
-    PLUS
-  | MINUS %prec NEG
-  | NOT %prec NEG
+    PLUS { $$ = create_unary_node("+", 0, create_location(@$)); }
+  | MINUS %prec NEG { $$ = create_unary_node("-", 1, create_location(@$)); }
+  | NOT %prec NEG { $$ = create_unary_node("!", 1, create_location(@$)); }
 
 primary_expression:  
-    variable  
-  | unsigned_integer  
-  | unsigned_real  
-  | STRING_LITERAL  
+    variable { $$ = $1; }
+  | unsigned_integer { $$ = $1; }
+  | unsigned_real { $$ = $1; }
+  | string_literal { $$ = $1; }
   | NIL {
       $$ = create_nil_literal(create_location(@$));
     }
-  | funcid L_PAREN expression_list R_PAREN  
-  | L_BRACKET element_list R_BRACKET  
-  | L_PAREN expression R_PAREN  
+  | funcid L_PAREN expression_list R_PAREN {
+      $$ = create_function_call_node($1, $3, create_location(@$));
+    }
+  | L_BRACKET element_list R_BRACKET { $$ = $2; }
+  | L_PAREN expression R_PAREN { $$ = $2; } 
 
 element_list:  
     empty  
-  | element  
-  | element_list COMMA element  
+  | element { $$ = create_element_list(NULL, $1, create_location(@$)); }
+  | element_list COMMA element {
+      $$ = append_element_list($1, $3, create_location(@$));
+    }
 
 element:  
-    expression  
-  | expression DOTDOTDOT expression  
+    expression { $$ = $1; }
+  | expression DOTDOT expression  {
+      $$ = create_expression_range_node($1, $3, create_location(@$));
+    }
 
 constid:  
-   identifier  { /* identifier of const */ }
+   identifier  {
+      $$ = update_identifier_node_kind($1, SYMBOL_CONSTANT, true);
+   }
 
 typeid:
-    CHAR
-  | BOOLEAN
-  | INTEGER
-  | REAL
-  | STRING
-  | identifier  { /* identifier of type */ }
+    CHAR { $$ = create_builtin_type_identifier("char", create_location(@$)); }
+  | BOOLEAN { $$ = create_builtin_type_identifier("boolean", create_location(@$)); }
+  | INTEGER { $$ = create_builtin_type_identifier("integer", create_location(@$)); }
+  | REAL { $$ = create_builtin_type_identifier("real", create_location(@$)); }
+  | STRING { $$ = create_builtin_type_identifier("string", create_location(@$)); }
+  | identifier {
+      ASTNode *typeId = update_identifier_node_kind($1, SYMBOL_TYPE, true);
+      $$ = create_type_identifier(typeId, create_location(@$));
+    }
 
 funcid: 
-   identifier  { /* identifier of func */ }
+  identifier  { 
+    $$ = update_identifier_node_kind($1, SYMBOL_FUNCTION, true);
+  }
 
 procid:  
-   identifier { /* identifier of proc */ }
-  | WRITE
-  | WRITELN
-  | READ
-  | READLN
+  identifier { 
+    $$ = update_identifier_node_kind($1, SYMBOL_PROCEDURE, true);
+  }
+  | WRITE { $$ = create_builtin_identifier("write", create_location(@$)); }
+  | WRITELN { $$ = create_builtin_identifier("writeln", create_location(@$)); }
+  | READ { $$ = create_builtin_identifier("read", create_location(@$)); }
+  | READLN { $$ = create_builtin_identifier("readln", create_location(@$)); }
 
 fieldid:  
-   identifier { /* identifier of field */ }
+  identifier { 
+    $$ = update_identifier_node_kind($1, SYMBOL_FIELD, true);
+  }
 
 varid: 
-   identifier { /* identifier of variable */ }
+  identifier {
+    $$ = update_identifier_node_kind($1, SYMBOL_VARIABLE, true);
+  }
 
 identifier:
    IDENTIFIER { $$ = create_identifier_node($1, create_location(@$)); }
@@ -574,7 +586,7 @@ char_literal:
 
 boolean_literal:
     BOOLEAN_LITERAL {
-      $$ = create_string_literal($1, create_location(@$));
+      $$ = create_boolean_literal($1, create_location(@$));
     }
 
 empty: { $$ = NULL; }

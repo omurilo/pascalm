@@ -1,9 +1,9 @@
 #ifndef AST_H
 #define AST_H
 
-#include "../parser/types.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include "../commons.h"
 
 typedef struct ProgramNode ProgramNode; // Raiz da AST, contendo o nome do
                                         // programa e seu bloco principal
@@ -74,156 +74,8 @@ typedef struct VariantRecordNode VariantRecordNode; // Record com parte variante
 typedef struct ListNode
     ListNode; // Nó genérico para listas (pode ser especializado)
 typedef struct ErrorNode ErrorNode; // Nó para representar erros sintáticos
-
-typedef struct ASTNode ASTNode;
-typedef struct SourceLocation SourceLocation;
-
-struct SourceLocation {
-  int first_line;
-  int first_column;
-  int last_line;
-  int last_column;
-  char *file_name;
-};
-
-typedef enum {
-  /* Estrutura do programa */
-  NODE_PROGRAM,
-  NODE_HEADING,
-  NODE_BLOCK,
-  NODE_USES,
-
-  /* Declarações */
-  NODE_LABEL_DECL,
-  NODE_CONST_DECL,
-  NODE_TYPE_DECL,
-  NODE_VAR_DECL,
-  NODE_PROC_DECL,
-  NODE_FUNC_DECL,
-
-  /* Tipos */
-  NODE_CONST_ITEM,
-  NODE_SCALAR_TYPE,
-  NODE_SUBRANGE_TYPE,
-  NODE_TYPE_IDENTIFIER,
-  NODE_STRUCTURED_TYPE,
-  NODE_ARRAY_TYPE,
-  NODE_RECORD_TYPE,
-  NODE_SET_TYPE,
-  NODE_FILE_TYPE,
-  NODE_POINTER_TYPE,
-  NODE_POINTER_DEREF,
-
-  /* Comandos */
-  NODE_COMPOUND_STMT,
-  NODE_ASSIGN_STMT,
-  NODE_PROC_CALL,
-  NODE_IF_STMT,
-  NODE_CASE_STMT,
-  NODE_CASE_ITEM,
-  NODE_CASE_ELSE,
-  NODE_WHILE_STMT,
-  NODE_REPEAT_STMT,
-  NODE_FOR_STMT,
-  NODE_FOR_LIST,
-  NODE_WITH_STMT,
-  NODE_GOTO_STMT,
-  NODE_LABELED_STMT,
-
-  /* Expressões */
-  NODE_BINARY_EXPR,
-  NODE_UNARY_EXPR,
-  NODE_LITERAL,
-  NODE_IDENTIFIER,
-  NODE_MEMBER_ACCESS,
-  NODE_ARRAY_ACCESS,
-  NODE_FUNC_CALL,
-  NODE_SET_CONSTRUCTOR,
-
-  /* Auxiliares */
-
-  NODE_FIELD_LIST,
-  NODE_PARAMETER,
-  NODE_VARIANT_RECORD,
-  NODE_LIST,
-  NODE_ERROR
-} NodeType;
-
-typedef enum {
-    SYMBOL_UNKNOWN,       // Ainda não resolvido
-    
-    // Tipos de identificadores primários
-    SYMBOL_VARIABLE,      // Variável
-    SYMBOL_CONSTANT,      // Constante
-    SYMBOL_PARAMETER,     // Parâmetro de função/procedimento
-    SYMBOL_FUNCTION,      // Função
-    SYMBOL_PROCEDURE,     // Procedimento
-    SYMBOL_TYPE,          // Tipo definido pelo usuário
-    
-    // Tipos específicos de variáveis
-    SYMBOL_FIELD,         // Campo de um record
-    SYMBOL_LOCAL_VAR,     // Variável local
-    SYMBOL_GLOBAL_VAR,    // Variável global
-    
-    // Tipos específicos de parâmetros
-    SYMBOL_VALUE_PARAM,   // Parâmetro por valor
-    SYMBOL_VAR_PARAM,     // Parâmetro por referência (var)
-    
-    // Tipos específicos para tipos
-    SYMBOL_ENUM_VALUE,    // Valor de enumeração
-    SYMBOL_LABEL,         // Rótulo (label)
-    
-    // Para escopos internos
-    SYMBOL_PROGRAM,       // Nome do programa
-    SYMBOL_UNIT,          // Nome da unit (para Pascal modular)
-    
-    // Tipos especiais
-    SYMBOL_FORWARD_DECL,  // Declaração forward de função/procedimento
-    SYMBOL_BUILTIN        // Funções/procedimentos/tipos built-in
-} SymbolKind;
-
-typedef struct SymbolEntry {
-    char *name;             // Nome do símbolo
-    SymbolKind kind;        // Tipo do símbolo
-    
-    union {
-        struct {
-            ASTNode *type;  // Tipo da variável/parâmetro/constante
-            int offset;     // Offset na stack/frame (para variáveis)
-            bool is_ref;    // Se é parâmetro por referência
-        } var_info;
-        
-        struct {
-            ASTNode *return_type;     // Tipo de retorno (NULL para void/procedure)
-            ASTNode *params;          // Lista de parâmetros
-            ASTNode *body;            // Corpo da função
-            bool is_forward;          // Se é declaração forward
-        } func_info;
-        
-        struct {
-            ASTNode *definition;      // Definição do tipo
-            size_t size;              // Tamanho do tipo (em bytes)
-        } type_info;
-    } info;
-    
-    int scope_level;        // Nível de escopo para verificação de visibilidade
-    SourceLocation location; // Localização da declaração para mensagens de erro
-    struct SymbolEntry *next; // Para implementação de lista encadeada na tabela
-} SymbolEntry;
-
-struct ASTNode {
-  NodeType type;
-  SourceLocation location;
-  void (*print)(struct ASTNode *,
-                int); // Função para imprimir o nó (para debug)
-  /*
-  int data_type; // tipo dos dados (INTEGER, REAL, STRING, etc.)
-  int scope_level; // Nível de escopo para análise de visibilidade
-  void *symbol_entry; // ponteiro para entrada na tabela de símbolos
-  void *pass_info;  // Informações específicas para diferentes passes
-  */
-};
-
+typedef struct ElementNode ElementNode;
+typedef struct OperationNode OperationNode;
 /*
 // auxiliar na verificação semântica:
 struct BinaryOperationNode {
@@ -426,8 +278,16 @@ struct IdentifierNode {
     ASTNode base;
     char *name;                  // Identifier name
     SymbolKind kind;             // Inicialmente SYMBOL_UNKNOWN
-    void *symbol_entry;          // Reference to symbol table entry
+    const char *symbol_entry_key;          // Reference to symbol table entry
     // int is_lvalue;               // Is this usable as an l-value?
+};
+
+struct TypeIdentifierNode {
+  ASTNode base;
+  char *name;
+  SymbolKind kind;
+  bool is_base_type;
+  IdentifierNode *id;
 };
 
 struct AssignmentNode {
@@ -475,9 +335,8 @@ struct CaseItemNode {
 
 struct CaseLabelNode {
   ASTNode base;
-  ASTNode *value_list;
-  ASTNode *label;
-  ASTNode *stmt;
+  ASTNode *lower;
+  ASTNode *upper;
 };
 
 struct CaseElseNode {
@@ -536,10 +395,22 @@ struct LabeledStmtNode {
 };
 
 
+struct ElementNode {
+  ASTNode base;
+  ASTNode *lower;
+  ASTNode *upper;
+};
+
 struct ListNode {
   ASTNode base;
   ASTNode *element;
   ASTNode *next;
+};
+
+struct OperationNode {
+  ASTNode base;
+  char *op;
+  int precedence;
 };
 
 typedef enum {
@@ -608,8 +479,18 @@ ASTNode *create_case_label_list(ASTNode* case_label, SourceLocation loc);
 ASTNode *create_constant_declaration_node(ASTNode *identifier,
                                           ASTNode *constant,
                                           SourceLocation loc);
+ASTNode *create_expression_range_node(ASTNode *expr1, ASTNode *expr2, SourceLocation loc);
+ASTNode *create_constant_range_node(ASTNode *constant1, ASTNode *constant2, SourceLocation loc);
+ASTNode *create_function_call_node(ASTNode *id, ASTNode *params, SourceLocation loc);
 ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc);
 ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc);
+ASTNode *create_relational_op(char *op, SourceLocation loc);
+ASTNode *create_multiplicative_node(char *op, SourceLocation Loc);
+ASTNode *create_additive_op(char *op, SourceLocation loc);
+ASTNode *create_additive_expression(ASTNode *add_expr, ASTNode *add_op, ASTNode *mult_expr, SourceLocation loc); 
+ASTNode *create_unary_node(char *op, int precedence, SourceLocation loc);
+ASTNode *create_unary_expression(ASTNode *unary_op, ASTNode *expr, SourceLocation loc);
+ASTNode *create_multiplicative_expression(ASTNode *mul_expr, ASTNode *mult_op, ASTNode* unary_expr, SourceLocation loc);
 ASTNode *create_integer_literal(int integer, SourceLocation loc);
 ASTNode *create_real_literal(double real, SourceLocation loc);
 ASTNode *create_string_literal(char *string, SourceLocation loc);
@@ -669,6 +550,8 @@ ASTNode *create_subscript_list_node(ASTNode *expr, SourceLocation loc);
 ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
                                SourceLocation loc);
 ASTNode *create_type_identifier(ASTNode *identifier, SourceLocation loc);
+ASTNode *create_builtin_type_identifier(char *type, SourceLocation loc);
+ASTNode *create_builtin_identifier(char *i, SourceLocation loc);
 ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc);
 ASTNode *create_unsigned_real_node(double real, SourceLocation loc);
 ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
@@ -679,8 +562,10 @@ ASTNode *create_while_stmt_node(ASTNode *expr, ASTNode *stmt,
                                 SourceLocation loc);
 ASTNode *create_with_record_list_node(ASTNode *record_var_list, ASTNode *stmt,
                                       SourceLocation loc);
-
-/* APPENDING */
+ASTNode *create_element_list(ASTNode *list, ASTNode *element, SourceLocation loc);
+ASTNode *create_expression(ASTNode *expr, ASTNode *relop, ASTNode  *add_expr, SourceLocation loc);
+ASTNode *create_expression_list(ASTNode *list, ASTNode *element, SourceLocation loc);
+ASTNode *append_expression_list(ASTNode *list, ASTNode *element, SourceLocation loc);
 ASTNode *append_case_list_node(ASTNode *list, ASTNode *element,
                                SourceLocation loc);
 ASTNode *append_case_label_list(ASTNode *list, ASTNode *case_label, SourceLocation loc);
@@ -701,6 +586,7 @@ ASTNode *append_variable_identifier_list(ASTNode *list, ASTNode *var_id,
                                           SourceLocation loc);
 ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
                              SourceLocation loc);
+ASTNode *append_element_list(ASTNode *list, ASTNode *element, SourceLocation loc);
 ASTNode *create_record_variable_list_node(ASTNode *record_var, SourceLocation loc);
 ASTNode *append_stmt_list(ASTNode *list, ASTNode *stmt, SourceLocation loc);
 ASTNode *append_proc_and_func_declarations(ASTNode* list, ASTNode* proc_and_func, SourceLocation loc);
@@ -712,6 +598,7 @@ ASTNode *add_variables_to_block(ASTNode *block, ASTNode *variables);
 ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *proc_funcs);
 
 /* UTILS */
+ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind, bool update_symbol);
 ASTNode *get_statements_from_block(ASTNode *block);
 void free_node(ASTNode *node);
 void print_todo(ASTNode *node, int indent);
@@ -740,7 +627,7 @@ int is_constant_expression(ASTNode *expr);
 
 // Estrutura de Visitante:
 // Implementar um padrão visitante para percorrer a AST, facilitando diferentes 
-ases de análise:
+cases de análise:
 
 typedef struct Visitor {
     void (*visit_program)(Visitor *self, ProgramNode *node);

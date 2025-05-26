@@ -3,7 +3,7 @@ CFLAGS = -Wall -g
 
 all: pascal
 
-pascal: parser/lex.yy.c parser/parser.tab.c ast/ast.c main.c
+pascal: parser/lex.yy.c parser/parser.tab.c ast/ast.c symbol-table/symbol-table.c main.c
 	$(CC) $(CFLAGS) -o $@ $^
 
 parser/lex.yy.c: parser/parser.l parser/parser.tab.h ast/ast.h

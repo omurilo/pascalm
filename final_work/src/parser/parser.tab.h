@@ -110,28 +110,27 @@ extern int yydebug;
     MOD = 311,                     /* MOD  */
     DOT = 312,                     /* DOT  */
     DOTDOT = 313,                  /* DOTDOT  */
-    DOTDOTDOT = 314,               /* DOTDOTDOT  */
-    CARET = 315,                   /* CARET  */
-    ASSIGN = 316,                  /* ASSIGN  */
-    SEMICOLON = 317,               /* SEMICOLON  */
-    COMMA = 318,                   /* COMMA  */
-    COLON = 319,                   /* COLON  */
-    L_PAREN = 320,                 /* L_PAREN  */
-    R_PAREN = 321,                 /* R_PAREN  */
-    L_BRACE = 322,                 /* L_BRACE  */
-    R_BRACE = 323,                 /* R_BRACE  */
-    L_BRACKET = 324,               /* L_BRACKET  */
-    R_BRACKET = 325,               /* R_BRACKET  */
-    CHAR_LITERAL = 326,            /* CHAR_LITERAL  */
-    INTEGER_LITERAL = 327,         /* INTEGER_LITERAL  */
-    REAL_LITERAL = 328,            /* REAL_LITERAL  */
-    BOOLEAN_LITERAL = 329,         /* BOOLEAN_LITERAL  */
-    IDENTIFIER = 330,              /* IDENTIFIER  */
-    STRING_LITERAL = 331,          /* STRING_LITERAL  */
-    SQRT = 332,                    /* SQRT  */
-    NEG = 333,                     /* NEG  */
-    IN = 334,                      /* IN  */
-    LOWER_THAN_ELSE = 335          /* LOWER_THAN_ELSE  */
+    CARET = 314,                   /* CARET  */
+    ASSIGN = 315,                  /* ASSIGN  */
+    SEMICOLON = 316,               /* SEMICOLON  */
+    COMMA = 317,                   /* COMMA  */
+    COLON = 318,                   /* COLON  */
+    L_PAREN = 319,                 /* L_PAREN  */
+    R_PAREN = 320,                 /* R_PAREN  */
+    L_BRACE = 321,                 /* L_BRACE  */
+    R_BRACE = 322,                 /* R_BRACE  */
+    L_BRACKET = 323,               /* L_BRACKET  */
+    R_BRACKET = 324,               /* R_BRACKET  */
+    CHAR_LITERAL = 325,            /* CHAR_LITERAL  */
+    INTEGER_LITERAL = 326,         /* INTEGER_LITERAL  */
+    REAL_LITERAL = 327,            /* REAL_LITERAL  */
+    BOOLEAN_LITERAL = 328,         /* BOOLEAN_LITERAL  */
+    IDENTIFIER = 329,              /* IDENTIFIER  */
+    STRING_LITERAL = 330,          /* STRING_LITERAL  */
+    SQRT = 331,                    /* SQRT  */
+    NEG = 332,                     /* NEG  */
+    IN = 333,                      /* IN  */
+    LOWER_THAN_ELSE = 334          /* LOWER_THAN_ELSE  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -140,7 +139,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 17 "parser/parser.y"
+#line 19 "parser/parser.y"
 
   int integer;
   bool boolean;
@@ -153,7 +152,7 @@ union YYSTYPE
   LiteralNode *lnode;
   ListNode *ltnode;
 
-#line 157 "parser/parser.tab.h"
+#line 156 "parser/parser.tab.h"
 
 };
 typedef union YYSTYPE YYSTYPE;
