@@ -1,6 +1,6 @@
 **program:**
 
-![program](diagram/program.svg)
+![program](grammar/diagram/program.svg)
 
 ```
 program  ::= 'program' identifier program_headingopt ';' block '.'
@@ -8,7 +8,7 @@ program  ::= 'program' identifier program_headingopt ';' block '.'
 
 **program_headingopt:**
 
-![program_headingopt](diagram/program_headingopt.svg)
+![program_headingopt](grammar/diagram/program_headingopt.svg)
 
 ```
 program_headingopt
@@ -21,7 +21,7 @@ referenced by:
 
 **identifier_list:**
 
-![identifier_list](diagram/identifier_list.svg)
+![identifier_list](grammar/diagram/identifier_list.svg)
 
 ```
 identifier_list
@@ -35,7 +35,7 @@ referenced by:
 
 **block:**
 
-![block](diagram/block.svg)
+![block](grammar/diagram/block.svg)
 
 ```
 block    ::= ( 'label' unsigned_integer ( ',' unsigned_integer )* ';' )? block1
@@ -48,7 +48,7 @@ referenced by:
 
 **block1:**
 
-![block1](diagram/block1.svg)
+![block1](grammar/diagram/block1.svg)
 
 ```
 block1   ::= ( 'const' ( identifier '=' constant ';' )+ )? block2
@@ -60,7 +60,7 @@ referenced by:
 
 **block2:**
 
-![block2](diagram/block2.svg)
+![block2](grammar/diagram/block2.svg)
 
 ```
 block2   ::= ( 'type' ( identifier '=' type ';' )+ )? block3
@@ -72,7 +72,7 @@ referenced by:
 
 **block3:**
 
-![block3](diagram/block3.svg)
+![block3](grammar/diagram/block3.svg)
 
 ```
 block3   ::= ( 'var' ( variableid_list ':' type ';' )+ )? block4
@@ -84,7 +84,7 @@ referenced by:
 
 **block4:**
 
-![block4](diagram/block4.svg)
+![block4](grammar/diagram/block4.svg)
 
 ```
 block4   ::= ( proc_or_func ';' )* block5
@@ -96,7 +96,7 @@ referenced by:
 
 **block5:**
 
-![block5](diagram/block5.svg)
+![block5](grammar/diagram/block5.svg)
 
 ```
 block5   ::= 'begin' statement_list 'end'
@@ -108,7 +108,7 @@ referenced by:
 
 **variableid_list:**
 
-![variableid_list](diagram/variableid_list.svg)
+![variableid_list](grammar/diagram/variableid_list.svg)
 
 ```
 variableid_list
@@ -121,7 +121,7 @@ referenced by:
 
 **constant:**
 
-![constant](diagram/constant.svg)
+![constant](grammar/diagram/constant.svg)
 
 ```
 constant ::= integer_literal
@@ -138,7 +138,7 @@ referenced by:
 
 **type:**
 
-![type](diagram/type.svg)
+![type](grammar/diagram/type.svg)
 
 ```
 type     ::= simple_type
@@ -155,7 +155,7 @@ referenced by:
 
 **simple_type:**
 
-![simple_type](diagram/simple_type.svg)
+![simple_type](grammar/diagram/simple_type.svg)
 
 ```
 simple_type
@@ -170,7 +170,7 @@ referenced by:
 
 **field_list:**
 
-![field_list](diagram/field_list.svg)
+![field_list](grammar/diagram/field_list.svg)
 
 ```
 field_list
@@ -185,7 +185,7 @@ referenced by:
 
 **record_field:**
 
-![record_field](diagram/record_field.svg)
+![record_field](grammar/diagram/record_field.svg)
 
 ```
 record_field
@@ -199,7 +199,7 @@ referenced by:
 
 **variant_part:**
 
-![variant_part](diagram/variant_part.svg)
+![variant_part](grammar/diagram/variant_part.svg)
 
 ```
 variant_part
@@ -212,7 +212,7 @@ referenced by:
 
 **tag_field:**
 
-![tag_field](diagram/tag_field.svg)
+![tag_field](grammar/diagram/tag_field.svg)
 
 ```
 tag_field
@@ -225,7 +225,7 @@ referenced by:
 
 **variant:**
 
-![variant](diagram/variant.svg)
+![variant](grammar/diagram/variant.svg)
 
 ```
 variant  ::= ε
@@ -238,7 +238,7 @@ referenced by:
 
 **case_label_list:**
 
-![case_label_list](diagram/case_label_list.svg)
+![case_label_list](grammar/diagram/case_label_list.svg)
 
 ```
 case_label_list
@@ -252,7 +252,7 @@ referenced by:
 
 **proc_or_func:**
 
-![proc_or_func](diagram/proc_or_func.svg)
+![proc_or_func](grammar/diagram/proc_or_func.svg)
 
 ```
 proc_or_func
@@ -265,7 +265,7 @@ referenced by:
 
 **block_or_forward:**
 
-![block_or_forward](diagram/block_or_forward.svg)
+![block_or_forward](grammar/diagram/block_or_forward.svg)
 
 ```
 block_or_forward
@@ -279,7 +279,7 @@ referenced by:
 
 **parameters:**
 
-![parameters](diagram/parameters.svg)
+![parameters](grammar/diagram/parameters.svg)
 
 ```
 parameters
@@ -293,7 +293,7 @@ referenced by:
 
 **formal_parameter_section:**
 
-![formal_parameter_section](diagram/formal_parameter_section.svg)
+![formal_parameter_section](grammar/diagram/formal_parameter_section.svg)
 
 ```
 formal_parameter_section
@@ -307,7 +307,7 @@ referenced by:
 
 **statement:**
 
-![statement](diagram/statement.svg)
+![statement](grammar/diagram/statement.svg)
 
 ```
 statement
@@ -325,7 +325,7 @@ referenced by:
 
 **matched_statement:**
 
-![matched_statement](diagram/matched_statement.svg)
+![matched_statement](grammar/diagram/matched_statement.svg)
 
 ```
 matched_statement
@@ -340,7 +340,7 @@ referenced by:
 
 **other_statement:**
 
-![other_statement](diagram/other_statement.svg)
+![other_statement](grammar/diagram/other_statement.svg)
 
 ```
 other_statement
@@ -358,7 +358,7 @@ referenced by:
 
 **expression:**
 
-![expression](diagram/expression.svg)
+![expression](grammar/diagram/expression.svg)
 
 ```
 expression
@@ -378,7 +378,7 @@ referenced by:
 
 **relational_expression:**
 
-![relational_expression](diagram/relational_expression.svg)
+![relational_expression](grammar/diagram/relational_expression.svg)
 
 ```
 relational_expression
@@ -391,7 +391,7 @@ referenced by:
 
 **additive_expression:**
 
-![additive_expression](diagram/additive_expression.svg)
+![additive_expression](grammar/diagram/additive_expression.svg)
 
 ```
 additive_expression
@@ -404,7 +404,7 @@ referenced by:
 
 **multiplicative_expression:**
 
-![multiplicative_expression](diagram/multiplicative_expression.svg)
+![multiplicative_expression](grammar/diagram/multiplicative_expression.svg)
 
 ```
 multiplicative_expression
@@ -417,7 +417,7 @@ referenced by:
 
 **unary_expression:**
 
-![unary_expression](diagram/unary_expression.svg)
+![unary_expression](grammar/diagram/unary_expression.svg)
 
 ```
 unary_expression
@@ -430,7 +430,7 @@ referenced by:
 
 **primary_expression:**
 
-![primary_expression](diagram/primary_expression.svg)
+![primary_expression](grammar/diagram/primary_expression.svg)
 
 ```
 primary_expression
@@ -449,7 +449,7 @@ referenced by:
 
 **expression_list:**
 
-![expression_list](diagram/expression_list.svg)
+![expression_list](grammar/diagram/expression_list.svg)
 
 ```
 expression_list
@@ -463,7 +463,7 @@ referenced by:
 
 **element:**
 
-![element](diagram/element.svg)
+![element](grammar/diagram/element.svg)
 
 ```
 element  ::= expression ( '...' expression )?
@@ -475,7 +475,7 @@ referenced by:
 
 **relational_op:**
 
-![relational_op](diagram/relational_op.svg)
+![relational_op](grammar/diagram/relational_op.svg)
 
 ```
 relational_op
@@ -493,7 +493,7 @@ referenced by:
 
 **add_op:**
 
-![add_op](diagram/add_op.svg)
+![add_op](grammar/diagram/add_op.svg)
 
 ```
 add_op   ::= '+'
@@ -507,7 +507,7 @@ referenced by:
 
 **mul_op:**
 
-![mul_op](diagram/mul_op.svg)
+![mul_op](grammar/diagram/mul_op.svg)
 
 ```
 mul_op   ::= '*'
@@ -524,7 +524,7 @@ referenced by:
 
 **unary_op:**
 
-![unary_op](diagram/unary_op.svg)
+![unary_op](grammar/diagram/unary_op.svg)
 
 ```
 unary_op ::= '+'
@@ -538,7 +538,7 @@ referenced by:
 
 **statement_list:**
 
-![statement_list](diagram/statement_list.svg)
+![statement_list](grammar/diagram/statement_list.svg)
 
 ```
 statement_list
@@ -552,7 +552,7 @@ referenced by:
 
 **case_element:**
 
-![case_element](diagram/case_element.svg)
+![case_element](grammar/diagram/case_element.svg)
 
 ```
 case_element
@@ -565,7 +565,7 @@ referenced by:
 
 **case_else:**
 
-![case_else](diagram/case_else.svg)
+![case_else](grammar/diagram/case_else.svg)
 
 ```
 case_else
@@ -578,7 +578,7 @@ referenced by:
 
 **for_list:**
 
-![for_list](diagram/for_list.svg)
+![for_list](grammar/diagram/for_list.svg)
 
 ```
 for_list ::= expression ( 'to' | 'downto' ) expression
@@ -590,7 +590,7 @@ referenced by:
 
 **variable:**
 
-![variable](diagram/variable.svg)
+![variable](grammar/diagram/variable.svg)
 
 ```
 variable ::= identifier ( '[' expression ( ',' expression )* ']' | '.' fieldid | '^' )*
@@ -603,7 +603,7 @@ referenced by:
 
 **identifier:**
 
-![identifier](diagram/identifier.svg)
+![identifier](grammar/diagram/identifier.svg)
 
 ```
 identifier
@@ -631,7 +631,7 @@ referenced by:
 
 **funcid:**
 
-![funcid](diagram/funcid.svg)
+![funcid](grammar/diagram/funcid.svg)
 
 ```
 funcid   ::= identifier
@@ -643,7 +643,7 @@ referenced by:
 
 **procid:**
 
-![procid](diagram/procid.svg)
+![procid](grammar/diagram/procid.svg)
 
 ```
 procid   ::= identifier
@@ -659,7 +659,7 @@ referenced by:
 
 **varid:**
 
-![varid](diagram/varid.svg)
+![varid](grammar/diagram/varid.svg)
 
 ```
 varid    ::= identifier
@@ -671,7 +671,7 @@ referenced by:
 
 **fieldid:**
 
-![fieldid](diagram/fieldid.svg)
+![fieldid](grammar/diagram/fieldid.svg)
 
 ```
 fieldid  ::= identifier
@@ -683,7 +683,7 @@ referenced by:
 
 **constid:**
 
-![constid](diagram/constid.svg)
+![constid](grammar/diagram/constid.svg)
 
 ```
 constid  ::= identifier
@@ -695,7 +695,7 @@ referenced by:
 
 **typeid:**
 
-![typeid](diagram/typeid.svg)
+![typeid](grammar/diagram/typeid.svg)
 
 ```
 typeid   ::= 'char'
@@ -716,7 +716,7 @@ referenced by:
 
 **unsigned_integer:**
 
-![unsigned_integer](diagram/unsigned_integer.svg)
+![unsigned_integer](grammar/diagram/unsigned_integer.svg)
 
 ```
 unsigned_integer
@@ -730,7 +730,7 @@ referenced by:
 
 **unsigned_real:**
 
-![unsigned_real](diagram/unsigned_real.svg)
+![unsigned_real](grammar/diagram/unsigned_real.svg)
 
 ```
 unsigned_real
@@ -743,7 +743,7 @@ referenced by:
 
 **integer_literal:**
 
-![integer_literal](diagram/integer_literal.svg)
+![integer_literal](grammar/diagram/integer_literal.svg)
 
 ```
 integer_literal
@@ -756,7 +756,7 @@ referenced by:
 
 **real_literal:**
 
-![real_literal](diagram/real_literal.svg)
+![real_literal](grammar/diagram/real_literal.svg)
 
 ```
 real_literal
@@ -769,7 +769,7 @@ referenced by:
 
 **string_literal:**
 
-![string_literal](diagram/string_literal.svg)
+![string_literal](grammar/diagram/string_literal.svg)
 
 ```
 string_literal
@@ -783,7 +783,7 @@ referenced by:
 
 **char_literal:**
 
-![char_literal](diagram/char_literal.svg)
+![char_literal](grammar/diagram/char_literal.svg)
 
 ```
 char_literal
@@ -792,7 +792,7 @@ char_literal
 
 **boolean_literal:**
 
-![boolean_literal](diagram/boolean_literal.svg)
+![boolean_literal](grammar/diagram/boolean_literal.svg)
 
 ```
 boolean_literal
@@ -801,7 +801,7 @@ boolean_literal
 
 **empty:**
 
-![empty](diagram/empty.svg)
+![empty](grammar/diagram/empty.svg)
 
 ```
 empty    ::=
