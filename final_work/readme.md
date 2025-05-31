@@ -1,3 +1,6 @@
+## A PascalM Compiler is a software to generate C code from PascalM syntax. 
+
+## PascalM BNF
 **program:**
 
 ![program](grammar/diagram/program.svg)
