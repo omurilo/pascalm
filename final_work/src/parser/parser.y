@@ -77,7 +77,7 @@ extern ht *HashTable;
 
 %type <node> type
 %type <node> simple_type
-%type <node> structured_type
+%type <node> structured_type unpacked_structured_type
 %type <node> index_list
 %type <node> field_list
 %type <node> fixed_part
@@ -102,15 +102,11 @@ extern ht *HashTable;
 %type <node> label
 %type <node> record_variable_list
 %type <node> expression
-%type <node> relational_op
 %type <node> additive_expression
-%type <node> additive_op
 %type <node> multiplicative_expression
-%type <node> multiplicative_op
 %type <node> unary_expression
-%type <node> unary_op
 %type <node> primary_expression
-%type <node> element_list
+%type <node> element_list element_list_non_empty
 %type <node> element
 
 %type <node> constid
@@ -246,11 +242,11 @@ type:
       $$ = create_structure_type_node($1, create_location(@$));
     }
   | CARET typeid {
-      $$ = create_poniter_type_node($2, create_location(@$));
+      $$ = create_pointer_type_node($2, create_location(@$));
     }  // pointer type
 
 simple_type:  
-    L_PAREN  identifier_list R_PAREN { $$ = create_identifier_list_node($2, create_location(@$)); }
+    L_PAREN  identifier_list R_PAREN { $$ = create_enumerated_type_node($2, create_location(@$)); }
   | constant DOTDOT constant {
       $$ = create_constant_range_node($1, $3, create_location(@$));
     }
@@ -258,29 +254,38 @@ simple_type:
       $$ = $1;
     }
 
-structured_type:  
-    ARRAY L_BRACKET index_list R_BRACKET OF type {
-      $$ = create_array_type_node($3, $6, create_location(@$));
+structured_type:
+    unpacked_structured_type {
+      $$ = $1;
     }
-  | RECORD field_list END {
-    $$ = create_record_type_node($2, create_location(@$));
-  }
-  | SET OF simple_type {
-    $$ = create_set_of_type_node($3, create_location(@$));
-  }
-  | FILE_TOK OF type {
-    $$ = create_file_of_type_node($3, create_location(@$));
-  }
-  | PACKED structured_type {
-    $$ = create_packed_type($2, create_location(@$));
-  }
+    | PACKED unpacked_structured_type {
+      $$ = create_packed_type($2, create_location(@$));
+    }
 
-index_list:  
-    simple_type { $$ = $1; }
+unpacked_structured_type:
+      ARRAY L_BRACKET index_list R_BRACKET OF type {
+        $$ = create_array_type_node($3, $6, create_location(@$));
+      }
+    | RECORD field_list END {
+        $$ = create_record_type_node($2, create_location(@$));
+      }
+    | SET OF simple_type {
+        $$ = create_set_of_type_node($3, create_location(@$));
+      }
+    | FILE_TOK {
+        $$ = create_file_of_type_node(NULL, create_location(@$));
+      }
+    | FILE_TOK OF type {
+        $$ = create_file_of_type_node($3, create_location(@$));
+      }
+
+index_list:
+    simple_type { 
+      $$ = create_index_list_start($1, create_location(@$)); 
+    }
   | index_list COMMA simple_type {
-      $$ = create_index_list_node($1, $3, create_location(@$));
+      $$ = append_index_to_list($1, $3, create_location(@$));
     }
-
 field_list:  
     fixed_part { $$ = $1; }  
   | fixed_part SEMICOLON variant_part { $$ = create_field_list($1, $3, create_location(@$)); }
@@ -333,7 +338,7 @@ proc_or_func:
 
 block_or_forward:  
     block { $$ = $1; }
-  | FORWARD  { /* descobrir o que fazer com forward */ }
+  | FORWARD  { $$ = create_forward_declaration_node(create_location(@$)); }
 
 parameters:  
    L_PAREN formal_parameter_list R_PAREN { $$ = create_parameters_node($2, create_location(@$)); }
@@ -430,7 +435,7 @@ for_list:
 
 
 expression_list:  
-    expression { $$ = create_expression_list(NULL, $1, create_location(@$)); }
+    expression { $$ = create_expression_list($1, create_location(@$)); }
   | expression_list COMMA expression { $$ = append_expression_list($1, $3, create_location(@$)); }
 
 label:  
@@ -443,46 +448,70 @@ record_variable_list:
     } 
 
 expression: 
-    expression relational_op additive_expression  { $$ = create_expression($1, $2, $3, create_location(@$)); }
+    expression LT additive_expression { 
+      $$ = create_binary_expression($1, BINOP_LT, $3, create_location(@$)); 
+    }
+  | expression LTE additive_expression { 
+      $$ = create_binary_expression($1, BINOP_LTE, $3, create_location(@$)); 
+    }
+  | expression EQ additive_expression { 
+      $$ = create_binary_expression($1, BINOP_EQ, $3, create_location(@$)); 
+    }
+  | expression NEQ additive_expression { 
+      $$ = create_binary_expression($1, BINOP_NEQ, $3, create_location(@$)); 
+    }
+  | expression GTE additive_expression { 
+      $$ = create_binary_expression($1, BINOP_GTE, $3, create_location(@$)); 
+    }
+  | expression GT additive_expression { 
+      $$ = create_binary_expression($1, BINOP_GT, $3, create_location(@$)); 
+    }
   | additive_expression { $$ = $1; }
 
-relational_op:
-    LT { $$ = create_relational_op("<", create_location(@$)); }
-  | LTE { $$ = create_relational_op("<=", create_location(@$)); }
-  | EQ { $$ = create_relational_op("=", create_location(@$)); }
-  | NEQ { $$ = create_relational_op("<>", create_location(@$)); }
-  | GTE { $$ = create_relational_op(">=", create_location(@$)); }
-  | GT { $$ = create_relational_op(">", create_location(@$)); }
-
 additive_expression: 
-    additive_expression additive_op multiplicative_expression { $$ = create_additive_expression($1, $2, $3, create_location(@$)); }
+    additive_expression PLUS multiplicative_expression { 
+      $$ = create_binary_expression($1, BINOP_PLUS, $3, create_location(@$)); 
+    }
+  | additive_expression MINUS multiplicative_expression { 
+      $$ = create_binary_expression($1, BINOP_MINUS, $3, create_location(@$)); 
+    }
+  | additive_expression OR multiplicative_expression { 
+      $$ = create_binary_expression($1, BINOP_OR, $3, create_location(@$)); 
+    }
   | multiplicative_expression { $$ = $1; }
 
-additive_op:
-    PLUS { $$ = create_additive_op("+", create_location(@$)); }
-  | MINUS { $$ = create_additive_op("-", create_location(@$)); }
-  | OR { $$ = create_additive_op("or", create_location(@$)); }
-
 multiplicative_expression: 
-    multiplicative_expression multiplicative_op unary_expression { $$ = create_multiplicative_expression($1, $2, $3, create_location(@$)); }
+    multiplicative_expression TIMES unary_expression { 
+      $$ = create_binary_expression($1, BINOP_TIMES, $3, create_location(@$)); 
+    }
+  | multiplicative_expression DIVIDE unary_expression { 
+      $$ = create_binary_expression($1, BINOP_DIVIDE, $3, create_location(@$)); 
+    }
+  | multiplicative_expression DIV unary_expression { 
+      $$ = create_binary_expression($1, BINOP_DIV, $3, create_location(@$)); 
+    }
+  | multiplicative_expression MOD unary_expression { 
+      $$ = create_binary_expression($1, BINOP_MOD, $3, create_location(@$)); 
+    }
+  | multiplicative_expression AND unary_expression { 
+      $$ = create_binary_expression($1, BINOP_AND, $3, create_location(@$)); 
+    }
+  | multiplicative_expression IN unary_expression { 
+      $$ = create_binary_expression($1, BINOP_IN, $3, create_location(@$)); 
+    }
   | unary_expression { $$ = $1; }
 
-multiplicative_op:
-    TIMES { $$ = create_multiplicative_node("*", create_location(@$)); }
-  | DIVIDE { $$ = create_multiplicative_node("/", create_location(@$)); }
-  | DIV { $$ = create_multiplicative_node("div", create_location(@$)); }
-  | MOD { $$ = create_multiplicative_node("mod", create_location(@$)); }
-  | AND { $$ = create_multiplicative_node("and", create_location(@$)); }
-  | IN { $$ = create_multiplicative_node("in", create_location(@$)); }
-
 unary_expression: 
-    unary_op unary_expression { $$ = create_unary_expression($1, $2, create_location(@$)); }
+    PLUS unary_expression { 
+      $$ = create_unary_expression(UNOP_PLUS, $2, create_location(@$)); 
+    }
+  | MINUS unary_expression %prec NEG { 
+      $$ = create_unary_expression(UNOP_MINUS, $2, create_location(@$)); 
+    }
+  | NOT unary_expression %prec NEG { 
+      $$ = create_unary_expression(UNOP_NOT, $2, create_location(@$)); 
+    }
   | primary_expression { $$ = $1; }
-
-unary_op:
-    PLUS { $$ = create_unary_node("+", 0, create_location(@$)); }
-  | MINUS %prec NEG { $$ = create_unary_node("-", 1, create_location(@$)); }
-  | NOT %prec NEG { $$ = create_unary_node("!", 1, create_location(@$)); }
 
 primary_expression:  
     variable { $$ = $1; }
@@ -498,17 +527,28 @@ primary_expression:
   | L_BRACKET element_list R_BRACKET { $$ = $2; }
   | L_PAREN expression R_PAREN { $$ = $2; } 
 
-element_list:  
-    empty  
-  | element { $$ = create_element_list(NULL, $1, create_location(@$)); }
-  | element_list COMMA element {
-      $$ = append_element_list($1, $3, create_location(@$));
+element_list:
+    empty { 
+      $$ = create_set_literal(create_location(@$)); 
+    }
+  | element_list_non_empty { 
+      $$ = $1; 
     }
 
-element:  
-    expression { $$ = $1; }
-  | expression DOTDOT expression  {
-      $$ = create_expression_range_node($1, $3, create_location(@$));
+element_list_non_empty:
+    element { 
+      $$ = create_set_literal_with_element($1, create_location(@$)); 
+    }
+  | element_list_non_empty COMMA element {
+      $$ = add_element_to_set_literal($1, $3, create_location(@$));
+    }
+
+element:
+    expression { 
+      $$ = create_set_element($1, create_location(@$)); 
+    }
+  | expression DOTDOT expression {
+      $$ = create_set_range_element($1, $3, create_location(@$));
     }
 
 constid:  

@@ -20,7 +20,7 @@ typedef struct ProcDeclarationNode
 typedef struct FuncDeclarationNode FuncDeclarationNode; // Declaração de funções
 
 typedef struct SimpleTypeNode SimpleTypeNode;      // Tipos simples
-/**/ typedef struct ScalarTypeNode ScalarTypeNode; // Tipo escalar (enumerado)
+/**/ typedef struct EnumeratedTypeNode EnumeratedTypeNode; // Tipo enumerado
 /**/ typedef struct SubrangeTypeNode SubrangeTypeNode; // Tipo de subintervalo
 /**/ typedef struct TypeIdentifierNode
     TypeIdentifierNode; // Referência a um tipo identificador
@@ -73,6 +73,7 @@ typedef struct VariantRecordNode VariantRecordNode; // Record com parte variante
 
 typedef struct ListNode
     ListNode; // Nó genérico para listas (pode ser especializado)
+typedef struct IndexList IndexList;
 typedef struct ErrorNode ErrorNode; // Nó para representar erros sintáticos
 typedef struct ElementNode ElementNode;
 typedef struct OperationNode OperationNode;
@@ -292,8 +293,8 @@ struct TypeIdentifierNode {
 
 struct AssignmentNode {
   ASTNode base;
-    ASTNode *target;     // Variável alvo (lado esquerdo)
-    ASTNode *expression; // Expressão (lado direito) fm
+  ASTNode *target;     // Variável alvo (lado esquerdo)
+  ASTNode *expression; // Expressão (lado direito) fm
 };
 
 struct IfNode {
@@ -371,6 +372,12 @@ struct ForListNode {
     bool is_downto;         // true se for downto, false se for to
 };
 
+struct FunctionCallNode {
+  ASTNode base;
+  ASTNode *function;
+  ASTNode *params;
+};
+
 struct ProcedureCallNode {
     ASTNode base;
     ASTNode *procedure;     // Identificador do procedimento
@@ -394,6 +401,91 @@ struct LabeledStmtNode {
     ASTNode *statement;     // Statement
 };
 
+struct SimpleTypeNode {
+  ASTNode base;
+  char* type_name;
+};
+
+struct EnumeratedTypeNode {
+  ASTNode base;
+  ASTNode *identifiers_list;
+};
+
+struct SubrangeTypeNode {
+  ASTNode base;
+  ASTNode *upper;
+  ASTNode *lower;
+};
+
+struct StructuredTypeNode {
+  ASTNode base;
+  bool is_packed;
+  ASTNode * type;
+};
+
+struct ArrayTypeNode {
+    ASTNode base;
+    ASTNode *index_list;
+    ASTNode *type; //TODO(Semantic Analysis): all index list node must have the same type?
+};
+
+struct RecordTypeNode {
+    ASTNode base;
+    ASTNode *field_list;
+    ASTNode *variant_part;
+};
+
+typedef enum {
+    SET_ELEMENT_SINGLE,  // valor único
+    SET_ELEMENT_RANGE    // range (a..b)
+} SetElementType;
+
+typedef struct {
+    ASTNode base;
+    SetElementType type;
+    union {
+        ASTNode* single_value;
+        struct {
+            ASTNode* start;
+            ASTNode* end;
+        } range;
+    } value;
+} SetElement;
+
+typedef struct {
+    ASTNode base;
+    SetElement** elements;
+    int count;
+    int capacity;
+} SetLiteral;
+
+struct SetTypeNode {
+    ASTNode base;
+    ASTNode *type;
+};
+
+struct FileTypeNode {
+    ASTNode base;
+    ASTNode *type;
+};
+
+struct PointerTypeNode {
+    ASTNode base;
+    ASTNode *type;
+};
+
+struct BinaryOperationNode {
+  ASTNode base;
+  BinaryOperator operator;
+  ASTNode *left;
+  ASTNode *right;
+};
+
+struct UnaryOperationNode {
+  ASTNode base;
+  UnaryOperator operator;
+  ASTNode *operand;
+};
 
 struct ElementNode {
   ASTNode base;
@@ -405,6 +497,13 @@ struct ListNode {
   ASTNode base;
   ASTNode *element;
   ASTNode *next;
+};
+
+struct IndexList {
+  ASTNode base;
+  ASTNode **indexes;
+  int count;
+  int capacity;
 };
 
 struct OperationNode {
@@ -462,6 +561,7 @@ ASTNode *create_proc_declaration_node(ASTNode *id,
 ASTNode *create_func_declaration_node(ASTNode *id,
      ASTNode *parameters, ASTNode *type, ASTNode *block_or_forward,
                                                SourceLocation loc);
+ASTNode *create_forward_declaration_node(SourceLocation loc);
 ASTNode *create_array_access_node(ASTNode *variable, ASTNode *sub_list,
                                   SourceLocation loc);
 ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
@@ -486,11 +586,10 @@ ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc);
 ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc);
 ASTNode *create_relational_op(char *op, SourceLocation loc);
 ASTNode *create_multiplicative_node(char *op, SourceLocation Loc);
-ASTNode *create_additive_op(char *op, SourceLocation loc);
-ASTNode *create_additive_expression(ASTNode *add_expr, ASTNode *add_op, ASTNode *mult_expr, SourceLocation loc); 
-ASTNode *create_unary_node(char *op, int precedence, SourceLocation loc);
-ASTNode *create_unary_expression(ASTNode *unary_op, ASTNode *expr, SourceLocation loc);
-ASTNode *create_multiplicative_expression(ASTNode *mul_expr, ASTNode *mult_op, ASTNode* unary_expr, SourceLocation loc);
+ASTNode *create_binary_expression(ASTNode *left, BinaryOperator op,
+                                    ASTNode *right, SourceLocation loc);
+ASTNode *create_unary_expression(UnaryOperator unary_op, ASTNode *operand,
+                                 SourceLocation loc);
 ASTNode *create_integer_literal(int integer, SourceLocation loc);
 ASTNode *create_real_literal(double real, SourceLocation loc);
 ASTNode *create_string_literal(char *string, SourceLocation loc);
@@ -517,8 +616,7 @@ ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc);
 ASTNode *create_identifier_node(char *id, SourceLocation loc);
 ASTNode *create_if_stmt_node(ASTNode *expression, ASTNode *then_part,
                              ASTNode *else_part, SourceLocation loc);
-ASTNode *create_index_list_node(ASTNode *list, ASTNode *type,
-                                SourceLocation loc);
+ASTNode *create_index_list_start(ASTNode *first_index, SourceLocation loc);
 ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
                                 SourceLocation loc);
 ASTNode *create_packed_type(ASTNode *type, SourceLocation loc);
@@ -528,7 +626,7 @@ ASTNode *create_parameter_list_types_node(ASTNode *list, ASTNode *type,
                                           SourceLocation loc);
 ASTNode *create_parameters_node(ASTNode *parameter, SourceLocation loc);
 ASTNode *create_pointer_deref_node(ASTNode *pointer, SourceLocation loc);
-ASTNode *create_poniter_type_node(ASTNode *type, SourceLocation loc);
+ASTNode *create_pointer_type_node(ASTNode *type, SourceLocation loc);
 ASTNode *create_procedure_call_node(ASTNode *identifier, ASTNode *expr_list,
                                     SourceLocation loc);
 ASTNode *create_procedure_param_node(ASTNode *identifier, ASTNode *params,
@@ -546,6 +644,7 @@ ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc);
 ASTNode *create_simple_type_node(ASTNode *type, SourceLocation loc);
 ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc);
 ASTNode *create_structure_type_node(ASTNode *type, SourceLocation loc);
+ASTNode *create_enumerated_type_node(ASTNode *identiiers_list, SourceLocation loc);
 ASTNode *create_subscript_list_node(ASTNode *expr, SourceLocation loc);
 ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
                                SourceLocation loc);
@@ -562,9 +661,13 @@ ASTNode *create_while_stmt_node(ASTNode *expr, ASTNode *stmt,
                                 SourceLocation loc);
 ASTNode *create_with_record_list_node(ASTNode *record_var_list, ASTNode *stmt,
                                       SourceLocation loc);
-ASTNode *create_element_list(ASTNode *list, ASTNode *element, SourceLocation loc);
+ASTNode *create_set_literal(SourceLocation loc);
+ASTNode *create_set_literal_with_element(ASTNode *element, SourceLocation loc);
+ASTNode *add_element_to_set_literal(ASTNode* set_literal, ASTNode *element, SourceLocation loc);
+ASTNode *create_set_element(ASTNode *expr, SourceLocation loc);
+ASTNode *create_set_range_element(ASTNode* const1, ASTNode *const2, SourceLocation loc);
 ASTNode *create_expression(ASTNode *expr, ASTNode *relop, ASTNode  *add_expr, SourceLocation loc);
-ASTNode *create_expression_list(ASTNode *list, ASTNode *element, SourceLocation loc);
+ASTNode *create_expression_list(ASTNode *element, SourceLocation loc);
 ASTNode *append_expression_list(ASTNode *list, ASTNode *element, SourceLocation loc);
 ASTNode *append_case_list_node(ASTNode *list, ASTNode *element,
                                SourceLocation loc);
@@ -586,7 +689,7 @@ ASTNode *append_variable_identifier_list(ASTNode *list, ASTNode *var_id,
                                           SourceLocation loc);
 ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
                              SourceLocation loc);
-ASTNode *append_element_list(ASTNode *list, ASTNode *element, SourceLocation loc);
+ASTNode *append_index_to_list(ASTNode *list, ASTNode *element, SourceLocation loc);
 ASTNode *create_record_variable_list_node(ASTNode *record_var, SourceLocation loc);
 ASTNode *append_stmt_list(ASTNode *list, ASTNode *stmt, SourceLocation loc);
 ASTNode *append_proc_and_func_declarations(ASTNode* list, ASTNode* proc_and_func, SourceLocation loc);
@@ -603,6 +706,13 @@ ASTNode *get_statements_from_block(ASTNode *block);
 void free_node(ASTNode *node);
 void print_todo(ASTNode *node, int indent);
 void print_program_node(ASTNode *node, int indent);
+void print_identifier_node(ASTNode *node, int indent);
+void print_stmt_list(ASTNode *node, int indent);
+void print_binary_operation(ASTNode *node, int indent);
+void print_unary_operation(ASTNode *node, int indent);
+const char* nodeTypeToString(NodeType type);
+const char* binary_op_to_string(BinaryOperator op);
+const char* unary_op_to_string(UnaryOperator op);
 // void print_binary_expr_node(ASTNode *node, int indent);
 // void print_heading(ASTNode *node, int indent);
 #endif

@@ -65,24 +65,29 @@ void print_list_identifiers(ASTNode *node, int indent) {
   }
 }
 
+void print_literal_value(ASTNode *node, int indent) {
+  if (node->type != NODE_LITERAL) return;
+
+  LiteralNode *lit = (LiteralNode *)node;
+  if (lit->literal_type == LITERAL_STRING) {
+    printf("%*sLiteral %s\n", indent, "", lit->value.str_val);
+  } else if (lit->literal_type == LITERAL_INTEGER) {
+    printf("%*sLiteral %d\n", indent, "", lit->value.int_val);
+  } else if (lit->literal_type == LITERAL_REAL) {
+    printf("%*sLiteral %.2f\n", indent, "", lit->value.real_val);
+  } else if (lit->literal_type == LITERAL_BOOLEAN) {
+    printf("%*sLiteral %s\n", indent, "", lit->value.bool_val ? "true" : "false");
+  } else if (lit->literal_type == LITERAL_CHAR) {
+    printf("%*sLiteral %c\n", indent, "", lit->value.char_val);
+  }
+}
+
 void print_list_values(ASTNode *node, int indent) {
   ListNode *current = (ListNode *)node;
 
   while (current) {
     if (current->element) {
-      LiteralNode *lit =
-          (LiteralNode *)((LabelDeclarationNode *)current->element)->value;
-      if (lit->literal_type == LITERAL_STRING) {
-        printf("%*s%s\n", indent, "", lit->value.str_val);
-      } else if (lit->literal_type == LITERAL_INTEGER) {
-        printf("%*s%d\n", indent, "", lit->value.int_val);
-      } else if (lit->literal_type == LITERAL_REAL) {
-        printf("%*s%.2f\n", indent, "", lit->value.real_val);
-      } else if (lit->literal_type == LITERAL_BOOLEAN) {
-        printf("%*s%s\n", indent, "", lit->value.bool_val ? "true" : "false");
-      } else if (lit->literal_type == LITERAL_CHAR) {
-        printf("%*s%c\n", indent, "", lit->value.char_val);
-      }
+      print_literal_value(current->element, indent);
     } else {
       printf("[NULL]\n");
     }
@@ -157,78 +162,161 @@ void print_stmt_list(ASTNode *node, int indent) {
     if (current->element) {
       switch (current->element->type) {
       case NODE_COMPOUND_STMT: {
-        printf("%*sNODE_COMPOUND_STMT!\n", indent, "");
+        printf("%*sNODE_COMPOUND_STMT->\n", indent, "");
+        current->element->print(current->element, indent+2);
         break;
       }
       case NODE_ASSIGN_STMT: {
-        printf("%*sNODE_ASSIGN_STMT!\n", indent, "");
+        printf("%*sNODE_ASSIGN_STMT->\n", indent, "");
+        AssignmentNode *a = (AssignmentNode *)current->element;
+        if (a->target->type == NODE_IDENTIFIER) {
+          a->target->print(a->target, indent+2);
+        }
+        a->expression->print(a->expression, indent+2);
         break;
       }
       case NODE_PROC_CALL: {
-        printf("%*sNODE_PROC_CALL!\n", indent, "");
+        printf("%*sNODE_PROC_CALL->\n", indent, "");
+        ProcedureCallNode *proc = (ProcedureCallNode *)current->element;
+        if (proc->procedure->type == NODE_IDENTIFIER) {
+          proc->procedure->print(proc->procedure, indent+2);
+          break;
+        }
+        proc->base.print((ASTNode *)proc, indent+2);
         break;
       }
       case NODE_IF_STMT: {
-        printf("%*sNODE_IF_STMT!\n", indent, "");
+        printf("%*sNODE_IF_STMT->\n", indent, "");
+        current->element->print(current->element, indent+2);
         break;
       }
       case NODE_CASE_STMT: {
-        printf("%*sNODE_CASE_STMT!\n", indent, "");
+        printf("%*sNODE_CASE_STMT->\n", indent, "");
+        current->element->print(current->element, indent+2);
         break;
       }
       case NODE_CASE_ITEM: {
-        printf("%*sNODE_CASE_ITEM!\n", indent, "");
+        printf("%*sNODE_CASE_ITEM->\n", indent, "");
+        current->element->print(current->element, indent+2);
         break;
       }
       case NODE_CASE_ELSE: {
-        printf("%*sNODE_CASE_ELSE!\n", indent, "");
+        printf("%*sNODE_CASE_ELSE->\n", indent, "");
+        current->element->print(current->element, indent+2);
         break;
       }
       case NODE_WHILE_STMT: {
-        printf("%*sNODE_WHILE!\n", indent, "");
+        printf("%*sNODE_WHILE->\n", indent, "");
+        WhileStmtNode *w = (WhileStmtNode *)current->element;
+        print_stmt_list(w->body, indent+2);
         break;
       }
       case NODE_REPEAT_STMT: {
-        printf("%*sNODE_REPEATE!\n", indent, "");
+        printf("%*sNODE_REPEAT->\n", indent, "");
+        RepeatUntilNode *r = (RepeatUntilNode *)current->element;
+        print_stmt_list(r->body, indent+2);
         break;
       }
       case NODE_FOR_STMT: {
-        printf("%*sNODE_FOR!\n", indent, "");
+        printf("%*sNODE_FOR->\n", indent, "");
+        ForStmtNode *ft = (ForStmtNode *)current->element;
+        if (ft->variable->type == NODE_IDENTIFIER) {
+          ft->variable->print(ft->variable, indent+2);
+        }
+        print_stmt_list(ft->body, indent+2);
         break;
       }
       case NODE_WITH_STMT: {
-        printf("%*sNODE_WITH!\n", indent, "");
+        printf("%*sNODE_WITH->\n", indent, "");
+        current->element->print(current->element, indent+2);
         break;
       }
       case NODE_GOTO_STMT: {
-        printf("%*sNODE_GOTO!\n", indent, "");
+        printf("%*sNODE_GOTO->\n", indent, "");
+        current->element->print(current->element, indent+2);
         break;
       }
       case NODE_IDENTIFIER: {
-        IdentifierNode *id = (IdentifierNode *)current->element;
-        printf("%*sIdentificador: %s\n", indent, "", id->name);
+        printf("%*sNODE_IDENTIFIER->\n", indent, "");
+        print_identifier_node(current->element, indent+2);
+        break;
+      }
+      case NODE_LIST: {
+        printf("%*sNODE_LIST->\n", indent, "");
+        print_stmt_list(current->element, indent+2);          
+        break;
+      }
+      case NODE_BINARY_EXPR: {
+        printf("%*sNODE_BINARY_EXPR->\n", indent, "");
+        print_binary_operation(current->element, indent+2);
+        break;
       }
       default:
-        printf("%*sUnknown node\n", indent, "");
+        printf("%*sNode Type %s\n", indent, "", nodeTypeToString(current->element->type));
         break;
       }
     } else {
-      printf("[NULL]\n");
+      if (!current->next) {
+        printf("[NULL]\n");
+      } else {
+        // printf("Next type %s\n", nodeTypeToString(current->next->type));
+        // // return print_stmt_list(current->next, indent);
+        // current->next->print((ASTNode*) current->next, indent);
+        // current = (ListNode *)current->next;
+        // continue;
+      }
     }
     current = (ListNode *)current->next;
   }
 }
 
-// void print_binary_expr_node(ASTNode *node, int indent) {
-//   BinaryOperationNode *expr = (BinaryOperationNode *)node;
-//   printf("%*sBinary Expression (op: %d)\n", indent, "", expr->operator);
-//   if (expr->left) {
-//     expr->left->print(expr->left, indent + 2);
-//   }
-//   if (expr->right) {
-//     expr->right->print(expr->right, indent + 2);
-//   }
-// }
+void print_identifier_node(ASTNode *node, int indent) {
+  if (node->type != NODE_IDENTIFIER) {
+    printf("WARN: Tentou imprimir NODE_IDENTIFIER, mas o tipo é %s!\n", nodeTypeToString(node->type));
+  }
+  IdentifierNode *id = (IdentifierNode *)node;
+  if (id->name != NULL) {
+    printf("%*sIdentificador: %s\n", indent, "", id->name);
+  } else {
+    printf("%*sIdentificador: <unnamed>\n", indent, "");
+  }
+}
+
+void print_binary_operation(ASTNode *node, int indent) {
+  BinaryOperationNode *expr = (BinaryOperationNode *)node;
+  printf("%*sBinary Expression (op: %s)\n", indent, "", binary_op_to_string(expr->operator));
+  if (expr->left) {
+    if (expr->left->type == NODE_IDENTIFIER) {
+      print_identifier_node(expr->left, indent+2);
+    } else {
+      expr->left->print(expr->left, indent + 2);
+    }
+  }
+  if (expr->right) {
+    if (expr->right->type == NODE_IDENTIFIER) {
+      print_identifier_node(expr->right, indent+2);
+    } else {
+      expr->right->print(expr->right, indent + 2);
+    }
+  }
+}
+
+void print_unary_operation(ASTNode *node, int indent) {
+  UnaryOperationNode *expr = (UnaryOperationNode *)node;
+  printf("%*sUnary Expression (op: %s)\n", indent, "", unary_op_to_string(expr->operator));
+  if (expr->operand) {
+    expr->operand->print(expr->operand, indent + 2);
+  }
+}
+
+void print_function_call(ASTNode *node, int indent) {
+  FunctionCallNode *fc = (FunctionCallNode*)node;
+  printf("%*sNODE_FUNC_CALL->\n", indent, "");
+  print_identifier_node(fc->function, indent+2);
+  // fc->params->print(fc->params, indent);
+  printf("%*sFUNC_CALL_PARAMS->\n", indent+2, "");
+  print_stmt_list(fc->params, indent+4);
+}
 
 ASTNode *create_program_node(char *name, ASTNode *heading, ASTNode *block,
                              SourceLocation loc) {
@@ -343,7 +431,7 @@ ASTNode *create_builtin_type_identifier(char *name, SourceLocation loc) {
   typeid->base.type = NODE_TYPE_IDENTIFIER;
   typeid->base.location = loc;
   typeid->base.print = print_todo;
-  typeid->name = name;
+  typeid->name = strdup(name);
   typeid->kind = SYMBOL_BUILTIN;
   typeid->is_base_type = true;
 
@@ -354,9 +442,10 @@ ASTNode *create_builtin_identifier(char *name, SourceLocation loc) {
   IdentifierNode *built = (IdentifierNode *)malloc(sizeof(IdentifierNode));
   built->base.type = NODE_IDENTIFIER;
   built->base.location = loc;
-  built->base.print = print_todo;
-  built->name = name;
+  built->base.print = print_identifier_node;
+  built->name = strdup(name);
   built->kind = SYMBOL_PROCEDURE;
+  return (ASTNode *)built;
 }
 
 ASTNode *create_identifier_list_node(ASTNode *element, SourceLocation loc) {
@@ -437,14 +526,14 @@ ASTNode *create_case_label_list(ASTNode *case_label, SourceLocation loc) {
 ASTNode *create_constant_range_node(ASTNode *constant1, ASTNode *constant2,
                                     SourceLocation loc) {
   // TODO: In a semantic analysis, the type of lower and upper must be equal
-  CaseLabelNode *label = (CaseLabelNode *)malloc(sizeof(CaseLabelNode));
-  label->base.type = NODE_CASE_LABEL;
-  label->base.location = loc;
-  label->base.print = print_todo;
-  label->lower = constant1;
-  label->upper = constant2;
+  SubrangeTypeNode *node = (SubrangeTypeNode *)malloc(sizeof(SubrangeTypeNode));
+  node->base.type = NODE_SUBRANGE_TYPE;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->lower = constant1;
+  node->upper = constant2;
 
-  return (ASTNode *)label;
+  return (ASTNode *)node;
 }
 
 ASTNode *create_array_access_node(ASTNode *array, ASTNode *subscripts,
@@ -560,6 +649,19 @@ ASTNode *create_proc_declaration_node(ASTNode *id, ASTNode *parameters,
   proc->parameters = parameters;
   proc->block_or_forward = block_or_forward;
 
+  IdentifierNode *id_node = (IdentifierNode *)id;
+  SymbolEntry *symb = ht_get(HashTable, id_node->symbol_entry_key);
+  symb->info.func_info.return_type = NULL;
+  symb->info.func_info.params = parameters;
+
+  if (block_or_forward->type == NODE_FORWARD_DECL) {
+    symb->info.func_info.is_forward = true;
+  } else {
+    symb->info.func_info.body = block_or_forward;
+  }
+
+  ht_set(HashTable, symb->name, symb);
+
   return (ASTNode *)proc;
 };
 
@@ -576,8 +678,29 @@ ASTNode *create_func_declaration_node(ASTNode *id, ASTNode *parameters,
   func->parameters = parameters;
   func->block_or_forward = block_or_forward;
 
+  IdentifierNode *id_node = (IdentifierNode *)id;
+  SymbolEntry *symb = ht_get(HashTable, id_node->symbol_entry_key);
+  symb->info.func_info.return_type = type;
+  symb->info.func_info.params = parameters;
+
+  if (block_or_forward->type == NODE_FORWARD_DECL) {
+    symb->info.func_info.is_forward = true;
+  } else {
+    symb->info.func_info.body = block_or_forward;
+  }
+
+  ht_set(HashTable, symb->name, symb);
+
   return (ASTNode *)func;
 };
+
+ASTNode *create_forward_declaration_node(SourceLocation loc) {
+  ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+  node->type = NODE_FORWARD_DECL;
+  node->location = loc;
+  node->print = print_todo;
+  return node;
+}
 
 ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc) {
   ListNode *new_list = (ListNode *)malloc(sizeof(ListNode));
@@ -604,58 +727,38 @@ ASTNode *create_expression_range_node(ASTNode *expression1,
 }
 
 ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
-                                SourceLocation loc) {};
+                                SourceLocation loc) {
+  ArrayTypeNode *node = (ArrayTypeNode *)malloc(sizeof(ArrayTypeNode));
+  node->base.type = NODE_ARRAY_TYPE;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->index_list = list;
+  node->type = type;
+
+  return (ASTNode *)node;
+};
+
 ASTNode *create_assign_node(ASTNode *variable, ASTNode *expression,
-                            SourceLocation loc) {};
+                            SourceLocation loc) {
+  AssignmentNode *node = (AssignmentNode*)malloc(sizeof(AssignmentNode));
+  node->base.type = NODE_ASSIGN_STMT;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->target = variable;
+  node->expression = expression;
+
+  return (ASTNode *)node;
+};
 ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
                                      SourceLocation loc) {};
 ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {};
 ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {};
 
-ASTNode *create_relational_op(char *op, SourceLocation loc) {
-  OperationNode *node = (OperationNode *)malloc(sizeof(OperationNode));
-  node->base.type = NODE_OPERATION;
-  node->base.location = loc;
-  node->base.print = print_todo;
-  node->op = op;
-  node->precedence = 0;
-  return (ASTNode *)node;
-}
-
-ASTNode *create_additive_op(char *op, SourceLocation loc) {
-  OperationNode *node = (OperationNode *)malloc(sizeof(OperationNode));
-  node->base.type = NODE_OPERATION;
-  node->base.location = loc;
-  node->base.print = print_todo;
-  node->op = op;
-  node->precedence = 0;
-  return (ASTNode *)node;
-}
-
-ASTNode *create_multiplicative_node(char *op, SourceLocation loc) {
-  OperationNode *node = (OperationNode *)malloc(sizeof(OperationNode));
-  node->base.type = NODE_OPERATION;
-  node->base.location = loc;
-  node->base.print = print_todo;
-  node->op = op;
-  node->precedence = 0;
-  return (ASTNode *)node;
-}
-ASTNode *create_unary_node(char *op, int precedence, SourceLocation loc) {
-  OperationNode *node = (OperationNode *)malloc(sizeof(OperationNode));
-  node->base.type = NODE_OPERATION;
-  node->base.location = loc;
-  node->base.print = print_todo;
-  node->op = op;
-  node->precedence = precedence;
-  return (ASTNode *)node;
-}
-
 ASTNode *create_integer_literal(int integer, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_literal_value;
   node->literal_type = LITERAL_INTEGER;
   node->value.int_val = integer;
   return (ASTNode *)node;
@@ -665,7 +768,7 @@ ASTNode *create_real_literal(double real, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_literal_value;
   node->literal_type = LITERAL_REAL;
   node->value.real_val = real;
   return (ASTNode *)node;
@@ -675,7 +778,7 @@ ASTNode *create_string_literal(char *string, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_literal_value;
   node->literal_type = LITERAL_STRING;
   node->value.str_val = strdup(string);
   return (ASTNode *)node;
@@ -685,7 +788,7 @@ ASTNode *create_char_literal(char character, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_literal_value;
   node->literal_type = LITERAL_CHAR;
   node->value.char_val = character;
   return (ASTNode *)node;
@@ -695,7 +798,7 @@ ASTNode *create_boolean_literal(bool boolean, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_literal_value;
   node->literal_type = LITERAL_BOOLEAN;
   node->value.bool_val = boolean;
   return (ASTNode *)node;
@@ -705,7 +808,7 @@ ASTNode *create_nil_literal(SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_literal_value;
   node->literal_type = LITERAL_NIL;
   return (ASTNode *)node;
 };
@@ -714,7 +817,20 @@ ASTNode *create_constant_signed_identifier(ASTNode *value, char *op,
                                            SourceLocation loc) {};
 ASTNode *create_field_identifier_list_node(ASTNode *list, ASTNode *identifier,
                                            SourceLocation loc) {};
-ASTNode *create_file_of_type_node(ASTNode *type, SourceLocation loc) {};
+ASTNode *create_file_of_type_node(ASTNode *type, SourceLocation loc) {
+  FileTypeNode *node = (FileTypeNode *)malloc(sizeof(FileTypeNode));
+  node->base.type = NODE_FILE_TYPE;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  if (type == NULL) {
+    ASTNode *builtin = create_builtin_type_identifier("char", loc);
+    ASTNode *simple_type = create_simple_type_node(builtin, loc);
+    node->type = simple_type;
+  } else {
+    node->type = type;
+  }
+  return (ASTNode *)node;
+};
 ASTNode *create_field_list(ASTNode *fixed, ASTNode *variant,
                            SourceLocation loc) {};
 ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
@@ -750,8 +866,23 @@ ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
                                             SourceLocation loc) {};
 ASTNode *create_function_param_node(ASTNode *identifier, ASTNode *params,
                                     ASTNode *type, SourceLocation loc) {};
-ASTNode *create_function_call_node(ASTNode *id, ASTNode *params,
-                                   SourceLocation loc) {};
+ASTNode *create_function_call_node(ASTNode *func, ASTNode *params,
+                                   SourceLocation loc) {
+  FunctionCallNode *node =
+      (FunctionCallNode *)malloc(sizeof(FunctionCallNode));
+  node->base.type = NODE_FUNC_CALL;
+  node->base.location = loc;
+  node->base.print = print_function_call;
+  node->function = func;
+  node->params = params; // Pode ser NULL se não houver parâmetros
+
+  if (func->type == NODE_IDENTIFIER) {
+    IdentifierNode *id = (IdentifierNode *)func;
+    id->kind = SYMBOL_FUNCTION; // Será verificado durante análise semântica
+  }
+
+  return (ASTNode *)node;
+};
 ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc) {
   GotoNode *node = (GotoNode *)malloc(sizeof(GotoNode));
   node->base.type = NODE_GOTO_STMT;
@@ -771,8 +902,18 @@ ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt,
   node->else_stmt = else_stmt;
   return (ASTNode *)node;
 }
-ASTNode *create_index_list_node(ASTNode *list, ASTNode *type,
-                                SourceLocation loc) {};
+ASTNode *create_index_list_start(ASTNode *first_index, SourceLocation loc) {
+  IndexList *new_list = (IndexList *)malloc(sizeof(IndexList));
+  new_list->base.type = NODE_INDEX_LIST;
+  new_list->base.location = loc;
+  new_list->base.print = print_todo;
+  new_list->indexes = (ASTNode **)malloc(sizeof(ASTNode**));
+  new_list->indexes[0] = first_index;
+  new_list->count = 1;
+  new_list->capacity = 1;
+  return (ASTNode *)new_list;
+};
+
 ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
                                 SourceLocation loc) {
   LabeledStmtNode *node = (LabeledStmtNode *)malloc(sizeof(LabeledStmtNode));
@@ -784,13 +925,37 @@ ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
   return (ASTNode *)node;
 }
 
-ASTNode *create_packed_type(ASTNode *type, SourceLocation loc) {};
+ASTNode *create_enumerated_type_node(ASTNode *identifiers_list, SourceLocation loc){
+  EnumeratedTypeNode *node = (EnumeratedTypeNode*)malloc(sizeof(EnumeratedTypeNode));
+  node->base.type = NODE_ENUMERATED_TYPE;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->identifiers_list = identifiers_list;
+  return (ASTNode *)node;
+}
+
+ASTNode *create_packed_type(ASTNode *type, SourceLocation loc) {
+  StructuredTypeNode *node = (StructuredTypeNode *)malloc(sizeof(StructuredTypeNode));
+  node->base.type = NODE_STRUCTURED_TYPE;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->type = type;
+  node->is_packed = true;
+  return (ASTNode *)node;
+};
 ASTNode *create_parameter_identifier_list_node(ASTNode *list, ASTNode *element,
                                                SourceLocation loc) {};
 ASTNode *create_parameter_list_types_node(ASTNode *list, ASTNode *type,
                                           SourceLocation loc) {};
 ASTNode *create_parameters_node(ASTNode *parameter, SourceLocation loc) {};
-ASTNode *create_poniter_type_node(ASTNode *type, SourceLocation loc) {};
+ASTNode *create_pointer_type_node(ASTNode *type, SourceLocation loc) {
+  PointerTypeNode *node = (PointerTypeNode *)malloc(sizeof(PointerTypeNode));
+  node->base.type = NODE_POINTER_TYPE;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->type = type;
+  return (ASTNode *)node;
+};
 
 ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params,
                                     SourceLocation loc) {
@@ -817,20 +982,35 @@ ASTNode *create_record_access_type(ASTNode *identifier, ASTNode *field,
                                    SourceLocation loc) {};
 ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,
                                   SourceLocation loc) {};
-ASTNode *create_record_type_node(ASTNode *field_list, SourceLocation loc) {};
+
+ASTNode *create_record_type_node(ASTNode *field_list, SourceLocation loc) {
+  RecordTypeNode *node = (RecordTypeNode *)malloc(sizeof(RecordTypeNode));
+  node->base.type = NODE_RECORD_TYPE;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->field_list = field_list;
+  return (ASTNode *)node;
+};
 
 ASTNode *create_repeat_until_stmt_list_node(ASTNode *body, ASTNode *condition,
                                             SourceLocation loc) {
   RepeatUntilNode *node = (RepeatUntilNode *)malloc(sizeof(RepeatUntilNode));
   node->base.type = NODE_REPEAT_STMT;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = body->print;
   node->body = body;
   node->condition = condition;
   return (ASTNode *)node;
 }
 
-ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc) {};
+ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc) {
+  SetTypeNode *node = (SetTypeNode *)malloc(sizeof(SetTypeNode));
+  node->base.type = NODE_SET_TYPE;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->type = type;
+  return (ASTNode *)node;
+};
 ASTNode *create_simple_type_node(ASTNode *type, SourceLocation loc) {};
 ASTNode *create_structure_type_node(ASTNode *type, SourceLocation loc) {};
 ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
@@ -868,7 +1048,7 @@ ASTNode *create_identifier_node(char *name, SourceLocation loc) {
 
   node->base.type = NODE_IDENTIFIER;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_identifier_node;
   node->name = strdup(name);
   node->kind = SYMBOL_UNKNOWN;
   node->symbol_entry_key = key;
@@ -879,7 +1059,7 @@ ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_literal_value;
   node->literal_type = LITERAL_INTEGER;
   node->value.int_val = integer;
   return (ASTNode *)node;
@@ -889,7 +1069,7 @@ ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_literal_value;
   node->literal_type = LITERAL_REAL;
   node->value.real_val = real;
   return (ASTNode *)node;
@@ -960,14 +1140,40 @@ ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var,
   }
 }
 
-ASTNode *create_expression_list(ASTNode *list, ASTNode *element,
-                                SourceLocation loc) {}
+ASTNode *create_expression_list(ASTNode *element,
+                                SourceLocation loc) {
+  ListNode *node = (ListNode *)malloc(sizeof(ListNode));
+  node->base.type = NODE_LIST;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->element = element;
+  node->next = NULL;
+  return (ASTNode *)node;
+
+}
 ASTNode *create_expression(ASTNode *expr, ASTNode *add_op, ASTNode *add_expr,
                            SourceLocation loc) {}
 /* APPENDS */
 ASTNode *append_expression_list(ASTNode *list, ASTNode *element,
                                 SourceLocation loc) {
-  return create_expression_list(list, element, loc);
+  ListNode *head = (ListNode *)list;
+
+  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  new_node->base.type = NODE_LIST;
+  new_node->base.location = loc;
+  new_node->base.print = print_todo;
+  new_node->element = element;
+  new_node->next = NULL;
+
+  if (head) {
+    ListNode *cur = head;
+    while (cur->next)
+      cur = (ListNode *)cur->next;
+    cur->next = (ASTNode *)new_node;
+    return (ASTNode *)head;
+  } else {
+    return (ASTNode *)new_node;
+  }
 }
 
 ASTNode *append_identifier_list_node(ASTNode *list, ASTNode *element,
@@ -1090,31 +1296,65 @@ ASTNode *append_case_list_node(ASTNode *list, ASTNode *expr,
   }
 }
 
-ASTNode *create_element_list(ASTNode *list, ASTNode *element,
-                             SourceLocation loc) {
-  ListNode *head = (ListNode *)list;
+ASTNode *create_set_literal(SourceLocation loc) {
+  SetLiteral *node = (SetLiteral *)malloc(sizeof(SetLiteral));
+  node->base.type = NODE_SET_CONSTRUCTOR;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->elements = NULL;
+  node->capacity = 0;
+  node->count = 0;
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
-  new_node->base.type = NODE_LIST;
-  new_node->base.location = loc;
-  new_node->base.print = print_todo;
-  new_node->element = element;
-  new_node->next = NULL;
-
-  if (head) {
-    ListNode *cur = head;
-    while (cur->next)
-      cur = (ListNode *)cur->next;
-    cur->next = (ASTNode *)new_node;
-    return (ASTNode *)head;
-  } else {
-    return (ASTNode *)new_node;
-  }
+  return (ASTNode *)node;
 }
 
-ASTNode *append_element_list(ASTNode *list, ASTNode *element,
-                             SourceLocation loc) {
-  return create_element_list(list, element, loc);
+ASTNode *create_set_literal_with_element(ASTNode *element, SourceLocation loc){
+  SetLiteral *node = (SetLiteral *)malloc(sizeof(SetLiteral));
+  node->base.type = NODE_SET_CONSTRUCTOR;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->elements = (SetElement **)malloc(sizeof(SetElement*));
+  node->elements[0] = (SetElement *)element;
+  node->capacity = 1;
+  node->count = 1;
+
+  return (ASTNode *)node;
+}
+
+ASTNode *add_element_to_set_literal(ASTNode* set_literal, ASTNode *element, SourceLocation loc){
+  SetLiteral *node = (SetLiteral *)set_literal;
+  if (node->count >= node->capacity) {
+      node->capacity *= 2;
+      node->elements = realloc(
+        node->elements, 
+        node->capacity * sizeof(ASTNode*)
+      );
+  }
+  node->elements[node->count++] = (SetElement*) element;
+  return (ASTNode *)node;
+}
+
+ASTNode *create_set_element(ASTNode *expr, SourceLocation loc) {
+  SetElement *element = (SetElement *)malloc(sizeof(SetElement));
+  element->base.type = NODE_SET_ELEMENT;
+  element->base.location = loc;
+  element->base.print = print_todo;
+  element->type = SET_ELEMENT_SINGLE;
+  element->value.single_value = expr;
+
+  return (ASTNode *)element;
+}
+
+ASTNode *create_set_range_element(ASTNode* const1, ASTNode *const2, SourceLocation loc) {
+  SetElement *element = (SetElement *)malloc(sizeof(SetElement));
+  element->base.type = NODE_SET_ELEMENT;
+  element->base.location = loc;
+  element->base.print = print_todo;
+  element->type = SET_ELEMENT_RANGE;
+  element->value.range.start = const1;
+  element->value.range.end = const2;
+
+  return (ASTNode *)element;
 }
 
 ASTNode *append_variable_declaration(ASTNode *list, ASTNode *vars,
@@ -1229,13 +1469,42 @@ ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *procs_funcs) {
                            blk->base.location);
 }
 
-ASTNode *create_additive_expression(ASTNode *expr, ASTNode *relop,
-                                    ASTNode *mult_expr, SourceLocation loc) {}
-ASTNode *create_multiplicative_expression(ASTNode *mul_expr, ASTNode *mult_op,
-                                          ASTNode *unary_expr,
-                                          SourceLocation loc) {}
-ASTNode *create_unary_expression(ASTNode *unary_op, ASTNode *expr,
-                                 SourceLocation loc) {}
+ASTNode *append_index_to_list(ASTNode* list, ASTNode* new_index, SourceLocation loc) {
+  IndexList *curr_list = (IndexList *)list;
+  if (curr_list->count >= curr_list->capacity) {
+        curr_list->capacity *= 2;
+        curr_list->indexes = realloc(
+            curr_list->indexes, 
+            curr_list->capacity * sizeof(ASTNode*)
+        );
+    }
+    curr_list->indexes[curr_list->count++] = new_index;
+    return (ASTNode *)curr_list;
+}
+
+ASTNode *create_binary_expression(ASTNode *left, BinaryOperator op,
+                                    ASTNode *right, SourceLocation loc) {
+  BinaryOperationNode *node = (BinaryOperationNode *)malloc(sizeof(BinaryOperationNode));
+  node->base.type = NODE_BINARY_EXPR;
+  node->base.location = loc;
+  node->base.print = print_binary_operation;
+  node->left = left;
+  node->operator = op;
+  node->right = right;
+
+  return (ASTNode*)node;
+}
+ASTNode *create_unary_expression(UnaryOperator unary_op, ASTNode *operand,
+                                 SourceLocation loc) {
+  UnaryOperationNode *node = (UnaryOperationNode *)malloc(sizeof(UnaryOperationNode));
+  node->base.type = NODE_UNARY_EXPR;
+  node->base.location = loc;
+  node->base.print = print_unary_operation;
+  node->operand = operand;
+  node->operator = unary_op;
+
+  return (ASTNode*)node;
+}
 
 /* UTILS */
 
@@ -1258,8 +1527,101 @@ ASTNode *get_statements_from_block(ASTNode *block) {
   return ((BlockNode *)block)->statements;
 }
 
+const char* binary_op_to_string(BinaryOperator op) {
+    switch (op) {
+        case BINOP_LT: return "<";
+        case BINOP_LTE: return "<=";
+        case BINOP_EQ: return "=";
+        case BINOP_NEQ: return "<>";
+        case BINOP_GTE: return ">=";
+        case BINOP_GT: return ">";
+        case BINOP_PLUS: return "+";
+        case BINOP_MINUS: return "-";
+        case BINOP_OR: return "or";
+        case BINOP_TIMES: return "*";
+        case BINOP_DIVIDE: return "/";
+        case BINOP_DIV: return "div";
+        case BINOP_MOD: return "mod";
+        case BINOP_AND: return "and";
+        case BINOP_IN: return "in";
+        default: return "unknown";
+    }
+}
+
+const char* unary_op_to_string(UnaryOperator op) {
+    switch (op) {
+        case UNOP_PLUS: return "+";
+        case UNOP_MINUS: return "-";
+        case UNOP_NOT: return "not";
+        default: return "unknown";
+    }
+}
+
+const char* nodeTypeToString(NodeType type) {
+    switch (type) {
+        case NODE_PROGRAM: return "NODE_PROGRAM";
+        case NODE_HEADING: return "NODE_HEADING";
+        case NODE_BLOCK: return "NODE_BLOCK";
+        case NODE_USES: return "NODE_USES";
+
+        case NODE_LABEL_DECL: return "NODE_LABEL_DECL";
+        case NODE_CONST_DECL: return "NODE_CONST_DECL";
+        case NODE_TYPE_DECL: return "NODE_TYPE_DECL";
+        case NODE_VAR_DECL: return "NODE_VAR_DECL";
+        case NODE_PROC_DECL: return "NODE_PROC_DECL";
+        case NODE_FUNC_DECL: return "NODE_FUNC_DECL";
+        case NODE_FORWARD_DECL: return "NODE_FORWARD_DECL";
+
+        case NODE_ENUMERATED_TYPE: return "NODE_ENUMERATED_TYPE";
+        case NODE_SUBRANGE_TYPE: return "NODE_SUBRANGE_TYPE";
+        case NODE_TYPE_IDENTIFIER: return "NODE_TYPE_IDENTIFIER";
+        case NODE_STRUCTURED_TYPE: return "NODE_STRUCTURED_TYPE";
+        case NODE_ARRAY_TYPE: return "NODE_ARRAY_TYPE";
+        case NODE_RECORD_TYPE: return "NODE_RECORD_TYPE";
+        case NODE_SET_TYPE: return "NODE_SET_TYPE";
+        case NODE_FILE_TYPE: return "NODE_FILE_TYPE";
+        case NODE_POINTER_TYPE: return "NODE_POINTER_TYPE";
+        case NODE_POINTER_DEREF: return "NODE_POINTER_DEREF";
+
+        case NODE_COMPOUND_STMT: return "NODE_COMPOUND_STMT";
+        case NODE_ASSIGN_STMT: return "NODE_ASSIGN_STMT";
+        case NODE_PROC_CALL: return "NODE_PROC_CALL";
+        case NODE_IF_STMT: return "NODE_IF_STMT";
+        case NODE_CASE_STMT: return "NODE_CASE_STMT";
+        case NODE_CASE_ITEM: return "NODE_CASE_ITEM";
+        case NODE_CASE_LABEL: return "NODE_CASE_LABEL";
+        case NODE_CASE_ELSE: return "NODE_CASE_ELSE";
+        case NODE_WHILE_STMT: return "NODE_WHILE_STMT";
+        case NODE_REPEAT_STMT: return "NODE_REPEAT_STMT";
+        case NODE_FOR_STMT: return "NODE_FOR_STMT";
+        case NODE_FOR_LIST: return "NODE_FOR_LIST";
+        case NODE_WITH_STMT: return "NODE_WITH_STMT";
+        case NODE_GOTO_STMT: return "NODE_GOTO_STMT";
+        case NODE_LABELED_STMT: return "NODE_LABELED_STMT";
+
+        case NODE_BINARY_EXPR: return "NODE_BINARY_EXPR";
+        case NODE_UNARY_EXPR: return "NODE_UNARY_EXPR";
+        case NODE_LITERAL: return "NODE_LITERAL";
+        case NODE_IDENTIFIER: return "NODE_IDENTIFIER";
+        case NODE_MEMBER_ACCESS: return "NODE_MEMBER_ACCESS";
+        case NODE_ARRAY_ACCESS: return "NODE_ARRAY_ACCESS";
+        case NODE_FUNC_CALL: return "NODE_FUNC_CALL";
+        case NODE_SET_CONSTRUCTOR: return "NODE_SET_CONSTRUCTOR";
+
+        case NODE_FIELD_LIST: return "NODE_FIELD_LIST";
+        case NODE_INDEX_LIST: return "NODE_INDEX_LIST";
+        case NODE_PARAMETER: return "NODE_PARAMETER";
+        case NODE_VARIANT_RECORD: return "NODE_VARIANT_RECORD";
+        case NODE_LIST: return "NODE_LIST";
+        case NODE_ERROR: return "NODE_ERROR";
+        case NODE_OPERATION: return "NODE_OPERATION";
+
+        default: return "UNKNOWN_NODETYPE";
+    }
+}
+
 void print_todo(ASTNode *node, int indent) {
-  printf("%*sTODO %d\n", indent, "", node->type);
+  printf("%*sTODO %s\n", indent, "", nodeTypeToString(node->type));
 }
 
 void free_node(ASTNode *node) {
@@ -1301,7 +1663,7 @@ void free_node(ASTNode *node) {
   case NODE_FUNC_DECL: {
     break;
   }
-  case NODE_SCALAR_TYPE: {
+  case NODE_ENUMERATED_TYPE: {
     break;
   }
   case NODE_SUBRANGE_TYPE: {
@@ -1338,6 +1700,7 @@ void free_node(ASTNode *node) {
     break;
   }
   case NODE_PROC_CALL: {
+    printf("NODE_PROC_CALL id: %d", NODE_PROC_CALL);
     break;
   }
   case NODE_IF_STMT: {
@@ -1386,6 +1749,7 @@ void free_node(ASTNode *node) {
     break;
   }
   case NODE_FUNC_CALL: {
+    printf("NODE_FUNC_CALL id: %d", NODE_FUNC_CALL);
     break;
   }
   case NODE_SET_CONSTRUCTOR: {

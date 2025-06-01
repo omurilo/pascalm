@@ -26,9 +26,10 @@ typedef enum {
   NODE_VAR_DECL,
   NODE_PROC_DECL,
   NODE_FUNC_DECL,
+  NODE_FORWARD_DECL,
 
   /* Tipos */
-  NODE_SCALAR_TYPE,
+  NODE_ENUMERATED_TYPE,
   NODE_SUBRANGE_TYPE,
   NODE_TYPE_IDENTIFIER,
   NODE_STRUCTURED_TYPE,
@@ -69,11 +70,13 @@ typedef enum {
   /* Auxiliares */
 
   NODE_FIELD_LIST,
+  NODE_INDEX_LIST,
   NODE_PARAMETER,
   NODE_VARIANT_RECORD,
   NODE_LIST,
   NODE_ERROR,
-  NODE_OPERATION
+  NODE_OPERATION,
+  NODE_SET_ELEMENT
 } NodeType;
 
 typedef enum {
@@ -108,6 +111,36 @@ typedef enum {
   SYMBOL_FORWARD_DECL, // Declaração forward de função/procedimento
   SYMBOL_BUILTIN       // Funções/procedimentos/tipos built-in
 } SymbolKind;
+
+typedef enum {
+    // Relacionais
+    BINOP_LT,     // <
+    BINOP_LTE,    // <=
+    BINOP_EQ,     // =
+    BINOP_NEQ,    // <>
+    BINOP_GTE,    // >=
+    BINOP_GT,     // >
+    
+    // Aditivos
+    BINOP_PLUS,   // +
+    BINOP_MINUS,  // -
+    BINOP_OR,     // or
+    
+    // Multiplicativos
+    BINOP_TIMES,  // *
+    BINOP_DIVIDE, // /
+    BINOP_DIV,    // div
+    BINOP_MOD,    // mod
+    BINOP_AND,    // and
+    BINOP_IN      // in
+} BinaryOperator;
+
+// Operadores unários
+typedef enum {
+    UNOP_PLUS,    // +
+    UNOP_MINUS,   // -
+    UNOP_NOT      // not
+} UnaryOperator;
 
 struct SourceLocation {
   int first_line;

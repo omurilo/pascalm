@@ -12,3 +12,14 @@ exercises/flex/language-tokenization/lexer
 exercises/bison/reverse-polish-notation/rpn
 exercises/bison/ast-stmts/ast-stmts
 final_work/final_work
+temp/.venv/bin/pip3
+temp/.venv/bin/pip
+temp/.venv/bin/cairosvg
+final_work/.venv/bin/markdown_py
+final_work/.venv/bin/panfl
+final_work/.venv/bin/pip3
+final_work/.venv/bin/panflute
+final_work/.venv/bin/pip
+final_work/.venv/bin/pygmentize
+final_work/.venv/bin/cairosvg
+final_work/src/pascal
