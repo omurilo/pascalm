@@ -11,30 +11,25 @@ typedef struct HeadingNode HeadingNode; // Lista de identificadores de cabeçalh
 typedef struct BlockNode BlockNode;     // Contém declarações e o corpo do pr
                                         // grama/procedimento/função
 typedef struct UsesNode UsesNode;       // Lista de módulos importados
-typedef struct ConstDeclarationNode
-    ConstDeclarationNode; // Declaração de constantes
+typedef struct ConstDeclarationNode ConstDeclarationNode; // Declaração de constantes
 typedef struct TypeDeclarationNode TypeDeclarationNode; // Declaração de tipos
 typedef struct VarDeclarationNode VarDeclarationNode; // Declaração de variáveis
-typedef struct ProcDeclarationNode
-    ProcDeclarationNode; // Declaração de procedimentos
+typedef struct ProcDeclarationNode ProcDeclarationNode; // Declaração de procedimentos
 typedef struct FuncDeclarationNode FuncDeclarationNode; // Declaração de funções
 
 typedef struct SimpleTypeNode SimpleTypeNode;      // Tipos simples
 /**/ typedef struct EnumeratedTypeNode EnumeratedTypeNode; // Tipo enumerado
 /**/ typedef struct SubrangeTypeNode SubrangeTypeNode; // Tipo de subintervalo
-/**/ typedef struct TypeIdentifierNode
-    TypeIdentifierNode; // Referência a um tipo identificador
+/**/ typedef struct TypeIdentifierNode TypeIdentifierNode; // Referência a um tipo identificador
 typedef struct StructuredTypeNode StructuredTypeNode; // Tipos estruturados
 /**/ typedef struct ArrayTypeNode ArrayTypeNode;      // Tipo array
 /**/ typedef struct RecordTypeNode RecordTypeNode;    // Tipo record
 /**/ typedef struct SetTypeNode SetTypeNode;          // Tipo set
 /**/ typedef struct FileTypeNode FileTypeNode;        // Tipo file
-typedef struct RepeatUntilNode RepeatUntilNode;
 typedef struct PointerTypeNode PointerTypeNode;       // Tipo ponteiro
 typedef struct PointerDerefNode PointerDerefNode;
 
-typedef struct CompoundStatementNode
-    CompoundStatementNode;                    // Bloco de comandos (begin...end)
+typedef struct CompoundStatementNode CompoundStatementNode;                    // Bloco de comandos (begin...end)
 typedef struct AssignmentNode AssignmentNode; // Atribuição (:=)
 typedef struct ProcedureCallNode ProcedureCallNode; // Chamada de procedimento
 typedef struct IfNode IfNode; // Estrutura condicional if-then-else
@@ -47,7 +42,6 @@ typedef struct CaseElseNode CaseElseNode;   // Cláusula else do case (extensão
 typedef struct WhileNode WhileNode;   // Laço while
 typedef struct WhileStmtNode WhileStmtNode;
 typedef struct RepeatUntilNode RepeatUntilNode;
-typedef struct RepeatNode RepeatNode; // Laço repeat until
 typedef struct ForStmtNode ForStmtNode;       // Laço for
 typedef struct ForListNode ForListNode;
 typedef struct WithNode WithNode;     // Estrutura with
@@ -77,6 +71,15 @@ typedef struct IndexList IndexList;
 typedef struct ErrorNode ErrorNode; // Nó para representar erros sintáticos
 typedef struct ElementNode ElementNode;
 typedef struct OperationNode OperationNode;
+
+typedef struct RecordFieldNode RecordFieldNode;
+typedef struct FieldListNode FieldListNode;
+typedef struct FixedPartNode FixedPartNode;
+typedef struct TagFieldNode TagFieldNode;
+typedef struct VariantPartNode VariantPartNode;
+typedef struct VariantListNode VariantListNode;
+typedef struct VariantRecordNode VariantRecordNode;
+
 /*
 // auxiliar na verificação semântica:
 struct BinaryOperationNode {
@@ -260,6 +263,17 @@ struct VarDeclarationNode {
     int scope_level;             // Scope level of declaration
 };
 
+struct ParameterNode {
+  ASTNode base;
+  ASTNode *params_list;
+};
+
+typedef struct ParameterIdentifierList {
+  ASTNode base;
+  ASTNode *params_id_list;
+  ASTNode *params_type;
+} ParameterIdentifierList;
+
 struct ProcDeclarationNode {
   ASTNode base;
   ASTNode *identifier;
@@ -401,10 +415,13 @@ struct LabeledStmtNode {
     ASTNode *statement;     // Statement
 };
 
-struct SimpleTypeNode {
-  ASTNode base;
-  char* type_name;
-};
+typedef struct ConstantNode {
+    ASTNode base;
+    ASTNode *value;
+    ASTNode *identifier;
+    bool is_literal;
+    char *sign;
+} ConstantNode;
 
 struct EnumeratedTypeNode {
   ASTNode base;
@@ -415,6 +432,11 @@ struct SubrangeTypeNode {
   ASTNode base;
   ASTNode *upper;
   ASTNode *lower;
+};
+
+struct SimpleTypeNode {
+  ASTNode base;
+  ASTNode *type;
 };
 
 struct StructuredTypeNode {
@@ -485,6 +507,48 @@ struct UnaryOperationNode {
   ASTNode base;
   UnaryOperator operator;
   ASTNode *operand;
+};
+
+struct RecordFieldNode {
+  ASTNode base;
+  ASTNode *field_list;
+  ASTNode *record_type;
+};
+
+struct FieldListNode {
+  ASTNode base;
+  ASTNode *fixed_part;
+  ASTNode *variant_part;
+};
+
+struct FixedPartNode {
+  ASTNode base;
+  ASTNode *fields;
+  int field_count;
+};
+
+struct TagFieldNode {
+  ASTNode base;
+  ASTNode *field;
+  ASTNode *tag_type;
+};
+
+struct VariantPartNode {
+  ASTNode base;
+  ASTNode *tag_field;
+  ASTNode *variant_list;
+};
+
+struct VariantListNode {
+  ASTNode base;
+  ASTNode *variants;
+  int variant_count;
+};
+
+struct VariantRecordNode {
+  ASTNode base;
+  ASTNode *case_labels;
+  ASTNode *field_list;
 };
 
 struct ElementNode {
@@ -633,8 +697,6 @@ ASTNode *create_procedure_param_node(ASTNode *identifier, ASTNode *params,
                                      SourceLocation loc);
 ASTNode *create_record_access_node(ASTNode *identifier, ASTNode *field,
                                    SourceLocation loc);
-ASTNode *create_record_access_type(ASTNode *identifier, ASTNode *field,
-                                   SourceLocation loc);
 ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,
                                   SourceLocation loc);
 ASTNode *create_record_type_node(ASTNode *field_list, SourceLocation loc);
@@ -666,7 +728,6 @@ ASTNode *create_set_literal_with_element(ASTNode *element, SourceLocation loc);
 ASTNode *add_element_to_set_literal(ASTNode* set_literal, ASTNode *element, SourceLocation loc);
 ASTNode *create_set_element(ASTNode *expr, SourceLocation loc);
 ASTNode *create_set_range_element(ASTNode* const1, ASTNode *const2, SourceLocation loc);
-ASTNode *create_expression(ASTNode *expr, ASTNode *relop, ASTNode  *add_expr, SourceLocation loc);
 ASTNode *create_expression_list(ASTNode *element, SourceLocation loc);
 ASTNode *append_expression_list(ASTNode *list, ASTNode *element, SourceLocation loc);
 ASTNode *append_case_list_node(ASTNode *list, ASTNode *element,

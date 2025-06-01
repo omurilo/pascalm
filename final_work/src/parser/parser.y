@@ -286,13 +286,14 @@ index_list:
   | index_list COMMA simple_type {
       $$ = append_index_to_list($1, $3, create_location(@$));
     }
+
 field_list:  
-    fixed_part { $$ = $1; }  
+    fixed_part { $$ = create_field_list($1, NULL, create_location(@$)); }  
   | fixed_part SEMICOLON variant_part { $$ = create_field_list($1, $3, create_location(@$)); }
-  | variant_part { $$ = $1; } 
+  | variant_part { $$ = create_field_list(NULL, $1, create_location(@$)); } 
 
 fixed_part:  
-    record_field { $$ = $1; }
+    record_field { $$ = create_fixed_part_node(NULL, $1, create_location(@$)); }
   | fixed_part SEMICOLON record_field { $$ = create_fixed_part_node($1, $3, create_location(@$)); }
 
 record_field: 
@@ -300,18 +301,18 @@ record_field:
   | fieldid_list COLON type { $$ = create_record_field_node($1, $3, create_location(@$)); }
 
 fieldid_list:  
-    fieldid { $$ = $1; /* Identifier of field identifier list (problably func or proc) */ }
+    fieldid { $$ = create_field_identifier_list_node(NULL, $1, create_location(@$)); }
   | fieldid_list COMMA fieldid { $$ = create_field_identifier_list_node($1, $3, create_location(@$)); }  
 
 variant_part: 
     CASE tag_field OF variant_list { $$ = create_case_of_variant_node($2, $4, create_location(@$)); }
 
 tag_field: 
-    typeid { $$ = $1; }
+    typeid { $$ = create_tag_field_node(NULL, $1, create_location(@$)); }
   | identifier COLON typeid { $$ = create_tag_field_node($1, $3, create_location(@$)); }
 
 variant_list:  
-    variant { $$ = $1; }
+    variant { $$ = append_variant_list(NULL, $1, create_location(@$)); }
   | variant_list SEMICOLON variant {
       $$ = append_variant_list($1, $3, create_location(@$));
     } 
@@ -344,7 +345,7 @@ parameters:
    L_PAREN formal_parameter_list R_PAREN { $$ = create_parameters_node($2, create_location(@$)); }
 
 formal_parameter_list:  
-    formal_parameter_section { $$ = $1; }
+    formal_parameter_section { $$ = create_formal_parameters_list_node(NULL, $1, create_location(@$)); }
   | formal_parameter_list SEMICOLON formal_parameter_section {
       $$ = create_formal_parameters_list_node($1, $3, create_location(@$));
     }
@@ -356,10 +357,9 @@ formal_parameter_section:
   | FUNCTION identifier parameters COLON typeid { $$ = create_function_param_node($2, $3, $5, create_location(@$)); }
 
 parameterid_list:  
-    identifier  { $$ = $1; /* identifier of func parameter */ }
+    identifier  { $$ = create_parameter_identifier_list_node(NULL, $1, create_location(@$)); }
   | parameterid_list COMMA identifier  { 
       $$ = create_parameter_identifier_list_node($1, $3, create_location(@$));
-      /* identifier of func parameter */
     }
 
 statement_list:  
