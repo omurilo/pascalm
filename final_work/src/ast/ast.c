@@ -831,6 +831,11 @@ ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {
   node->is_literal = false;
   node->identifier = identifier;
 
+  if (identifier->type == NODE_IDENTIFIER) {
+    IdentifierNode *id = (IdentifierNode *)identifier;
+    id->kind = SYMBOL_CONSTANT;
+  }
+
   return (ASTNode *)node;
 };
 
@@ -904,7 +909,7 @@ ASTNode *create_nil_literal(SourceLocation loc) {
   return (ASTNode *)node;
 };
 
-ASTNode *create_constant_signed_identifier(ASTNode *identifier, char *op,
+ASTNode *create_constant_signed_identifier(ASTNode *identifier, const char *sign,
                                            SourceLocation loc) {
   ConstantNode *node = (ConstantNode*)malloc(sizeof(ConstantNode));
   node->base.type = NODE_CONST_IDENTIFIER;
@@ -912,7 +917,12 @@ ASTNode *create_constant_signed_identifier(ASTNode *identifier, char *op,
   node->base.print = print_todo;
   node->is_literal = false;
   node->identifier = identifier;
-  node->sign = op;
+  node->sign = strdup(sign);
+
+  if (identifier->type == NODE_IDENTIFIER) {
+    IdentifierNode *id = (IdentifierNode *)identifier;
+    id->kind = SYMBOL_CONSTANT;
+  }
 
   return (ASTNode *)node;
 };
@@ -1059,8 +1069,6 @@ ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
   return list;
 };
 
-ASTNode *create_function_param_node(ASTNode *identifier, ASTNode *params,
-                                    ASTNode *type, SourceLocation loc) {};
 ASTNode *create_function_call_node(ASTNode *func, ASTNode *params,
                                    SourceLocation loc) {
   FunctionCallNode *node =
@@ -1078,6 +1086,7 @@ ASTNode *create_function_call_node(ASTNode *func, ASTNode *params,
 
   return (ASTNode *)node;
 };
+
 ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc) {
   GotoNode *node = (GotoNode *)malloc(sizeof(GotoNode));
   node->base.type = NODE_GOTO_STMT;
@@ -1085,7 +1094,8 @@ ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc) {
   node->base.print = print_todo;
   node->label = label;
   return (ASTNode *)node;
-}
+};
+
 ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt,
                              ASTNode *else_stmt, SourceLocation loc) {
   IfNode *node = (IfNode *)malloc(sizeof(IfNode));
@@ -1096,7 +1106,8 @@ ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt,
   node->then_stmt = then_stmt;
   node->else_stmt = else_stmt;
   return (ASTNode *)node;
-}
+};
+ 
 ASTNode *create_index_list_start(ASTNode *first_index, SourceLocation loc) {
   IndexList *new_list = (IndexList *)malloc(sizeof(IndexList));
   new_list->base.type = NODE_INDEX_LIST;
@@ -1165,16 +1176,20 @@ ASTNode *create_parameter_identifier_list_node(ASTNode *list, ASTNode *element,
   return list;
 };
 
-ASTNode *create_parameter_list_types_node(ASTNode *paramsid_list, ASTNode *type,
-                                          SourceLocation loc) {
-  ParameterIdentifierList *plist = (ParameterIdentifierList*)malloc(sizeof(ParameterIdentifierList));
-  plist->base.type = NODE_PARAM_ID_LIST;
-  plist->base.location = loc;
-  plist->base.print = print_todo;
-  plist->params_id_list = paramsid_list;
-  plist->params_type = type;
-  return (ASTNode *)plist;
-};       
+ASTNode* create_formal_parameter_section_node(ParameterKind kind, ASTNode* identifiers, ASTNode* type,
+                                             ASTNode* parameters, ASTNode* return_type, SourceLocation loc) {
+  FormalParameterSectionNode* node = (FormalParameterSectionNode*)malloc(sizeof(FormalParameterSectionNode));
+  node->base.type = NODE_FORMAL_PARAM_SECTION;
+  node->base.location = loc;
+  node->base.print = print_todo;
+  node->kind = kind;
+  node->identifiers = identifiers;
+  node->type = type;
+  node->parameters = parameters;
+  node->return_type = return_type;
+  
+  return (ASTNode*)node;
+}
 
 ASTNode *create_parameters_node(ASTNode *parameters_list, SourceLocation loc) {
   ParameterNode *node = (ParameterNode*)malloc(sizeof(ParameterNode));
@@ -1213,11 +1228,6 @@ ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params,
 
   return (ASTNode *)node;
 }
-
-ASTNode *create_procedure_param_node(ASTNode *identifier, ASTNode *params,
-                                     SourceLocation loc) {
-  // TODO: procedure param
-};
 
 ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,
                                   SourceLocation loc) {
@@ -1993,7 +2003,7 @@ const char* nodeTypeToString(NodeType type) {
       case NODE_VARIANT_PART: return "NODE_VARIANT_PART";
       case NODE_TAG_FIELD: return "NODE_TAG_FIELD";
       case NODE_FIXED_PART: return "NODE_FIXED_PART";
-      case NODE_PARAM_ID_LIST: return "NODE_PARAM_ID_LIST";
+      case NODE_FORMAL_PARAM_SECTION: return "NODE_FORMAL_PARAM_SECTION";
       case NODE_LIST: return "NODE_LIST";
       case NODE_ERROR: return "NODE_ERROR";
       case NODE_OPERATION: return "NODE_OPERATION";
@@ -2138,6 +2148,21 @@ void free_node(ASTNode *node) {
   case NODE_SET_CONSTRUCTOR: {
     break;
   }
+  case NODE_FORWARD_DECL:
+  case NODE_SIMPLE_TYPE:
+  case NODE_CASE_LABEL:
+  case NODE_FOR_LIST:
+  case NODE_LABELED_STMT:
+  case NODE_CONST_IDENTIFIER:
+  case NODE_RECORD_FIELD:
+  case NODE_INDEX_LIST:
+  case NODE_VARIANT_LIST:
+  case NODE_VARIANT_PART:
+  case NODE_TAG_FIELD:
+  case NODE_FIXED_PART:
+  case NODE_FORMAL_PARAM_SECTION:
+  case NODE_OPERATION:
+  case NODE_SET_ELEMENT:
   case NODE_FIELD_LIST: {
     break;
   }

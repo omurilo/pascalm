@@ -13,6 +13,13 @@ typedef struct SourceLocation SourceLocation;
 typedef struct SymbolEntry SymbolEntry;
 
 typedef enum {
+    PARAM_VALUE,        // Parâmetro por valor
+    PARAM_VAR,         // Parâmetro por referência (var)
+    PARAM_PROCEDURE,   // Parâmetro procedural
+    PARAM_FUNCTION     // Parâmetro funcional
+} ParameterKind;
+
+typedef enum {
   /* Estrutura do programa */
   NODE_PROGRAM,
   NODE_HEADING,
@@ -80,7 +87,7 @@ typedef enum {
   NODE_VARIANT_PART,
   NODE_TAG_FIELD,
   NODE_FIXED_PART,
-  NODE_PARAM_ID_LIST,
+  NODE_FORMAL_PARAM_SECTION,
   NODE_LIST,
   NODE_ERROR,
   NODE_OPERATION,

@@ -19,17 +19,43 @@ var
   i, soma: integer;
   alunos: array[1..MAX] of TAluno;
   opt: integer;
+  resultado: real;
 
 { Função simples }
 function Dobro(x: integer): integer;
 begin
   Dobro := x * 2;
 end;
+{ Função que recebe função }
+function AplicarOperacao(x, y: real; 
+                        function op(a, b: real): real): real;
+begin
+    AplicarOperacao := op(x, y);
+end;
+
+{ Função que é passada como parâmetro de outra função }
+function Multiplicar(a, b: real): real;
+begin
+    Multiplicar := a * b;
+end;
 
 { Procedimento simples }
 procedure ImprimeAluno(a: TAluno);
 begin
   write(a.nome, ': ', a.nota);
+end;
+
+{ Procedure que recebe procedure }
+procedure ExecutarOperacao(x, y: integer; 
+                           procedure operacao(a, b: integer));
+begin
+    operacao(x, y);
+end;
+
+{ Procedure que é passada como parâmetro para outra procedure }
+procedure Somar(a, b: integer);
+begin
+    writeln(a + b);
 end;
 
 begin
@@ -44,6 +70,13 @@ begin
 
   { Testa função }
   opt := Dobro(soma);
+
+  { Testa função com parâmetro de função }
+  resultado := AplicarOperacao(4.5, 2.0, Multiplicar);
+  writeln(resultado);
+
+  { Testa procedure com parâmetro de procedure }
+  ExecutarOperacao(5, 3, Somar);
 
   { Testa case }
   case opt of

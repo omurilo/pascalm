@@ -557,6 +557,16 @@ struct ElementNode {
   ASTNode *upper;
 };
 
+/* Estrutura para uma seção de parâmetros formais */
+typedef struct {
+    ASTNode base;
+    ParameterKind kind;
+    ASTNode* identifiers;    // Lista de identificadores
+    ASTNode* type;          // Tipo dos parâmetros (para PARAM_VALUE e PARAM_VAR)
+    ASTNode* parameters;    // Parâmetros do proc/func (para PARAM_PROCEDURE e PARAM_FUNCTION)
+    ASTNode* return_type;   // Tipo de retorno (apenas para PARAM_FUNCTION)
+} FormalParameterSectionNode;
+
 struct ListNode {
   ASTNode base;
   ASTNode *element;
@@ -660,7 +670,7 @@ ASTNode *create_string_literal(char *string, SourceLocation loc);
 ASTNode *create_char_literal(char character, SourceLocation loc);
 ASTNode *create_boolean_literal(bool boolean, SourceLocation loc);
 ASTNode *create_nil_literal(SourceLocation loc);
-ASTNode *create_constant_signed_identifier(ASTNode *value, char *op,
+ASTNode *create_constant_signed_identifier(ASTNode *value, const char *sign,
                                            SourceLocation loc);
 ASTNode *create_field_identifier_list_node(ASTNode *list, ASTNode *identifier,
                                            SourceLocation loc);
@@ -674,8 +684,6 @@ ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_list,
 ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto, SourceLocation loc);
 ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
                                             SourceLocation loc);
-ASTNode *create_function_param_node(ASTNode *identifier, ASTNode *params,
-                                    ASTNode *type, SourceLocation loc);
 ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc);
 ASTNode *create_identifier_node(char *id, SourceLocation loc);
 ASTNode *create_if_stmt_node(ASTNode *expression, ASTNode *then_part,
@@ -686,15 +694,13 @@ ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
 ASTNode *create_packed_type(ASTNode *type, SourceLocation loc);
 ASTNode *create_parameter_identifier_list_node(ASTNode *list, ASTNode *element,
                                                SourceLocation loc);
-ASTNode *create_parameter_list_types_node(ASTNode *list, ASTNode *type,
-                                          SourceLocation loc);
+ASTNode* create_formal_parameter_section_node(ParameterKind kind, ASTNode* identifiers, ASTNode* type,
+                                             ASTNode* parameters, ASTNode* return_type, SourceLocation loc);
 ASTNode *create_parameters_node(ASTNode *parameter, SourceLocation loc);
 ASTNode *create_pointer_deref_node(ASTNode *pointer, SourceLocation loc);
 ASTNode *create_pointer_type_node(ASTNode *type, SourceLocation loc);
 ASTNode *create_procedure_call_node(ASTNode *identifier, ASTNode *expr_list,
                                     SourceLocation loc);
-ASTNode *create_procedure_param_node(ASTNode *identifier, ASTNode *params,
-                                     SourceLocation loc);
 ASTNode *create_record_access_node(ASTNode *identifier, ASTNode *field,
                                    SourceLocation loc);
 ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,

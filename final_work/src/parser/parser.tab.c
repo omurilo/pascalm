@@ -665,17 +665,17 @@ static const yytype_int16 yyrline[] =
      258,   261,   266,   269,   272,   275,   278,   283,   286,   291,
      292,   293,   296,   297,   300,   301,   304,   305,   308,   311,
      312,   315,   316,   321,   322,   327,   328,   333,   336,   341,
-     342,   345,   348,   349,   354,   355,   356,   357,   360,   361,
-     366,   367,   370,   371,   372,   373,   374,   375,   376,   377,
-     378,   379,   380,   381,   382,   383,   384,   387,   388,   389,
-     390,   393,   396,   401,   402,   407,   412,   413,   418,   419,
-     424,   429,   432,   438,   439,   442,   445,   446,   451,   454,
-     457,   460,   463,   466,   469,   472,   475,   478,   481,   484,
-     487,   490,   493,   496,   499,   502,   505,   508,   511,   514,
-     517,   518,   519,   520,   521,   524,   527,   528,   531,   534,
-     539,   542,   547,   550,   555,   560,   561,   562,   563,   564,
-     565,   571,   576,   579,   580,   581,   582,   585,   590,   595,
-     598,   603,   608,   613,   618,   632
+     342,   345,   348,   349,   354,   357,   360,   364,   370,   371,
+     376,   377,   380,   381,   382,   383,   384,   385,   386,   387,
+     388,   389,   390,   391,   392,   393,   394,   397,   398,   399,
+     400,   403,   406,   411,   412,   417,   422,   423,   428,   429,
+     434,   439,   442,   448,   449,   452,   455,   456,   461,   464,
+     467,   470,   473,   476,   479,   482,   485,   488,   491,   494,
+     497,   500,   503,   506,   509,   512,   515,   518,   521,   524,
+     527,   528,   529,   530,   531,   534,   537,   538,   541,   544,
+     549,   552,   557,   560,   565,   570,   571,   572,   573,   574,
+     575,   581,   586,   589,   590,   591,   592,   595,   600,   605,
+     608,   613,   618,   623,   628,   642
 };
 #endif
 
@@ -2398,709 +2398,719 @@ yyreduce:
 
   case 74: /* formal_parameter_section: parameterid_list COLON typeid  */
 #line 354 "parser/parser.y"
-                                  { (yyval.node) = create_parameter_list_types_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2403 "parser/parser.tab.c"
+                                  { 
+        (yyval.node) = create_formal_parameter_section_node(PARAM_VALUE, (yyvsp[-2].node), (yyvsp[0].node), NULL, NULL, create_location((yyloc))); 
+      }
+#line 2405 "parser/parser.tab.c"
     break;
 
   case 75: /* formal_parameter_section: VAR parameterid_list COLON typeid  */
-#line 355 "parser/parser.y"
-                                      { (yyval.node) = create_parameter_list_types_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2409 "parser/parser.tab.c"
+#line 357 "parser/parser.y"
+                                        { 
+        (yyval.node) = create_formal_parameter_section_node(PARAM_VAR, (yyvsp[-2].node), (yyvsp[0].node), NULL, NULL, create_location((yyloc))); 
+      }
+#line 2413 "parser/parser.tab.c"
     break;
 
   case 76: /* formal_parameter_section: PROCEDURE identifier parameters  */
-#line 356 "parser/parser.y"
-                                    { (yyval.node) = create_procedure_param_node((yyvsp[-1].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2415 "parser/parser.tab.c"
+#line 360 "parser/parser.y"
+                                      { 
+        ASTNode* single_id = create_parameter_identifier_list_node(NULL, (yyvsp[-1].node), create_location((yylsp[-1])));
+        (yyval.node) = create_formal_parameter_section_node(PARAM_PROCEDURE, single_id, NULL, (yyvsp[0].node), NULL, create_location((yyloc))); 
+      }
+#line 2422 "parser/parser.tab.c"
     break;
 
   case 77: /* formal_parameter_section: FUNCTION identifier parameters COLON typeid  */
-#line 357 "parser/parser.y"
-                                                { (yyval.node) = create_function_param_node((yyvsp[-3].node), (yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2421 "parser/parser.tab.c"
+#line 364 "parser/parser.y"
+                                                  { 
+        ASTNode* single_id = create_parameter_identifier_list_node(NULL, (yyvsp[-3].node), create_location((yylsp[-3])));
+        (yyval.node) = create_formal_parameter_section_node(PARAM_FUNCTION, single_id, NULL, (yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); 
+      }
+#line 2431 "parser/parser.tab.c"
     break;
 
   case 78: /* parameterid_list: identifier  */
-#line 360 "parser/parser.y"
+#line 370 "parser/parser.y"
                 { (yyval.node) = create_parameter_identifier_list_node(NULL, (yyvsp[0].node), create_location((yyloc))); }
-#line 2427 "parser/parser.tab.c"
+#line 2437 "parser/parser.tab.c"
     break;
 
   case 79: /* parameterid_list: parameterid_list COMMA identifier  */
-#line 361 "parser/parser.y"
+#line 371 "parser/parser.y"
                                        { 
       (yyval.node) = create_parameter_identifier_list_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc)));
     }
-#line 2435 "parser/parser.tab.c"
+#line 2445 "parser/parser.tab.c"
     break;
 
   case 80: /* statement_list: statement  */
-#line 366 "parser/parser.y"
+#line 376 "parser/parser.y"
               { (yyval.node) = create_stmt_list_node((yyvsp[0].node), create_location((yyloc))); }
-#line 2441 "parser/parser.tab.c"
+#line 2451 "parser/parser.tab.c"
     break;
 
   case 81: /* statement_list: statement_list SEMICOLON statement  */
-#line 367 "parser/parser.y"
+#line 377 "parser/parser.y"
                                        { (yyval.node) = append_stmt_list((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2447 "parser/parser.tab.c"
+#line 2457 "parser/parser.tab.c"
     break;
 
   case 83: /* statement: variable ASSIGN expression  */
-#line 371 "parser/parser.y"
+#line 381 "parser/parser.y"
                                { (yyval.node) = create_assign_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2453 "parser/parser.tab.c"
+#line 2463 "parser/parser.tab.c"
     break;
 
   case 84: /* statement: BEGIN_TOK statement_list END  */
-#line 372 "parser/parser.y"
+#line 382 "parser/parser.y"
                                   { (yyval.node) = create_stmt_list_node((yyvsp[-1].node), create_location((yyloc))); }
-#line 2459 "parser/parser.tab.c"
+#line 2469 "parser/parser.tab.c"
     break;
 
   case 85: /* statement: IF expression THEN statement  */
-#line 373 "parser/parser.y"
+#line 383 "parser/parser.y"
                                                        { (yyval.node) = create_if_stmt_node((yyvsp[-2].node), (yyvsp[0].node), NULL, create_location((yyloc))); }
-#line 2465 "parser/parser.tab.c"
+#line 2475 "parser/parser.tab.c"
     break;
 
   case 86: /* statement: IF expression THEN statement ELSE statement  */
-#line 374 "parser/parser.y"
+#line 384 "parser/parser.y"
                                                 { (yyval.node) = create_if_stmt_node((yyvsp[-4].node), (yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2471 "parser/parser.tab.c"
+#line 2481 "parser/parser.tab.c"
     break;
 
   case 87: /* statement: CASE expression OF case_list END  */
-#line 375 "parser/parser.y"
+#line 385 "parser/parser.y"
                                      { (yyval.node) = create_case_stmt_node((yyvsp[-3].node), (yyvsp[-1].node), NULL, create_location((yyloc))); }
-#line 2477 "parser/parser.tab.c"
+#line 2487 "parser/parser.tab.c"
     break;
 
   case 88: /* statement: CASE expression OF case_list SEMICOLON case_else END  */
-#line 376 "parser/parser.y"
+#line 386 "parser/parser.y"
                                                          { (yyval.node) = create_case_stmt_with_else_node((yyvsp[-5].node), (yyvsp[-3].node), (yyvsp[-1].node), create_location((yyloc))); }
-#line 2483 "parser/parser.tab.c"
+#line 2493 "parser/parser.tab.c"
     break;
 
   case 89: /* statement: WHILE expression DO statement  */
-#line 377 "parser/parser.y"
+#line 387 "parser/parser.y"
                                   { (yyval.node) = create_while_stmt_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2489 "parser/parser.tab.c"
+#line 2499 "parser/parser.tab.c"
     break;
 
   case 90: /* statement: REPEAT statement_list UNTIL expression  */
-#line 378 "parser/parser.y"
+#line 388 "parser/parser.y"
                                            { (yyval.node) = create_repeat_until_stmt_list_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2495 "parser/parser.tab.c"
+#line 2505 "parser/parser.tab.c"
     break;
 
   case 91: /* statement: FOR varid ASSIGN for_list DO statement  */
-#line 379 "parser/parser.y"
+#line 389 "parser/parser.y"
                                            { (yyval.node) = create_for_stmt_node((yyvsp[-4].node), (yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2501 "parser/parser.tab.c"
+#line 2511 "parser/parser.tab.c"
     break;
 
   case 92: /* statement: procid  */
-#line 380 "parser/parser.y"
+#line 390 "parser/parser.y"
            { (yyval.node) = (yyvsp[0].node); }
-#line 2507 "parser/parser.tab.c"
+#line 2517 "parser/parser.tab.c"
     break;
 
   case 93: /* statement: procid L_PAREN expression_list R_PAREN  */
-#line 381 "parser/parser.y"
+#line 391 "parser/parser.y"
                                            { (yyval.node) = create_procedure_call_node((yyvsp[-3].node), (yyvsp[-1].node), create_location((yyloc))); }
-#line 2513 "parser/parser.tab.c"
+#line 2523 "parser/parser.tab.c"
     break;
 
   case 94: /* statement: GOTO label  */
-#line 382 "parser/parser.y"
+#line 392 "parser/parser.y"
                { (yyval.node) = create_goto_label_node((yyvsp[0].node), create_location((yyloc))); }
-#line 2519 "parser/parser.tab.c"
+#line 2529 "parser/parser.tab.c"
     break;
 
   case 95: /* statement: WITH record_variable_list DO statement  */
-#line 383 "parser/parser.y"
+#line 393 "parser/parser.y"
                                            { (yyval.node) = create_with_record_list_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2525 "parser/parser.tab.c"
+#line 2535 "parser/parser.tab.c"
     break;
 
   case 96: /* statement: label COLON statement  */
-#line 384 "parser/parser.y"
+#line 394 "parser/parser.y"
                           { (yyval.node) = create_label_stmt_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2531 "parser/parser.tab.c"
+#line 2541 "parser/parser.tab.c"
     break;
 
   case 97: /* variable: varid  */
-#line 387 "parser/parser.y"
+#line 397 "parser/parser.y"
           { (yyval.node) = (yyvsp[0].node); }
-#line 2537 "parser/parser.tab.c"
+#line 2547 "parser/parser.tab.c"
     break;
 
   case 98: /* variable: variable L_BRACKET subscript_list R_BRACKET  */
-#line 388 "parser/parser.y"
+#line 398 "parser/parser.y"
                                                 { (yyval.node) = create_array_access_node((yyvsp[-3].node), (yyvsp[-1].node), create_location((yyloc))); }
-#line 2543 "parser/parser.tab.c"
+#line 2553 "parser/parser.tab.c"
     break;
 
   case 99: /* variable: variable DOT fieldid  */
-#line 389 "parser/parser.y"
+#line 399 "parser/parser.y"
                          { (yyval.node) = create_record_access_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2549 "parser/parser.tab.c"
+#line 2559 "parser/parser.tab.c"
     break;
 
   case 100: /* variable: variable CARET  */
-#line 390 "parser/parser.y"
+#line 400 "parser/parser.y"
                    { (yyval.node) = create_pointer_deref_node((yyvsp[-1].node), create_location((yyloc))); }
-#line 2555 "parser/parser.tab.c"
+#line 2565 "parser/parser.tab.c"
     break;
 
   case 101: /* subscript_list: expression  */
-#line 393 "parser/parser.y"
+#line 403 "parser/parser.y"
                { 
         (yyval.node) = create_subscript_list_node((yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2563 "parser/parser.tab.c"
+#line 2573 "parser/parser.tab.c"
     break;
 
   case 102: /* subscript_list: subscript_list COMMA expression  */
-#line 396 "parser/parser.y"
+#line 406 "parser/parser.y"
                                     { 
         (yyval.node) = append_subscript_list_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2571 "parser/parser.tab.c"
+#line 2581 "parser/parser.tab.c"
     break;
 
   case 103: /* case_list: case_item  */
-#line 401 "parser/parser.y"
+#line 411 "parser/parser.y"
               { (yyval.node) = (yyvsp[0].node); }
-#line 2577 "parser/parser.tab.c"
+#line 2587 "parser/parser.tab.c"
     break;
 
   case 104: /* case_list: case_list SEMICOLON case_item  */
-#line 402 "parser/parser.y"
+#line 412 "parser/parser.y"
                                   { 
       (yyval.node) = append_case_item((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2585 "parser/parser.tab.c"
+#line 2595 "parser/parser.tab.c"
     break;
 
   case 105: /* case_item: case_label_list COLON statement  */
-#line 407 "parser/parser.y"
+#line 417 "parser/parser.y"
                                     { 
       (yyval.node) = create_case_item_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2593 "parser/parser.tab.c"
+#line 2603 "parser/parser.tab.c"
     break;
 
   case 106: /* case_label_list: case_label  */
-#line 412 "parser/parser.y"
+#line 422 "parser/parser.y"
                { (yyval.node) = create_case_label_list((yyvsp[0].node), create_location((yyloc))); }
-#line 2599 "parser/parser.tab.c"
+#line 2609 "parser/parser.tab.c"
     break;
 
   case 107: /* case_label_list: case_label_list COMMA case_label  */
-#line 413 "parser/parser.y"
+#line 423 "parser/parser.y"
                                      { 
       (yyval.node) = append_case_label_list((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2607 "parser/parser.tab.c"
+#line 2617 "parser/parser.tab.c"
     break;
 
   case 108: /* case_label: constant  */
-#line 418 "parser/parser.y"
+#line 428 "parser/parser.y"
              { (yyval.node) = (yyvsp[0].node); }
-#line 2613 "parser/parser.tab.c"
+#line 2623 "parser/parser.tab.c"
     break;
 
   case 109: /* case_label: constant DOTDOT constant  */
-#line 419 "parser/parser.y"
+#line 429 "parser/parser.y"
                              { 
       (yyval.node) = create_constant_range_node((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2621 "parser/parser.tab.c"
+#line 2631 "parser/parser.tab.c"
     break;
 
   case 110: /* case_else: ELSE statement SEMICOLON  */
-#line 424 "parser/parser.y"
+#line 434 "parser/parser.y"
                              {
       (yyval.node) = create_case_else_node((yyvsp[-1].node), create_location((yyloc)));
     }
-#line 2629 "parser/parser.tab.c"
+#line 2639 "parser/parser.tab.c"
     break;
 
   case 111: /* for_list: expression TO expression  */
-#line 429 "parser/parser.y"
+#line 439 "parser/parser.y"
                              { 
       (yyval.node) = create_for_list_node((yyvsp[-2].node), (yyvsp[0].node), false, create_location((yyloc))); 
     }
-#line 2637 "parser/parser.tab.c"
+#line 2647 "parser/parser.tab.c"
     break;
 
   case 112: /* for_list: expression DOWNTO expression  */
-#line 432 "parser/parser.y"
+#line 442 "parser/parser.y"
                                  { 
       (yyval.node) = create_for_list_node((yyvsp[-2].node), (yyvsp[0].node), true, create_location((yyloc))); 
     }
-#line 2645 "parser/parser.tab.c"
+#line 2655 "parser/parser.tab.c"
     break;
 
   case 113: /* expression_list: expression  */
-#line 438 "parser/parser.y"
+#line 448 "parser/parser.y"
                { (yyval.node) = create_expression_list((yyvsp[0].node), create_location((yyloc))); }
-#line 2651 "parser/parser.tab.c"
+#line 2661 "parser/parser.tab.c"
     break;
 
   case 114: /* expression_list: expression_list COMMA expression  */
-#line 439 "parser/parser.y"
+#line 449 "parser/parser.y"
                                      { (yyval.node) = append_expression_list((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); }
-#line 2657 "parser/parser.tab.c"
+#line 2667 "parser/parser.tab.c"
     break;
 
   case 115: /* label: unsigned_integer  */
-#line 442 "parser/parser.y"
+#line 452 "parser/parser.y"
                     { (yyval.node) = (yyvsp[0].node); }
-#line 2663 "parser/parser.tab.c"
+#line 2673 "parser/parser.tab.c"
     break;
 
   case 116: /* record_variable_list: variable  */
-#line 445 "parser/parser.y"
+#line 455 "parser/parser.y"
              { (yyval.node) = create_record_variable_list_node((yyvsp[0].node), create_location((yyloc))); }
-#line 2669 "parser/parser.tab.c"
+#line 2679 "parser/parser.tab.c"
     break;
 
   case 117: /* record_variable_list: record_variable_list COMMA variable  */
-#line 446 "parser/parser.y"
+#line 456 "parser/parser.y"
                                         { 
       (yyval.node) = append_record_variable_list((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2677 "parser/parser.tab.c"
+#line 2687 "parser/parser.tab.c"
     break;
 
   case 118: /* expression: expression LT additive_expression  */
-#line 451 "parser/parser.y"
+#line 461 "parser/parser.y"
                                       { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_LT, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2685 "parser/parser.tab.c"
+#line 2695 "parser/parser.tab.c"
     break;
 
   case 119: /* expression: expression LTE additive_expression  */
-#line 454 "parser/parser.y"
+#line 464 "parser/parser.y"
                                        { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_LTE, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2693 "parser/parser.tab.c"
+#line 2703 "parser/parser.tab.c"
     break;
 
   case 120: /* expression: expression EQ additive_expression  */
-#line 457 "parser/parser.y"
+#line 467 "parser/parser.y"
                                       { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_EQ, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2701 "parser/parser.tab.c"
+#line 2711 "parser/parser.tab.c"
     break;
 
   case 121: /* expression: expression NEQ additive_expression  */
-#line 460 "parser/parser.y"
+#line 470 "parser/parser.y"
                                        { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_NEQ, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2709 "parser/parser.tab.c"
+#line 2719 "parser/parser.tab.c"
     break;
 
   case 122: /* expression: expression GTE additive_expression  */
-#line 463 "parser/parser.y"
+#line 473 "parser/parser.y"
                                        { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_GTE, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2717 "parser/parser.tab.c"
+#line 2727 "parser/parser.tab.c"
     break;
 
   case 123: /* expression: expression GT additive_expression  */
-#line 466 "parser/parser.y"
+#line 476 "parser/parser.y"
                                       { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_GT, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2725 "parser/parser.tab.c"
+#line 2735 "parser/parser.tab.c"
     break;
 
   case 124: /* expression: additive_expression  */
-#line 469 "parser/parser.y"
+#line 479 "parser/parser.y"
                         { (yyval.node) = (yyvsp[0].node); }
-#line 2731 "parser/parser.tab.c"
+#line 2741 "parser/parser.tab.c"
     break;
 
   case 125: /* additive_expression: additive_expression PLUS multiplicative_expression  */
-#line 472 "parser/parser.y"
+#line 482 "parser/parser.y"
                                                        { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_PLUS, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2739 "parser/parser.tab.c"
+#line 2749 "parser/parser.tab.c"
     break;
 
   case 126: /* additive_expression: additive_expression MINUS multiplicative_expression  */
-#line 475 "parser/parser.y"
+#line 485 "parser/parser.y"
                                                         { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_MINUS, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2747 "parser/parser.tab.c"
+#line 2757 "parser/parser.tab.c"
     break;
 
   case 127: /* additive_expression: additive_expression OR multiplicative_expression  */
-#line 478 "parser/parser.y"
+#line 488 "parser/parser.y"
                                                      { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_OR, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2755 "parser/parser.tab.c"
+#line 2765 "parser/parser.tab.c"
     break;
 
   case 128: /* additive_expression: multiplicative_expression  */
-#line 481 "parser/parser.y"
+#line 491 "parser/parser.y"
                               { (yyval.node) = (yyvsp[0].node); }
-#line 2761 "parser/parser.tab.c"
+#line 2771 "parser/parser.tab.c"
     break;
 
   case 129: /* multiplicative_expression: multiplicative_expression TIMES unary_expression  */
-#line 484 "parser/parser.y"
+#line 494 "parser/parser.y"
                                                      { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_TIMES, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2769 "parser/parser.tab.c"
+#line 2779 "parser/parser.tab.c"
     break;
 
   case 130: /* multiplicative_expression: multiplicative_expression DIVIDE unary_expression  */
-#line 487 "parser/parser.y"
+#line 497 "parser/parser.y"
                                                       { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_DIVIDE, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2777 "parser/parser.tab.c"
+#line 2787 "parser/parser.tab.c"
     break;
 
   case 131: /* multiplicative_expression: multiplicative_expression DIV unary_expression  */
-#line 490 "parser/parser.y"
+#line 500 "parser/parser.y"
                                                    { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_DIV, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2785 "parser/parser.tab.c"
+#line 2795 "parser/parser.tab.c"
     break;
 
   case 132: /* multiplicative_expression: multiplicative_expression MOD unary_expression  */
-#line 493 "parser/parser.y"
+#line 503 "parser/parser.y"
                                                    { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_MOD, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2793 "parser/parser.tab.c"
+#line 2803 "parser/parser.tab.c"
     break;
 
   case 133: /* multiplicative_expression: multiplicative_expression AND unary_expression  */
-#line 496 "parser/parser.y"
+#line 506 "parser/parser.y"
                                                    { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_AND, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2801 "parser/parser.tab.c"
+#line 2811 "parser/parser.tab.c"
     break;
 
   case 134: /* multiplicative_expression: multiplicative_expression IN unary_expression  */
-#line 499 "parser/parser.y"
+#line 509 "parser/parser.y"
                                                   { 
       (yyval.node) = create_binary_expression((yyvsp[-2].node), BINOP_IN, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2809 "parser/parser.tab.c"
+#line 2819 "parser/parser.tab.c"
     break;
 
   case 135: /* multiplicative_expression: unary_expression  */
-#line 502 "parser/parser.y"
+#line 512 "parser/parser.y"
                      { (yyval.node) = (yyvsp[0].node); }
-#line 2815 "parser/parser.tab.c"
+#line 2825 "parser/parser.tab.c"
     break;
 
   case 136: /* unary_expression: PLUS unary_expression  */
-#line 505 "parser/parser.y"
+#line 515 "parser/parser.y"
                           { 
       (yyval.node) = create_unary_expression(UNOP_PLUS, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2823 "parser/parser.tab.c"
+#line 2833 "parser/parser.tab.c"
     break;
 
   case 137: /* unary_expression: MINUS unary_expression  */
-#line 508 "parser/parser.y"
+#line 518 "parser/parser.y"
                                      { 
       (yyval.node) = create_unary_expression(UNOP_MINUS, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2831 "parser/parser.tab.c"
+#line 2841 "parser/parser.tab.c"
     break;
 
   case 138: /* unary_expression: NOT unary_expression  */
-#line 511 "parser/parser.y"
+#line 521 "parser/parser.y"
                                    { 
       (yyval.node) = create_unary_expression(UNOP_NOT, (yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2839 "parser/parser.tab.c"
+#line 2849 "parser/parser.tab.c"
     break;
 
   case 139: /* unary_expression: primary_expression  */
-#line 514 "parser/parser.y"
+#line 524 "parser/parser.y"
                        { (yyval.node) = (yyvsp[0].node); }
-#line 2845 "parser/parser.tab.c"
+#line 2855 "parser/parser.tab.c"
     break;
 
   case 140: /* primary_expression: variable  */
-#line 517 "parser/parser.y"
+#line 527 "parser/parser.y"
              { (yyval.node) = (yyvsp[0].node); }
-#line 2851 "parser/parser.tab.c"
+#line 2861 "parser/parser.tab.c"
     break;
 
   case 141: /* primary_expression: unsigned_integer  */
-#line 518 "parser/parser.y"
+#line 528 "parser/parser.y"
                      { (yyval.node) = (yyvsp[0].node); }
-#line 2857 "parser/parser.tab.c"
+#line 2867 "parser/parser.tab.c"
     break;
 
   case 142: /* primary_expression: unsigned_real  */
-#line 519 "parser/parser.y"
+#line 529 "parser/parser.y"
                   { (yyval.node) = (yyvsp[0].node); }
-#line 2863 "parser/parser.tab.c"
+#line 2873 "parser/parser.tab.c"
     break;
 
   case 143: /* primary_expression: string_literal  */
-#line 520 "parser/parser.y"
+#line 530 "parser/parser.y"
                    { (yyval.node) = (yyvsp[0].node); }
-#line 2869 "parser/parser.tab.c"
+#line 2879 "parser/parser.tab.c"
     break;
 
   case 144: /* primary_expression: NIL  */
-#line 521 "parser/parser.y"
+#line 531 "parser/parser.y"
         {
       (yyval.node) = create_nil_literal(create_location((yyloc)));
     }
-#line 2877 "parser/parser.tab.c"
+#line 2887 "parser/parser.tab.c"
     break;
 
   case 145: /* primary_expression: funcid L_PAREN expression_list R_PAREN  */
-#line 524 "parser/parser.y"
+#line 534 "parser/parser.y"
                                            {
       (yyval.node) = create_function_call_node((yyvsp[-3].node), (yyvsp[-1].node), create_location((yyloc)));
     }
-#line 2885 "parser/parser.tab.c"
+#line 2895 "parser/parser.tab.c"
     break;
 
   case 146: /* primary_expression: L_BRACKET element_list R_BRACKET  */
-#line 527 "parser/parser.y"
+#line 537 "parser/parser.y"
                                      { (yyval.node) = (yyvsp[-1].node); }
-#line 2891 "parser/parser.tab.c"
+#line 2901 "parser/parser.tab.c"
     break;
 
   case 147: /* primary_expression: L_PAREN expression R_PAREN  */
-#line 528 "parser/parser.y"
+#line 538 "parser/parser.y"
                                { (yyval.node) = (yyvsp[-1].node); }
-#line 2897 "parser/parser.tab.c"
+#line 2907 "parser/parser.tab.c"
     break;
 
   case 148: /* element_list: empty  */
-#line 531 "parser/parser.y"
+#line 541 "parser/parser.y"
           { 
       (yyval.node) = create_set_literal(create_location((yyloc))); 
     }
-#line 2905 "parser/parser.tab.c"
+#line 2915 "parser/parser.tab.c"
     break;
 
   case 149: /* element_list: element_list_non_empty  */
-#line 534 "parser/parser.y"
+#line 544 "parser/parser.y"
                            { 
       (yyval.node) = (yyvsp[0].node); 
     }
-#line 2913 "parser/parser.tab.c"
+#line 2923 "parser/parser.tab.c"
     break;
 
   case 150: /* element_list_non_empty: element  */
-#line 539 "parser/parser.y"
+#line 549 "parser/parser.y"
             { 
       (yyval.node) = create_set_literal_with_element((yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2921 "parser/parser.tab.c"
+#line 2931 "parser/parser.tab.c"
     break;
 
   case 151: /* element_list_non_empty: element_list_non_empty COMMA element  */
-#line 542 "parser/parser.y"
+#line 552 "parser/parser.y"
                                          {
       (yyval.node) = add_element_to_set_literal((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc)));
     }
-#line 2929 "parser/parser.tab.c"
+#line 2939 "parser/parser.tab.c"
     break;
 
   case 152: /* element: expression  */
-#line 547 "parser/parser.y"
+#line 557 "parser/parser.y"
                { 
       (yyval.node) = create_set_element((yyvsp[0].node), create_location((yyloc))); 
     }
-#line 2937 "parser/parser.tab.c"
+#line 2947 "parser/parser.tab.c"
     break;
 
   case 153: /* element: expression DOTDOT expression  */
-#line 550 "parser/parser.y"
+#line 560 "parser/parser.y"
                                  {
       (yyval.node) = create_set_range_element((yyvsp[-2].node), (yyvsp[0].node), create_location((yyloc)));
     }
-#line 2945 "parser/parser.tab.c"
+#line 2955 "parser/parser.tab.c"
     break;
 
   case 154: /* constid: identifier  */
-#line 555 "parser/parser.y"
+#line 565 "parser/parser.y"
                {
       (yyval.node) = update_identifier_node_kind((yyvsp[0].node), SYMBOL_CONSTANT, true);
    }
-#line 2953 "parser/parser.tab.c"
+#line 2963 "parser/parser.tab.c"
     break;
 
   case 155: /* typeid: CHAR  */
-#line 560 "parser/parser.y"
+#line 570 "parser/parser.y"
          { (yyval.node) = create_builtin_type_identifier("char", create_location((yyloc))); }
-#line 2959 "parser/parser.tab.c"
+#line 2969 "parser/parser.tab.c"
     break;
 
   case 156: /* typeid: BOOLEAN  */
-#line 561 "parser/parser.y"
+#line 571 "parser/parser.y"
             { (yyval.node) = create_builtin_type_identifier("boolean", create_location((yyloc))); }
-#line 2965 "parser/parser.tab.c"
+#line 2975 "parser/parser.tab.c"
     break;
 
   case 157: /* typeid: INTEGER  */
-#line 562 "parser/parser.y"
+#line 572 "parser/parser.y"
             { (yyval.node) = create_builtin_type_identifier("integer", create_location((yyloc))); }
-#line 2971 "parser/parser.tab.c"
+#line 2981 "parser/parser.tab.c"
     break;
 
   case 158: /* typeid: REAL  */
-#line 563 "parser/parser.y"
+#line 573 "parser/parser.y"
          { (yyval.node) = create_builtin_type_identifier("real", create_location((yyloc))); }
-#line 2977 "parser/parser.tab.c"
+#line 2987 "parser/parser.tab.c"
     break;
 
   case 159: /* typeid: STRING  */
-#line 564 "parser/parser.y"
+#line 574 "parser/parser.y"
            { (yyval.node) = create_builtin_type_identifier("string", create_location((yyloc))); }
-#line 2983 "parser/parser.tab.c"
+#line 2993 "parser/parser.tab.c"
     break;
 
   case 160: /* typeid: identifier  */
-#line 565 "parser/parser.y"
+#line 575 "parser/parser.y"
                {
       ASTNode *typeId = update_identifier_node_kind((yyvsp[0].node), SYMBOL_TYPE, true);
       (yyval.node) = create_type_identifier(typeId, create_location((yyloc)));
     }
-#line 2992 "parser/parser.tab.c"
+#line 3002 "parser/parser.tab.c"
     break;
 
   case 161: /* funcid: identifier  */
-#line 571 "parser/parser.y"
+#line 581 "parser/parser.y"
               { 
     (yyval.node) = update_identifier_node_kind((yyvsp[0].node), SYMBOL_FUNCTION, true);
   }
-#line 3000 "parser/parser.tab.c"
+#line 3010 "parser/parser.tab.c"
     break;
 
   case 162: /* procid: identifier  */
-#line 576 "parser/parser.y"
+#line 586 "parser/parser.y"
              { 
     (yyval.node) = update_identifier_node_kind((yyvsp[0].node), SYMBOL_PROCEDURE, true);
   }
-#line 3008 "parser/parser.tab.c"
+#line 3018 "parser/parser.tab.c"
     break;
 
   case 163: /* procid: WRITE  */
-#line 579 "parser/parser.y"
+#line 589 "parser/parser.y"
           { (yyval.node) = create_builtin_identifier("write", create_location((yyloc))); }
-#line 3014 "parser/parser.tab.c"
+#line 3024 "parser/parser.tab.c"
     break;
 
   case 164: /* procid: WRITELN  */
-#line 580 "parser/parser.y"
+#line 590 "parser/parser.y"
             { (yyval.node) = create_builtin_identifier("writeln", create_location((yyloc))); }
-#line 3020 "parser/parser.tab.c"
+#line 3030 "parser/parser.tab.c"
     break;
 
   case 165: /* procid: READ  */
-#line 581 "parser/parser.y"
+#line 591 "parser/parser.y"
          { (yyval.node) = create_builtin_identifier("read", create_location((yyloc))); }
-#line 3026 "parser/parser.tab.c"
+#line 3036 "parser/parser.tab.c"
     break;
 
   case 166: /* procid: READLN  */
-#line 582 "parser/parser.y"
+#line 592 "parser/parser.y"
            { (yyval.node) = create_builtin_identifier("readln", create_location((yyloc))); }
-#line 3032 "parser/parser.tab.c"
+#line 3042 "parser/parser.tab.c"
     break;
 
   case 167: /* fieldid: identifier  */
-#line 585 "parser/parser.y"
+#line 595 "parser/parser.y"
              { 
     (yyval.node) = update_identifier_node_kind((yyvsp[0].node), SYMBOL_FIELD, true);
   }
-#line 3040 "parser/parser.tab.c"
+#line 3050 "parser/parser.tab.c"
     break;
 
   case 168: /* varid: identifier  */
-#line 590 "parser/parser.y"
+#line 600 "parser/parser.y"
              {
     (yyval.node) = update_identifier_node_kind((yyvsp[0].node), SYMBOL_VARIABLE, true);
   }
-#line 3048 "parser/parser.tab.c"
+#line 3058 "parser/parser.tab.c"
     break;
 
   case 169: /* identifier: IDENTIFIER  */
-#line 595 "parser/parser.y"
+#line 605 "parser/parser.y"
               { (yyval.node) = create_identifier_node((yyvsp[0].string), create_location((yyloc))); }
-#line 3054 "parser/parser.tab.c"
+#line 3064 "parser/parser.tab.c"
     break;
 
   case 170: /* unsigned_integer: INTEGER_LITERAL  */
-#line 598 "parser/parser.y"
+#line 608 "parser/parser.y"
                     {
       (yyval.node) = create_unsigned_integer_node((yyvsp[0].integer), create_location((yyloc)));
     }
-#line 3062 "parser/parser.tab.c"
+#line 3072 "parser/parser.tab.c"
     break;
 
   case 171: /* unsigned_real: REAL_LITERAL  */
-#line 603 "parser/parser.y"
+#line 613 "parser/parser.y"
                  {
       (yyval.node) = create_unsigned_real_node((yyvsp[0].number), create_location((yyloc)));
     }
-#line 3070 "parser/parser.tab.c"
+#line 3080 "parser/parser.tab.c"
     break;
 
   case 172: /* integer_literal: INTEGER_LITERAL  */
-#line 608 "parser/parser.y"
+#line 618 "parser/parser.y"
                     {
       (yyval.node) = create_integer_literal((yyvsp[0].integer), create_location((yyloc)));
     }
-#line 3078 "parser/parser.tab.c"
+#line 3088 "parser/parser.tab.c"
     break;
 
   case 173: /* real_literal: REAL_LITERAL  */
-#line 613 "parser/parser.y"
+#line 623 "parser/parser.y"
                  {
       (yyval.node) = create_real_literal((yyvsp[0].number), create_location((yyloc)));
     }
-#line 3086 "parser/parser.tab.c"
+#line 3096 "parser/parser.tab.c"
     break;
 
   case 174: /* string_literal: STRING_LITERAL  */
-#line 618 "parser/parser.y"
+#line 628 "parser/parser.y"
                    {
       (yyval.node) = create_string_literal((yyvsp[0].string), create_location((yyloc)));
     }
-#line 3094 "parser/parser.tab.c"
+#line 3104 "parser/parser.tab.c"
     break;
 
   case 175: /* empty: %empty  */
-#line 632 "parser/parser.y"
+#line 642 "parser/parser.y"
        { (yyval.node) = NULL; }
-#line 3100 "parser/parser.tab.c"
+#line 3110 "parser/parser.tab.c"
     break;
 
 
-#line 3104 "parser/parser.tab.c"
+#line 3114 "parser/parser.tab.c"
 
       default: break;
     }

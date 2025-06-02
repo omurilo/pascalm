@@ -350,11 +350,21 @@ formal_parameter_list:
       $$ = create_formal_parameters_list_node($1, $3, create_location(@$));
     }
 
-formal_parameter_section:  
-    parameterid_list COLON typeid { $$ = create_parameter_list_types_node($1, $3, create_location(@$)); }
-  | VAR parameterid_list COLON typeid { $$ = create_parameter_list_types_node($2, $4, create_location(@$)); }
-  | PROCEDURE identifier parameters { $$ = create_procedure_param_node($2, $3, create_location(@$)); }
-  | FUNCTION identifier parameters COLON typeid { $$ = create_function_param_node($2, $3, $5, create_location(@$)); }
+formal_parameter_section:
+    parameterid_list COLON typeid { 
+        $$ = create_formal_parameter_section_node(PARAM_VALUE, $1, $3, NULL, NULL, create_location(@$)); 
+      }
+    | VAR parameterid_list COLON typeid { 
+        $$ = create_formal_parameter_section_node(PARAM_VAR, $2, $4, NULL, NULL, create_location(@$)); 
+      }
+    | PROCEDURE identifier parameters { 
+        ASTNode* single_id = create_parameter_identifier_list_node(NULL, $2, create_location(@2));
+        $$ = create_formal_parameter_section_node(PARAM_PROCEDURE, single_id, NULL, $3, NULL, create_location(@$)); 
+      }
+    | FUNCTION identifier parameters COLON typeid { 
+        ASTNode* single_id = create_parameter_identifier_list_node(NULL, $2, create_location(@2));
+        $$ = create_formal_parameter_section_node(PARAM_FUNCTION, single_id, NULL, $3, $5, create_location(@$)); 
+      }
 
 parameterid_list:  
     identifier  { $$ = create_parameter_identifier_list_node(NULL, $1, create_location(@$)); }
