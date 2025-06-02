@@ -498,14 +498,14 @@ struct PointerTypeNode {
 
 struct BinaryOperationNode {
   ASTNode base;
-  BinaryOperator operator;
+  BinaryOperator op;
   ASTNode *left;
   ASTNode *right;
 };
 
 struct UnaryOperationNode {
   ASTNode base;
-  UnaryOperator operator;
+  UnaryOperator op;
   ASTNode *operand;
 };
 

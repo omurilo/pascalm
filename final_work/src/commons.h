@@ -12,14 +12,14 @@ typedef struct ASTNode ASTNode;
 typedef struct SourceLocation SourceLocation;
 typedef struct SymbolEntry SymbolEntry;
 
-typedef enum {
+typedef enum ParameterKind {
     PARAM_VALUE,        // Parâmetro por valor
     PARAM_VAR,         // Parâmetro por referência (var)
     PARAM_PROCEDURE,   // Parâmetro procedural
     PARAM_FUNCTION     // Parâmetro funcional
 } ParameterKind;
 
-typedef enum {
+typedef enum NodeType {
   /* Estrutura do programa */
   NODE_PROGRAM,
   NODE_HEADING,
@@ -94,7 +94,7 @@ typedef enum {
   NODE_SET_ELEMENT
 } NodeType;
 
-typedef enum {
+typedef enum SymbolKind {
   SYMBOL_UNKNOWN, // Ainda não resolvido
 
   // Tipos de identificadores primários
@@ -127,7 +127,7 @@ typedef enum {
   SYMBOL_BUILTIN       // Funções/procedimentos/tipos built-in
 } SymbolKind;
 
-typedef enum {
+typedef enum BinaryOperator {
     // Relacionais
     BINOP_LT,     // <
     BINOP_LTE,    // <=
@@ -151,7 +151,7 @@ typedef enum {
 } BinaryOperator;
 
 // Operadores unários
-typedef enum {
+typedef enum UnaryOperator {
     UNOP_PLUS,    // +
     UNOP_MINUS,   // -
     UNOP_NOT      // not
