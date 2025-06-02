@@ -312,8 +312,13 @@ void print_stmt_list(ASTNode *node, int indent) {
         break;
       }
       case NODE_BINARY_EXPR: {
-        printf("%*sNODE_BINARY_EXPR-> (%s)\n", indent, "",debug_location(current->element->location));
+        printf("%*sNODE_BINARY_EXPR-> (%s)\n", indent, "", debug_location(current->element->location));
         print_binary_operation(current->element, indent+2);
+        break;
+      }
+      case NODE_LITERAL: {
+        printf("%*sNODE_LITERAL -> (%s)\n", indent, "", debug_location(current->element->location));
+        print_literal_value(current->element, indent+2);
         break;
       }
       default:
@@ -968,6 +973,7 @@ ASTNode *create_file_of_type_node(ASTNode *type, SourceLocation loc) {
   }
   return (ASTNode *)node;
 };
+
 ASTNode *create_field_list(ASTNode *fixed, ASTNode *variant,
                            SourceLocation loc) {
   FieldListNode *node = (FieldListNode*)malloc(sizeof(FieldListNode));
@@ -1031,7 +1037,8 @@ ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_list,
   node->is_downto = fl->is_downto;
 
   return (ASTNode *)node;
-}
+};
+
 ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto,
                               SourceLocation loc) {
   ForListNode *node = (ForListNode *)malloc(sizeof(ForListNode));
@@ -1042,7 +1049,8 @@ ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto,
   node->end_expr = end;
   node->is_downto = is_downto;
   return (ASTNode *)node;
-}
+};
+
 ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
                                             SourceLocation loc) {
   if (param == NULL) {
@@ -1138,7 +1146,7 @@ ASTNode *create_enumerated_type_node(ASTNode *identifiers_list, SourceLocation l
   node->base.print = print_todo;
   node->identifiers_list = identifiers_list;
   return (ASTNode *)node;
-}
+};
 
 ASTNode *create_packed_type(ASTNode *type, SourceLocation loc) {
   StructuredTypeNode *node = (StructuredTypeNode *)malloc(sizeof(StructuredTypeNode));
@@ -1189,7 +1197,7 @@ ASTNode* create_formal_parameter_section_node(ParameterKind kind, ASTNode* ident
   node->return_type = return_type;
   
   return (ASTNode*)node;
-}
+};
 
 ASTNode *create_parameters_node(ASTNode *parameters_list, SourceLocation loc) {
   ParameterNode *node = (ParameterNode*)malloc(sizeof(ParameterNode));
@@ -1259,7 +1267,7 @@ ASTNode *create_repeat_until_stmt_list_node(ASTNode *body, ASTNode *condition,
   node->body = body;
   node->condition = condition;
   return (ASTNode *)node;
-}
+};
 
 ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc) {
   SetTypeNode *node = (SetTypeNode *)malloc(sizeof(SetTypeNode));
@@ -1269,6 +1277,7 @@ ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc) {
   node->type = type;
   return (ASTNode *)node;
 };
+
 ASTNode *create_simple_type_node(ASTNode *type, SourceLocation loc) {
   SimpleTypeNode *node = (SimpleTypeNode*)malloc(sizeof(SimpleTypeNode));
   node->base.type = NODE_SIMPLE_TYPE;
@@ -1358,7 +1367,7 @@ ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc) {
   node->literal_type = LITERAL_INTEGER;
   node->value.int_val = integer;
   return (ASTNode *)node;
-}
+};
 
 ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
   LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
@@ -1368,7 +1377,7 @@ ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
   node->literal_type = LITERAL_REAL;
   node->value.real_val = real;
   return (ASTNode *)node;
-}
+};
 
 ASTNode *create_record_variable_list_node(ASTNode *record_var,
                                           SourceLocation loc) {
@@ -1379,7 +1388,7 @@ ASTNode *create_record_variable_list_node(ASTNode *record_var,
   node->element = record_var;
   node->next = NULL;
   return (ASTNode *)node;
-}
+};
 
 ASTNode *append_case_item(ASTNode *list, ASTNode *case_item,
                           SourceLocation loc) {
@@ -1398,7 +1407,7 @@ ASTNode *append_case_item(ASTNode *list, ASTNode *case_item,
   } else {
     return case_item;
   }
-}
+};
 
 ASTNode *append_case_label_list(ASTNode *list, ASTNode *case_label,
                                 SourceLocation loc) {
@@ -1417,7 +1426,7 @@ ASTNode *append_case_label_list(ASTNode *list, ASTNode *case_label,
   } else {
     return case_label;
   }
-}
+};
 
 // Adiciona um record à lista de records no with
 ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var,
@@ -1444,7 +1453,7 @@ ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var,
   }
     
   return (ASTNode *)new_node;
-}
+};
 
 ASTNode *create_expression_list(ASTNode *element,
                                 SourceLocation loc) {
@@ -1455,8 +1464,7 @@ ASTNode *create_expression_list(ASTNode *element,
   node->element = element;
   node->next = NULL;
   return (ASTNode *)node;
-
-}
+};
 
 /* APPENDS */
 ASTNode *append_expression_list(ASTNode *list, ASTNode *element,
@@ -1483,7 +1491,7 @@ ASTNode *append_expression_list(ASTNode *list, ASTNode *element,
   }
 
   return (ASTNode *)new_node;
-}
+};
 
 ASTNode *append_identifier_list_node(ASTNode *list, ASTNode *element,
                                      SourceLocation loc) {
@@ -1509,7 +1517,7 @@ ASTNode *append_identifier_list_node(ASTNode *list, ASTNode *element,
   }
 
   return (ASTNode *)new_node;
-}
+};
 
 ASTNode *append_label_declaration(ASTNode *list, ASTNode *element,
                                   SourceLocation loc) {
@@ -1530,7 +1538,7 @@ ASTNode *append_label_declaration(ASTNode *list, ASTNode *element,
 
   current->next = (ASTNode *)new_node;
   return list;
-}
+};
 
 ASTNode *append_constant_declaration(ASTNode *list, ASTNode *id,
                                      ASTNode *constant, SourceLocation loc) {
@@ -1552,7 +1560,7 @@ ASTNode *append_constant_declaration(ASTNode *list, ASTNode *id,
 
   current->next = (ASTNode *)new_node;
   return list;
-}
+};
 
 ASTNode *append_type_declaration(ASTNode *list, ASTNode *id, ASTNode *type_expr,
                                  SourceLocation loc) {
@@ -1574,7 +1582,7 @@ ASTNode *append_type_declaration(ASTNode *list, ASTNode *id, ASTNode *type_expr,
 
   current->next = (ASTNode *)new_node;
   return list;
-}
+};
 
 ASTNode *append_subscript_list_node(ASTNode *list, ASTNode *expr,
                                     SourceLocation loc) {
@@ -1600,7 +1608,7 @@ ASTNode *append_subscript_list_node(ASTNode *list, ASTNode *expr,
   }
 
   return (ASTNode *)new_node;
-}
+};
 
 ASTNode *append_case_list_node(ASTNode *list, ASTNode *expr,
                                SourceLocation loc) {
@@ -1626,7 +1634,7 @@ ASTNode *append_case_list_node(ASTNode *list, ASTNode *expr,
   }
 
   return (ASTNode *)new_node;
-}
+};
 
 ASTNode *create_set_literal(SourceLocation loc) {
   SetLiteral *node = (SetLiteral *)malloc(sizeof(SetLiteral));
@@ -1638,7 +1646,7 @@ ASTNode *create_set_literal(SourceLocation loc) {
   node->count = 0;
 
   return (ASTNode *)node;
-}
+};
 
 ASTNode *create_set_literal_with_element(ASTNode *element, SourceLocation loc){
   SetLiteral *node = (SetLiteral *)malloc(sizeof(SetLiteral));
@@ -1651,7 +1659,7 @@ ASTNode *create_set_literal_with_element(ASTNode *element, SourceLocation loc){
   node->count = 1;
 
   return (ASTNode *)node;
-}
+};
 
 ASTNode *add_element_to_set_literal(ASTNode* set_literal, ASTNode *element, SourceLocation loc){
   SetLiteral *node = (SetLiteral *)set_literal;
@@ -1664,7 +1672,7 @@ ASTNode *add_element_to_set_literal(ASTNode* set_literal, ASTNode *element, Sour
   }
   node->elements[node->count++] = (SetElement*) element;
   return (ASTNode *)node;
-}
+};
 
 ASTNode *create_set_element(ASTNode *expr, SourceLocation loc) {
   SetElement *element = (SetElement *)malloc(sizeof(SetElement));
@@ -1675,7 +1683,7 @@ ASTNode *create_set_element(ASTNode *expr, SourceLocation loc) {
   element->value.single_value = expr;
 
   return (ASTNode *)element;
-}
+};
 
 ASTNode *create_set_range_element(ASTNode* const1, ASTNode *const2, SourceLocation loc) {
   SetElement *element = (SetElement *)malloc(sizeof(SetElement));
@@ -1687,7 +1695,7 @@ ASTNode *create_set_range_element(ASTNode* const1, ASTNode *const2, SourceLocati
   element->value.range.end = const2;
 
   return (ASTNode *)element;
-}
+};
 
 ASTNode *append_variable_declaration(ASTNode *list, ASTNode *vars,
                                      ASTNode *type, SourceLocation loc) {
@@ -1709,7 +1717,7 @@ ASTNode *append_variable_declaration(ASTNode *list, ASTNode *vars,
 
   current->next = (ASTNode *)new_node;
   return list;
-}
+};
 
 ASTNode *append_variable_identifier_list(ASTNode *list, ASTNode *var_id,
                                          SourceLocation loc) {
@@ -1731,7 +1739,7 @@ ASTNode *append_variable_identifier_list(ASTNode *list, ASTNode *var_id,
 
   current->next = (ASTNode *)new_node;
   return list;
-}
+};
 
 ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
                              SourceLocation loc) {
@@ -1769,7 +1777,7 @@ ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
   clist->variant_count++;
 
   return list;
-}
+};
 
 ASTNode *append_stmt_list(ASTNode *list, ASTNode *stmt, SourceLocation loc) {
   if (stmt == NULL) {
@@ -1789,7 +1797,7 @@ ASTNode *append_stmt_list(ASTNode *list, ASTNode *stmt, SourceLocation loc) {
 
   current->next = (ASTNode *)new_node;
   return list;
-}
+};
 
 ASTNode *append_proc_and_func_declarations(ASTNode *list,
                                            ASTNode *proc_and_func,
@@ -1816,42 +1824,42 @@ ASTNode *append_proc_and_func_declarations(ASTNode *list,
   }
 
     return (ASTNode *)new_node;
-}
+};
 
 ASTNode *add_labels_to_block(ASTNode *block, ASTNode *labels) {
   BlockNode *blk = (BlockNode *)block;
   return create_block_node(labels, blk->types, blk->constants, blk->variables,
                            blk->procs_funcs, blk->statements,
                            blk->base.location);
-}
+};
 
 ASTNode *add_constants_to_block(ASTNode *block, ASTNode *constants) {
   BlockNode *blk = (BlockNode *)block;
   return create_block_node(blk->labels, blk->types, constants, blk->variables,
                            blk->procs_funcs, blk->statements,
                            blk->base.location);
-}
+};
 
 ASTNode *add_types_to_block(ASTNode *block, ASTNode *types) {
   BlockNode *blk = (BlockNode *)block;
   return create_block_node(blk->labels, types, blk->constants, blk->variables,
                            blk->procs_funcs, blk->statements,
                            blk->base.location);
-}
+};
 
 ASTNode *add_variables_to_block(ASTNode *block, ASTNode *variables) {
   BlockNode *blk = (BlockNode *)block;
   return create_block_node(blk->labels, blk->types, blk->constants, variables,
                            blk->procs_funcs, blk->statements,
                            blk->base.location);
-}
+};
 
 ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *procs_funcs) {
   BlockNode *blk = (BlockNode *)block;
   return create_block_node(blk->labels, blk->types, blk->constants,
                            blk->variables, procs_funcs, blk->statements,
                            blk->base.location);
-}
+};
 
 ASTNode *append_index_to_list(ASTNode* list, ASTNode* new_index, SourceLocation loc) {
   IndexList *curr_list = (IndexList *)list;
@@ -1864,7 +1872,7 @@ ASTNode *append_index_to_list(ASTNode* list, ASTNode* new_index, SourceLocation 
     }
     curr_list->indexes[curr_list->count++] = new_index;
     return list;
-}
+};
 
 ASTNode *create_binary_expression(ASTNode *left, BinaryOperator op,
                                     ASTNode *right, SourceLocation loc) {
@@ -1877,7 +1885,8 @@ ASTNode *create_binary_expression(ASTNode *left, BinaryOperator op,
   node->right = right;
 
   return (ASTNode*)node;
-}
+};
+
 ASTNode *create_unary_expression(UnaryOperator unary_op, ASTNode *operand,
                                  SourceLocation loc) {
   UnaryOperationNode *node = (UnaryOperationNode *)malloc(sizeof(UnaryOperationNode));
@@ -1888,10 +1897,9 @@ ASTNode *create_unary_expression(UnaryOperator unary_op, ASTNode *operand,
   node->operator = unary_op;
 
   return (ASTNode*)node;
-}
+};
 
 /* UTILS */
-
 ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind symb_kind,
                                      bool update_symbol) {
   IdentifierNode *id_node = (IdentifierNode *)id;
@@ -1903,13 +1911,13 @@ ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind symb_kind,
   }
 
   return (ASTNode *)id_node;
-}
+};
 
 ASTNode *get_statements_from_block(ASTNode *block) {
   if (!block)
     return NULL;
   return ((BlockNode *)block)->statements;
-}
+};
 
 const char* binary_op_to_string(BinaryOperator op) {
     switch (op) {
@@ -1930,7 +1938,7 @@ const char* binary_op_to_string(BinaryOperator op) {
         case BINOP_IN: return "in";
         default: return "unknown";
     }
-}
+};
 
 const char* unary_op_to_string(UnaryOperator op) {
     switch (op) {
@@ -1939,7 +1947,7 @@ const char* unary_op_to_string(UnaryOperator op) {
         case UNOP_NOT: return "not";
         default: return "unknown";
     }
-}
+};
 
 const char* nodeTypeToString(NodeType type) {
     switch (type) {
@@ -2011,11 +2019,11 @@ const char* nodeTypeToString(NodeType type) {
 
       default: return "UNKNOWN_NODETYPE";
     }
-}
+};
 
 void print_todo(ASTNode *node, int indent) {
   printf("%*sTODO %s\n", indent, "", nodeTypeToString(node->type));
-}
+};
 
 void free_node(ASTNode *node) {
   if (!node)
@@ -2181,4 +2189,4 @@ void free_node(ASTNode *node) {
   }
 
   free(node);
-}
+};

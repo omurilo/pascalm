@@ -29,9 +29,7 @@ end;
 { Função que recebe função }
 function AplicarOperacao(x, y: real; 
                         function op(a, b: real): real): real;
-begin
-    AplicarOperacao := op(x, y);
-end;
+forward;
 
 { Função que é passada como parâmetro de outra função }
 function Multiplicar(a, b: real): real;
@@ -56,6 +54,12 @@ end;
 procedure Somar(a, b: integer);
 begin
     writeln(a + b);
+end;
+
+function AplicarOperacao(x, y: real; 
+                        function op(a, b: real): real): real;
+begin
+    AplicarOperacao := op(x, y);
 end;
 
 begin
