@@ -13,11 +13,21 @@ typedef struct SourceLocation SourceLocation;
 typedef struct SymbolEntry SymbolEntry;
 
 typedef enum ParameterKind {
-    PARAM_VALUE,        // Parâmetro por valor
-    PARAM_VAR,         // Parâmetro por referência (var)
-    PARAM_PROCEDURE,   // Parâmetro procedural
-    PARAM_FUNCTION     // Parâmetro funcional
+  PARAM_VALUE,     // Parâmetro por valor
+  PARAM_VAR,       // Parâmetro por referência (var)
+  PARAM_PROCEDURE, // Parâmetro procedural
+  PARAM_FUNCTION   // Parâmetro funcional
 } ParameterKind;
+
+typedef enum ConstantType {
+  CONST_INTEGER,
+  CONST_REAL,
+  CONST_STRING,
+  CONST_CHAR,
+  CONST_BOOLEAN,
+  CONST_IDENTIFIER,
+  CONST_SIGNED_IDENTIFIER
+} ConstantType;
 
 typedef enum NodeType {
   /* Estrutura do programa */
@@ -73,7 +83,7 @@ typedef enum NodeType {
   NODE_ARRAY_ACCESS,
   NODE_FUNC_CALL,
   NODE_SET_CONSTRUCTOR,
-  NODE_CONST_IDENTIFIER,
+  NODE_CONSTANT,
   NODE_TYPE_IDENTIFIER,
 
   /* Auxiliares */
@@ -128,33 +138,33 @@ typedef enum SymbolKind {
 } SymbolKind;
 
 typedef enum BinaryOperator {
-    // Relacionais
-    BINOP_LT,     // <
-    BINOP_LTE,    // <=
-    BINOP_EQ,     // =
-    BINOP_NEQ,    // <>
-    BINOP_GTE,    // >=
-    BINOP_GT,     // >
-    
-    // Aditivos
-    BINOP_PLUS,   // +
-    BINOP_MINUS,  // -
-    BINOP_OR,     // or
-    
-    // Multiplicativos
-    BINOP_TIMES,  // *
-    BINOP_DIVIDE, // /
-    BINOP_DIV,    // div
-    BINOP_MOD,    // mod
-    BINOP_AND,    // and
-    BINOP_IN      // in
+  // Relacionais
+  BINOP_LT,  // <
+  BINOP_LTE, // <=
+  BINOP_EQ,  // =
+  BINOP_NEQ, // <>
+  BINOP_GTE, // >=
+  BINOP_GT,  // >
+
+  // Aditivos
+  BINOP_PLUS,  // +
+  BINOP_MINUS, // -
+  BINOP_OR,    // or
+
+  // Multiplicativos
+  BINOP_TIMES,  // *
+  BINOP_DIVIDE, // /
+  BINOP_DIV,    // div
+  BINOP_MOD,    // mod
+  BINOP_AND,    // and
+  BINOP_IN      // in
 } BinaryOperator;
 
 // Operadores unários
 typedef enum UnaryOperator {
-    UNOP_PLUS,    // +
-    UNOP_MINUS,   // -
-    UNOP_NOT      // not
+  UNOP_PLUS,  // +
+  UNOP_MINUS, // -
+  UNOP_NOT    // not
 } UnaryOperator;
 
 struct SourceLocation {
@@ -200,6 +210,10 @@ struct SymbolEntry {
       ASTNode *definition;
       size_t size;
     } type_info;
+
+    struct {
+      ASTNode *value;
+    } const_info;
   } info;
 
   int scope_level;

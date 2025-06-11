@@ -23,3 +23,8 @@ final_work/.venv/bin/pip
 final_work/.venv/bin/pygmentize
 final_work/.venv/bin/cairosvg
 final_work/src/pascal
+final_work/.venv/bin/pyserial-miniterm
+final_work/.venv/bin/pyserial-ports
+final_work/.venv/bin/register-python-argcomplete
+final_work/.venv/bin/python-argcomplete-check-easy-install-script
+final_work/.venv/bin/activate-global-python-argcomplete

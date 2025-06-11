@@ -419,6 +419,7 @@ typedef struct ConstantNode {
     ASTNode base;
     ASTNode *value;
     ASTNode *identifier;
+    ConstantType const_type;
     bool is_literal;
     char *sign;
 } ConstantNode;
@@ -607,6 +608,18 @@ struct LiteralNode {
     } value;
 };
 
+typedef struct ConstantValue {
+    ConstantType type;
+    union {
+        int int_val;
+        double real_val;
+        char *str_val;
+        int bool_val;
+        char char_val;
+    } value;
+    bool is_valid;
+} ConstantValue;
+
 SourceLocation create_location(YYLTYPE loc);
 ASTNode *create_program_node(char *name, ASTNode *heading, ASTNode *block,
                              SourceLocation loc);
@@ -767,8 +780,10 @@ ASTNode *add_types_to_block(ASTNode *block, ASTNode *types);
 ASTNode *add_variables_to_block(ASTNode *block, ASTNode *variables);
 ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *proc_funcs);
 
+/* EVALUATE FNS */
+ConstantValue evaluate_constant(ASTNode *const_node);
 /* UTILS */
-ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind, bool update_symbol);
+ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind);
 ASTNode *get_statements_from_block(ASTNode *block);
 void free_node(ASTNode *node);
 void print_todo(ASTNode *node, int indent);

@@ -307,7 +307,14 @@ void print_stmt_list(ASTNode *node, int indent) {
         if (ft->variable->type == NODE_IDENTIFIER) {
           ft->variable->print(ft->variable, indent + 2);
         }
-        print_stmt_list(ft->body, indent + 2);
+        ForListNode *fln = (ForListNode *)ft->for_list;
+        printf("%*sNODE_FOR_LIST-> (%s)\n", indent+2, "", fln->is_downto ? "downto" : "to");
+        printf("%*sStart Expression\n", indent+4, "");
+        fln->start_expr->print(fln->start_expr, indent + 6);
+        printf("%*sEnd Expression\n", indent+4, "");
+        fln->end_expr->print(fln->end_expr, indent + 6);
+        printf("%*sBody\n", indent+4, "");
+        print_stmt_list(ft->body, indent + 6);
         break;
       }
       case NODE_WITH_STMT: {
@@ -394,8 +401,8 @@ void print_identifier_node(ASTNode *node, int indent) {
 }
 
 void print_constant_identifier_node(ASTNode *node, int indent) {
-  if (node->type != NODE_CONST_IDENTIFIER) {
-    printf("WARN: Tentou imprimir NODE_CONST_IDENTIFIER, mas o tipo é %s!\n", 
+  if (node->type != NODE_CONSTANT) {
+    printf("WARN: Tentou imprimir NODE_CONSTANT, mas o tipo é %s!\n", 
            nodeTypeToString(node->type));
   }
 
@@ -536,15 +543,22 @@ ASTNode *create_label_declaration_node(ASTNode *value, SourceLocation loc) {
   return (ASTNode *)list;
 }
 
-ASTNode *create_constant_declaration_node(ASTNode *id, ASTNode *constant,
+ASTNode *create_constant_declaration_node(ASTNode *identifier, ASTNode *constant,
                                           SourceLocation loc) {
   ConstDeclarationNode *node =
       (ConstDeclarationNode *)malloc(sizeof(ConstDeclarationNode));
   node->base.type = NODE_CONST_DECL;
   node->base.location = loc;
   node->base.print = print_todo;
-  node->identifier = id;
+  node->identifier = identifier;
   node->const_expr = constant;
+
+  IdentifierNode *id = (IdentifierNode*)identifier;
+  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_CONSTANT, -1, loc);
+  s->info.const_info.value = constant;
+  const char *key = ht_set(HashTable, id->name, s);
+  id->kind = SYMBOL_CONSTANT;
+  id->symbol_entry_key = key;
 
   ListNode *list = (ListNode *)malloc(sizeof(ListNode));
   list->base.type = NODE_LIST;
@@ -556,15 +570,27 @@ ASTNode *create_constant_declaration_node(ASTNode *id, ASTNode *constant,
   return (ASTNode *)list;
 }
 
-ASTNode *create_type_declaration_node(ASTNode *id, ASTNode *type,
+ASTNode *create_type_declaration_node(ASTNode *identifier, ASTNode *type,
                                       SourceLocation loc) {
   TypeDeclarationNode *node =
       (TypeDeclarationNode *)malloc(sizeof(TypeDeclarationNode));
   node->base.type = NODE_TYPE_DECL;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
-  node->identifier = id;
+  node->identifier = identifier;
   node->type_expr = type;
+
+  TypeIdentifierNode *type_id = (TypeIdentifierNode*)identifier;
+
+  if (type_id->id != NULL) {
+    IdentifierNode *id = (IdentifierNode*)type_id->id;
+    SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_TYPE, -1, loc);
+    s->info.type_info.definition = type;
+    s->info.type_info.size = sizeof(type);
+    const char *key = ht_set(HashTable, s->name, s);
+    id->kind = SYMBOL_TYPE;
+    id->symbol_entry_key = key;
+  } 
 
   ListNode *list = (ListNode *)malloc(sizeof(ListNode));
   list->base.type = NODE_LIST;
@@ -756,15 +782,13 @@ ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
   int offset = 0;
   while (curr) {
     if (curr->element) {
-      IdentifierNode *id_node = (IdentifierNode *)curr->element;
-      id_node->kind = SYMBOL_VARIABLE;
-      SymbolEntry *symb = ht_get(HashTable, id_node->symbol_entry_key);
-      symb->kind = SYMBOL_VARIABLE;
-      symb->info.var_info.type = type;
-      symb->info.var_info.offset = offset;
-      symb->scope_level = decl->scope_level;
-
-      ht_set(HashTable, symb->name, symb);
+      IdentifierNode *id = (IdentifierNode *)curr->element;
+      SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_VARIABLE, decl->scope_level, loc);
+      s->info.var_info.type = type;
+      s->info.var_info.offset = offset;
+      const char *key = ht_set(HashTable, id->name, s);
+      id->kind = SYMBOL_VARIABLE;
+      id->symbol_entry_key = key;
       offset += 1;
     }
     curr = (ListNode *)curr->next;
@@ -801,7 +825,7 @@ ASTNode *create_proc_and_func_declarations_node(ASTNode *proc_and_func,
   return (ASTNode *)node;
 }
 
-ASTNode *create_proc_declaration_node(ASTNode *id, ASTNode *parameters,
+ASTNode *create_proc_declaration_node(ASTNode *identifier, ASTNode *parameters,
                                       ASTNode *block_or_forward,
                                       SourceLocation loc) {
   ProcDeclarationNode *proc =
@@ -809,27 +833,29 @@ ASTNode *create_proc_declaration_node(ASTNode *id, ASTNode *parameters,
   proc->base.type = NODE_PROC_DECL;
   proc->base.location = loc;
   proc->base.print = print_todo;
-  proc->identifier = id;
+  proc->identifier = identifier;
   proc->parameters = parameters;
   proc->block_or_forward = block_or_forward;
 
-  IdentifierNode *id_node = (IdentifierNode *)id;
-  SymbolEntry *symb = ht_get(HashTable, id_node->symbol_entry_key);
-  symb->info.func_info.return_type = NULL;
-  symb->info.func_info.params = parameters;
+  IdentifierNode *id = (IdentifierNode *)identifier;
+  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_PROCEDURE, -1, loc);
+  s->info.func_info.return_type = NULL;
+  s->info.func_info.params = parameters;
 
   if (block_or_forward->type == NODE_FORWARD_DECL) {
-    symb->info.func_info.is_forward = true;
+    s->info.func_info.is_forward = true;
   } else {
-    symb->info.func_info.body = block_or_forward;
+    s->info.func_info.body = block_or_forward;
   }
 
-  ht_set(HashTable, symb->name, symb);
+  const char *key = ht_set(HashTable, id->name, s);
+  id->kind = SYMBOL_PROCEDURE;
+  id->symbol_entry_key = key;
 
   return (ASTNode *)proc;
 };
 
-ASTNode *create_func_declaration_node(ASTNode *id, ASTNode *parameters,
+ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
                                       ASTNode *type, ASTNode *block_or_forward,
                                       SourceLocation loc) {
   FuncDeclarationNode *func =
@@ -837,23 +863,25 @@ ASTNode *create_func_declaration_node(ASTNode *id, ASTNode *parameters,
   func->base.type = NODE_FUNC_DECL;
   func->base.location = loc;
   func->base.print = print_todo;
-  func->identifier = id;
+  func->identifier = identifier;
   func->type = type;
   func->parameters = parameters;
   func->block_or_forward = block_or_forward;
 
-  IdentifierNode *id_node = (IdentifierNode *)id;
-  SymbolEntry *symb = ht_get(HashTable, id_node->symbol_entry_key);
-  symb->info.func_info.return_type = type;
-  symb->info.func_info.params = parameters;
+  IdentifierNode *id = (IdentifierNode *)identifier;
+  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_FUNCTION, -1, loc);
+  s->info.func_info.return_type = type;
+  s->info.func_info.params = parameters;
 
   if (block_or_forward->type == NODE_FORWARD_DECL) {
-    symb->info.func_info.is_forward = true;
+    s->info.func_info.is_forward = true;
   } else {
-    symb->info.func_info.body = block_or_forward;
+    s->info.func_info.body = block_or_forward;
   }
 
-  ht_set(HashTable, symb->name, symb);
+  const char *key = ht_set(HashTable, id->name, s);
+  id->kind = SYMBOL_FUNCTION;
+  id->symbol_entry_key = key;
 
   return (ASTNode *)func;
 };
@@ -928,27 +956,48 @@ ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
 
 ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {
   ConstantNode *node = (ConstantNode *)malloc(sizeof(ConstantNode));
-  node->base.type = NODE_CONST_IDENTIFIER;
+  node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
+  node->const_type = CONST_IDENTIFIER;
   node->is_literal = false;
   node->identifier = identifier;
 
-  if (identifier->type == NODE_IDENTIFIER) {
-    IdentifierNode *id = (IdentifierNode *)identifier;
-    id->kind = SYMBOL_CONSTANT;
-  }
-
+  evaluate_constant((ASTNode*)node);
+ 
   return (ASTNode *)node;
 };
 
 ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {
   ConstantNode *node = (ConstantNode *)malloc(sizeof(ConstantNode));
-  node->base.type = NODE_CONST_IDENTIFIER;
+  node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
   node->value = literalValue;
   node->is_literal = true;
+
+  LiteralNode *lvalue = (LiteralNode *)literalValue;
+
+  switch (lvalue->literal_type) {
+    case LITERAL_REAL:
+      node->const_type = CONST_REAL;
+      break;
+    case LITERAL_INTEGER:
+      node->const_type = CONST_INTEGER;
+      break;
+    case LITERAL_STRING:
+      node->const_type = CONST_STRING;
+      break;
+    case LITERAL_CHAR:
+      node->const_type = CONST_CHAR;
+      break;
+    case LITERAL_BOOLEAN:
+      node->const_type = CONST_BOOLEAN;
+      break;
+    default:
+      free(node);
+      return NULL;
+  }
 
   return (ASTNode *)node;
 };
@@ -1016,17 +1065,15 @@ ASTNode *create_constant_signed_identifier(ASTNode *identifier,
                                            const char *sign,
                                            SourceLocation loc) {
   ConstantNode *node = (ConstantNode *)malloc(sizeof(ConstantNode));
-  node->base.type = NODE_CONST_IDENTIFIER;
+  node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
+  node->const_type = CONST_SIGNED_IDENTIFIER;
   node->is_literal = false;
   node->identifier = identifier;
   node->sign = strdup(sign);
 
-  if (identifier->type == NODE_IDENTIFIER) {
-    IdentifierNode *id = (IdentifierNode *)identifier;
-    id->kind = SYMBOL_CONSTANT;
-  }
+  evaluate_constant((ASTNode*)node);
 
   return (ASTNode *)node;
 };
@@ -1035,6 +1082,18 @@ ASTNode *create_field_identifier_list_node(ASTNode *list, ASTNode *identifier,
                                            SourceLocation loc) {
   if (identifier == NULL) {
     return list;
+  }
+
+  IdentifierNode *id = (IdentifierNode *)identifier;
+
+  switch(id->kind) {
+    case SYMBOL_CONSTANT:
+      printf("Symbol Constant on field identifier list node");
+      SymbolEntry *symb = ht_get(HashTable, id->symbol_entry_key);
+      printf("evalueate %d", evaluate_constant(symb->info.const_info.value).is_valid);
+      break;
+    default:
+      break;
   }
 
   ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
@@ -1453,15 +1512,15 @@ ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body,
 ASTNode *create_identifier_node(char *name, SourceLocation loc) {
   IdentifierNode *node = (IdentifierNode *)malloc(sizeof(IdentifierNode));
 
-  SymbolEntry *s = create_symbol_entry(name, SYMBOL_UNKNOWN, -1, loc);
-  const char *key = ht_set(HashTable, s->name, s);
+  // SymbolEntry *s = create_symbol_entry(name, SYMBOL_UNKNOWN, -1, loc);
+  // const char *key = ht_set(HashTable, s->name, s);
 
   node->base.type = NODE_IDENTIFIER;
   node->base.location = loc;
   node->base.print = print_identifier_node;
   node->name = strdup(name);
   node->kind = SYMBOL_UNKNOWN;
-  node->symbol_entry_key = key;
+  // node->symbol_entry_key = key;
   return (ASTNode *)node;
 };
 
@@ -2001,16 +2060,10 @@ ASTNode *create_unary_expression(UnaryOperator unary_op, ASTNode *operand,
 };
 
 /* UTILS */
-ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind symb_kind,
-                                     bool update_symbol) {
+ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind symb_kind) {
   IdentifierNode *id_node = (IdentifierNode *)id;
   id_node->kind = symb_kind;
-  if (update_symbol) {
-    SymbolEntry *symb = ht_get(HashTable, id_node->symbol_entry_key);
-    symb->kind = symb_kind;
-    ht_set(HashTable, symb->name, symb);
-  }
-
+  
   return (ASTNode *)id_node;
 };
 
@@ -2166,8 +2219,8 @@ const char *nodeTypeToString(NodeType type) {
     return "NODE_FUNC_CALL";
   case NODE_SET_CONSTRUCTOR:
     return "NODE_SET_CONSTRUCTOR";
-  case NODE_CONST_IDENTIFIER:
-    return "NODE_CONST_IDENTIFIER";
+  case NODE_CONSTANT:
+    return "NODE_CONSTANT";
 
   case NODE_FIELD_LIST:
     return "NODE_FIELD_LIST";
@@ -2206,6 +2259,88 @@ const char *nodeTypeToString(NodeType type) {
 void print_todo(ASTNode *node, int indent) {
   printf("%*sTODO %s\n", indent, "", nodeTypeToString(node->type));
 };
+
+/* Evaluate fns */
+ConstantValue evaluate_constant(ASTNode *const_node) {
+    ConstantValue result = {0};
+    
+    if (const_node->type != NODE_CONSTANT) {
+        result.is_valid = false;
+        return result;
+    }
+
+    ConstantNode *node = (ConstantNode *)const_node;
+
+    switch (node->const_type) {
+        case CONST_INTEGER:
+            result.type = CONST_INTEGER;
+            result.value.int_val = ((LiteralNode *)node->value)->value.int_val;
+            result.is_valid = true;
+            break;
+            
+        case CONST_REAL:
+            result.type = CONST_REAL;
+            result.value.real_val = ((LiteralNode *)node->value)->value.real_val;
+            result.is_valid = true;
+            break;
+            
+        case CONST_STRING:
+            result.type = CONST_STRING;
+            result.value.str_val = ((LiteralNode *)node->value)->value.str_val;
+            result.is_valid = true;
+            break;
+
+        case CONST_CHAR:
+            result.type = CONST_CHAR;
+            result.value.char_val = ((LiteralNode *)node->value)->value.char_val;
+            result.is_valid = true;
+            break;
+
+        case CONST_BOOLEAN:
+            result.type = CONST_BOOLEAN;
+            result.value.bool_val = ((LiteralNode *)node->value)->value.bool_val;
+            result.is_valid = true;
+            break;
+
+        case CONST_IDENTIFIER:
+        case CONST_SIGNED_IDENTIFIER: {
+            IdentifierNode *id = (IdentifierNode *)node->identifier;
+            SymbolEntry *entry = ht_get(HashTable, id->symbol_entry_key ? id->symbol_entry_key : id->name);
+            
+            if (!entry || entry->kind != SYMBOL_CONSTANT) {
+                char *err;
+                if (asprintf(&err, "Constant of identifier: %s is not declared", id->name) < 0) {
+                  yyerror("Out of memory");
+                  exit(2);
+                };
+                yyerror((const char*)err);
+                result.is_valid = false;
+                free(err);
+                exit(1);
+                break;
+            }
+            
+            result = evaluate_constant(entry->info.const_info.value);
+            
+            if (node->const_type == CONST_SIGNED_IDENTIFIER && 
+                node->sign && 
+                strcmp(node->sign, "-") == 0) {
+                
+                if (result.type == CONST_INTEGER) {
+                    result.value.int_val = -result.value.int_val;
+                } else if (result.type == CONST_REAL) {
+                    result.value.real_val = -result.value.real_val;
+                } else {
+                    yyerror("Cannot apply sign to non-numeric constant");
+                    result.is_valid = false;
+                    exit(1);
+                }
+            }
+            break;
+        }
+    }
+    return result;
+}
 
 void free_node(ASTNode *node) {
   if (!node)
@@ -2343,7 +2478,7 @@ void free_node(ASTNode *node) {
   case NODE_CASE_LABEL:
   case NODE_FOR_LIST:
   case NODE_LABELED_STMT:
-  case NODE_CONST_IDENTIFIER:
+  case NODE_CONSTANT:
   case NODE_RECORD_FIELD:
   case NODE_INDEX_LIST:
   case NODE_VARIANT_LIST:

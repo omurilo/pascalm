@@ -9,7 +9,8 @@
 #define SAVE_INTEGER yylval.integer = atoi(yytext)
 #define SAVE_NUMBER yylval.number = atof(yytext)
 #define SAVE_CHAR yylval.character = yytext[1]
-#define SAVE_STRING yylval.string = strdup(yytext)
+#define SAVE_STRING yylval.string = strndup(yytext+1, yyleng - 2)
+#define SAVE_IDENTIFIER yylval.string = strdup(yytext)
 #define SAVE_BOOLEAN yylval.boolean = strcmp(yytext, "true") ? 1 : 0
 
 int yycolumn = 1;
@@ -38,7 +39,7 @@ ID {ALPHA}{ALPHANUM}*
 UINT {DIGIT}+
 REAL {UINT}(\.{UINT})?([eE][+-]{UINT})?
 CHAR \'[a-zA-Z]\'
-STRING \'([^\\\n]|(\\.))*?\'
+STRING \'(\\.|[^\\'])*\'
 
 %x COMMENT
 
@@ -127,7 +128,7 @@ STRING \'([^\\\n]|(\\.))*?\'
 {CHAR}          {SAVE_CHAR; return CHAR_LITERAL;}
 {UINT}          {SAVE_INTEGER; return INTEGER_LITERAL;}
 {REAL}          {SAVE_NUMBER; return REAL_LITERAL;}
-{ID}            {SAVE_STRING; return IDENTIFIER;}
+{ID}            {SAVE_IDENTIFIER; return IDENTIFIER;}
 {STRING}        {SAVE_STRING; return STRING_LITERAL;}
 
 .               { yyerror((const char*)"Illegal input in"); }

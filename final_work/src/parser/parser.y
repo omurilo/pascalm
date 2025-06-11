@@ -198,7 +198,7 @@ constant_declaration:
     CONST constid EQ constant {
       $$ = create_constant_declaration_node($2, $4, create_location(@$));
     }
-  | constant_declaration SEMICOLON  identifier EQ constant {
+  | constant_declaration SEMICOLON constid EQ constant {
       $$ = append_constant_declaration($1, $3, $5, create_location(@$));
     }  
 
@@ -443,7 +443,6 @@ for_list:
       $$ = create_for_list_node($1, $3, true, create_location(@$)); 
     }  
 
-
 expression_list:  
     expression { $$ = create_expression_list($1, create_location(@$)); }
   | expression_list COMMA expression { $$ = append_expression_list($1, $3, create_location(@$)); }
@@ -563,7 +562,7 @@ element:
 
 constid:  
    identifier  {
-      $$ = update_identifier_node_kind($1, SYMBOL_CONSTANT, true);
+      $$ = update_identifier_node_kind($1, SYMBOL_CONSTANT);
    }
 
 typeid:
@@ -573,18 +572,18 @@ typeid:
   | REAL { $$ = create_builtin_type_identifier("real", create_location(@$)); }
   | STRING { $$ = create_builtin_type_identifier("string", create_location(@$)); }
   | identifier {
-      ASTNode *typeId = update_identifier_node_kind($1, SYMBOL_TYPE, true);
+      ASTNode *typeId = update_identifier_node_kind($1, SYMBOL_TYPE);
       $$ = create_type_identifier(typeId, create_location(@$));
     }
 
 funcid: 
   identifier  { 
-    $$ = update_identifier_node_kind($1, SYMBOL_FUNCTION, true);
+    $$ = update_identifier_node_kind($1, SYMBOL_FUNCTION);
   }
 
 procid:  
   identifier { 
-    $$ = update_identifier_node_kind($1, SYMBOL_PROCEDURE, true);
+    $$ = update_identifier_node_kind($1, SYMBOL_PROCEDURE);
   }
   | WRITE { $$ = create_builtin_identifier("write", create_location(@$)); }
   | WRITELN { $$ = create_builtin_identifier("writeln", create_location(@$)); }
@@ -593,12 +592,12 @@ procid:
 
 fieldid:  
   identifier { 
-    $$ = update_identifier_node_kind($1, SYMBOL_FIELD, true);
+    $$ = update_identifier_node_kind($1, SYMBOL_FIELD);
   }
 
 varid: 
   identifier {
-    $$ = update_identifier_node_kind($1, SYMBOL_VARIABLE, true);
+    $$ = update_identifier_node_kind($1, SYMBOL_VARIABLE);
   }
 
 identifier:
