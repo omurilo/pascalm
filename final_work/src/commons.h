@@ -12,6 +12,11 @@ typedef struct ASTNode ASTNode;
 typedef struct SourceLocation SourceLocation;
 typedef struct SymbolEntry SymbolEntry;
 
+typedef struct CodeGenerator {
+  FILE *output_file;
+  int indent_level;
+} CodeGenerator;
+
 typedef enum ParameterKind {
   PARAM_VALUE,     // Parâmetro por valor
   PARAM_VAR,       // Parâmetro por referência (var)
@@ -179,6 +184,7 @@ struct ASTNode {
   NodeType type;
   SourceLocation location;
   void (*print)(struct ASTNode *, int);
+  CodeGenerator *code_gen;
   // Função para imprimir o nó (para debug)
   /*
   int data_type; // tipo dos dados (INTEGER, REAL, STRING, etc.)
@@ -191,6 +197,7 @@ struct ASTNode {
 struct SymbolEntry {
   char *name;
   SymbolKind kind;
+  const char *key;
 
   union {
     struct {

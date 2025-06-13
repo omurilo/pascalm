@@ -121,28 +121,6 @@ struct VariantRecordNode {
     int has_runtime_checks;      // Flag if runtime checks are needed
 };
 
-// expandir para suportar diferentes tipos
-typedef enum {
-    LITERAL_INTEGER,
-    LITERAL_REAL,
-    LITERAL_BOOLEAN,
-    LITERAL_STRING,
-    LITERAL_CHAR,
-    LITERAL_NIL
-} LiteralType;
-
-struct LiteralNode {
-    ASTNode base;
-    LiteralType literal_type;    // Type of literal
-    union {
-        int int_val;             // Integer value
-        double real_val;         // Real value
-        int bool_val;            // Boolean value (0/1)
-        char *str_val;           // String value
-        char char_val;           // Character value
-    } value;
-};
-
 void check_assignment(ASTNode *target, ASTNode *value) {
     if (target->type == NODE_IDENTIFIER) {
         IdentifierNode *id = (IdentifierNode *)target;
@@ -782,6 +760,7 @@ ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *proc_funcs);
 
 /* EVALUATE FNS */
 ConstantValue evaluate_constant(ASTNode *const_node);
+
 /* UTILS */
 ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind);
 ASTNode *get_statements_from_block(ASTNode *block);
@@ -792,9 +771,10 @@ void print_identifier_node(ASTNode *node, int indent);
 void print_stmt_list(ASTNode *node, int indent);
 void print_binary_operation(ASTNode *node, int indent);
 void print_unary_operation(ASTNode *node, int indent);
-const char* nodeTypeToString(NodeType type);
+const char* get_node_type_name(NodeType type);
 const char* binary_op_to_string(BinaryOperator op);
 const char* unary_op_to_string(UnaryOperator op);
+const char* get_symbol_kind_name(SymbolKind symb);
 // void print_binary_expr_node(ASTNode *node, int indent);
 // void print_heading(ASTNode *node, int indent);
 #endif

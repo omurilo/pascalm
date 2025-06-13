@@ -2,6 +2,7 @@
 #include "symbol-table/symbol-table.h"
 #include "parser/types.h"
 #include "parser/parser.tab.h"
+#include "code-generation/code.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -53,6 +54,8 @@ int main(int argc, char **argv) {
   if (root) {
     printf("AST construída com sucesso:\n");
     root->print(root, 0);
+    generate_program(root->code_gen, root);
+    fclose(root->code_gen->output_file);
     free_node(root);
   }
 

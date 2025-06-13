@@ -97,6 +97,7 @@ static const char *ht_set_entry(ht_entry *entries, size_t capacity,
     (*plength)++;
   }
   entries[index].key = (char *)key;
+  value->key = key;
   entries[index].value = value;
   return key;
 }

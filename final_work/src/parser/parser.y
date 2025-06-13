@@ -6,6 +6,7 @@
 #include "../commons.h"
 #include "../ast/ast.h"
 #include "../symbol-table/symbol-table.h"
+#include "../code-generation/code.h"
 
 ASTNode *root = NULL;
 extern ht *HashTable;
@@ -137,7 +138,8 @@ pascal_program:
    PROGRAM IDENTIFIER program_headingopt SEMICOLON block DOT {
       $$ = create_program_node($2, $3, $5, create_location(@$));
       root = $$;
-   }
+      root->code_gen = create_code_generator("../output.c");
+    }
 
 program_headingopt:
     L_PAREN identifier_list R_PAREN {
@@ -341,7 +343,7 @@ block_or_forward:
     block { $$ = $1; }
   | FORWARD  { $$ = create_forward_declaration_node(create_location(@$)); }
 
-parameters:  
+parameters:
    L_PAREN formal_parameter_list R_PAREN { $$ = create_parameters_node($2, create_location(@$)); }
 
 formal_parameter_list:  
