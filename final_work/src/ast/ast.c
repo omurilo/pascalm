@@ -612,6 +612,7 @@ ASTNode *create_type_identifier(ASTNode *id, SourceLocation loc) {
   typeid->base.location = loc;
   typeid->base.print = print_type_identifier_node;
   typeid->id = (IdentifierNode *)id;
+  typeid->kind = SYMBOL_TYPE;
   typeid->is_base_type = false;
 
   return (ASTNode *)typeid;
@@ -846,7 +847,8 @@ ASTNode *create_proc_declaration_node(ASTNode *identifier, ASTNode *parameters,
   s->info.func_info.return_type = NULL;
   s->info.func_info.params = parameters;
 
-  printf("[DEBUG] forward declaration block to %s type: %s\n", s->name, get_node_type_name(block_or_forward->type));
+  printf("[DEBUG] forward declaration block to %s type: %s\n", s->name,
+         get_node_type_name(block_or_forward->type));
   if (block_or_forward->type == NODE_FORWARD_DECL) {
     s->info.func_info.is_forward = true;
   } else {
@@ -878,7 +880,8 @@ ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
   s->info.func_info.return_type = type;
   s->info.func_info.params = parameters;
 
-  printf("[DEBUG] forward declaration block to %s type: %s\n", s->name, get_node_type_name(block_or_forward->type));
+  printf("[DEBUG] forward declaration block to %s type: %s\n", s->name,
+         get_node_type_name(block_or_forward->type));
   if (block_or_forward->type == NODE_FORWARD_DECL) {
     s->info.func_info.is_forward = true;
   } else {
@@ -1351,8 +1354,7 @@ ASTNode *create_parameter_identifier_list_node(ASTNode *list, ASTNode *element,
   return list;
 };
 
-ASTNode *
-create_formal_parameter_section_node(ParameterKind kind, ASTNode *identifiers,
+ASTNode *create_formal_parameter_section_node(ParameterKind kind, ASTNode *identifiers,
                                      ASTNode *type, ASTNode *parameters,
                                      ASTNode *return_type, SourceLocation loc) {
   FormalParameterSectionNode *node =

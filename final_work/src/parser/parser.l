@@ -104,6 +104,7 @@ STRING \'(\\.|[^\\'])*\'
 "array"         { return ARRAY; }
 "record"        { return RECORD; }
 "set"           { return SET; }
+"in"            { return IN; }
 "file"          { return FILE_TOK; }
 "integer"       { return INTEGER; }
 "real"          { return REAL; }

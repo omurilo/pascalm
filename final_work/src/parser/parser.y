@@ -529,6 +529,7 @@ primary_expression:
   | unsigned_integer { $$ = $1; }
   | unsigned_real { $$ = $1; }
   | string_literal { $$ = $1; }
+  | char_literal { $$ = $1; }
   | NIL {
       $$ = create_nil_literal(create_location(@$));
     }
