@@ -190,8 +190,9 @@ const char *resolve_variable_identifier(ASTNode *node) {
     // record - field
     const char *record = resolve_variable_identifier(m_node->record);
     const char *field = resolve_variable_identifier(m_node->field);
-    SymbolEntry *s = ht_get(HashTable, record);
+    // TODO: refazer a parte de verificar o símbolo usando o contexto;
     int is_ref = 0;
+    SymbolEntry *s = malloc(sizeof(SymbolEntry));
     if (s != NULL && s->kind == SYMBOL_VARIABLE) {
       is_ref = s->info.var_info.is_ref;
     }
@@ -379,8 +380,7 @@ void generate_vars(CodeGenerator *code_gen, ASTNode *node) {
                    strcmp(c_type_id->name, "boolean") == 0) {
           fprintf(code_gen->output_file, " = false");
         } else if (c_type_id->kind == SYMBOL_TYPE) {
-          SymbolEntry *s =
-              ht_get(HashTable, resolve_type_identifier((ASTNode *)c_type_id));
+          SymbolEntry *s = malloc(sizeof(SymbolEntry));
           if (s->info.type_info.definition->type == NODE_STRUCTURED_TYPE) {
             StructuredTypeNode *sym_t_node =
                 (StructuredTypeNode *)s->info.type_info.definition;
@@ -431,13 +431,11 @@ void generate_function(CodeGenerator *code_gen, ASTNode *node) {
   ASTNode *params = (ASTNode *)malloc(sizeof(ASTNode));
 
   if (node->type == NODE_FUNC_DECL) {
-    s = ht_get(HashTable, resolve_identifier(func->identifier));
     fprintf(code_gen->output_file, "%s %s(",
             resolve_type_identifier(func->type), s->name);
     block_or_forward = func->block_or_forward;
     params = func->parameters;
   } else {
-    s = ht_get(HashTable, resolve_identifier(proc->identifier));
     fprintf(code_gen->output_file, "void %s(", s->name);
     block_or_forward = proc->block_or_forward;
     params = proc->parameters;
@@ -651,7 +649,7 @@ void generate_assignment(CodeGenerator *code_gen, ASTNode *node) {
   AssignmentNode *a = (AssignmentNode *)node;
   const char *id = resolve_variable_identifier(a->target);
 
-  SymbolEntry *s = ht_get(HashTable, id);
+  SymbolEntry *s = malloc(sizeof(SymbolEntry));
   if (a->target->type == NODE_IDENTIFIER && s != NULL &&
       s->info.func_info.body != NULL) {
     fprintf(code_gen->output_file, "return ");
@@ -691,8 +689,7 @@ void generate_for_statement(CodeGenerator *code_gen, ASTNode *node) {
   ForStmtNode *for_stmt = (ForStmtNode *)node;
   fprintf(code_gen->output_file, "for(");
 
-  SymbolEntry *f_var =
-      ht_get(HashTable, resolve_variable_identifier(for_stmt->variable));
+  SymbolEntry *f_var = malloc(sizeof(SymbolEntry));
 
   if (f_var->info.var_info.type->type == NODE_SIMPLE_TYPE) {
     SimpleTypeNode *s_t = (SimpleTypeNode *)f_var->info.var_info.type;
@@ -766,7 +763,7 @@ void generate_write(CodeGenerator *code_gen, ASTNode *node, bool line) {
       case NODE_IDENTIFIER: {
         IdentifierNode *id = (IdentifierNode *)params->element;
         if (id->kind == SYMBOL_VARIABLE) {
-          SymbolEntry *id_sym = ht_get(HashTable, id->name);
+          SymbolEntry *id_sym = malloc(sizeof(SymbolEntry));
           if (id_sym->info.var_info.type->type == NODE_SIMPLE_TYPE) {
             SimpleTypeNode *s_t =
                 (SimpleTypeNode *)id_sym->info.type_info.definition;
@@ -838,7 +835,7 @@ void generate_proc_call_statement(CodeGenerator *code_gen, ASTNode *node) {
     func_name = resolve_identifier(p_call->procedure);
   }
 
-  SymbolEntry *s = ht_get(HashTable, func_name);
+  SymbolEntry *s = malloc(sizeof(SymbolEntry));
 
   if (s->kind == SYMBOL_BUILTIN) {
     if (strcmp(func_name, "write") == 0) {
