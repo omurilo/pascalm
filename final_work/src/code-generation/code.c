@@ -2,8 +2,6 @@
 #include "../symbol-table/symbol-table.h"
 #include "utils.c"
 
-extern ht *HashTable;
-
 CodeGenerator *create_code_generator(char *output_file) {
   CodeGenerator *code_gen = (CodeGenerator *)malloc(sizeof(CodeGenerator));
 

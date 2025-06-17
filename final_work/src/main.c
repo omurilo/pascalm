@@ -1,8 +1,9 @@
 #include "ast/ast.h"
-#include "symbol-table/symbol-table.h"
 #include "parser/types.h"
 #include "parser/parser.tab.h"
 #include "code-generation/code.h"
+#include "semantic-analyzer/analyser.h"
+#include "context.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <strings.h>
@@ -12,16 +13,12 @@ extern int yydebug;
 #endif
 
 extern struct ASTNode *root;
-extern struct ht *HashTable;
 
 void yyerror(const char *msg) {
   fprintf(stderr, "%s:%d.%d-%d.%d: error: %s\n",
           yylloc.file_name ? yylloc.file_name : "input", yylloc.first_line,
           yylloc.first_column, yylloc.last_line, yylloc.last_column, msg);
 }
-
-ht *HashTable = NULL;
-int scopes = 0;
 
 int main(int argc, char **argv) {
   if (argc > 1) {
@@ -40,9 +37,10 @@ int main(int argc, char **argv) {
   yylloc.last_column = 1;
   yylloc.last_line = 1;
 
-  HashTable = ht_create();
-  if (HashTable == NULL) {
-    yyerror((char *)"OUT OF MEMORY");
+  CompilerContext *context = context_create();
+  if (context == NULL) {
+    yyerror("OUT OF MEMORY");
+    return 1;
   }
 
   yyparse();
@@ -55,12 +53,12 @@ int main(int argc, char **argv) {
   if (root) {
     printf("AST construída com sucesso:\n");
     // root->print(root, 0);
+    analyze_semantics(root, context);
     generate_program(root->code_gen, root);
     fclose(root->code_gen->output_file);
     free_node(root);
   }
 
-  ht_destroy(HashTable);
-
+  context_destroy(context);
   return 0;
 }
