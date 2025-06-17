@@ -9,6 +9,7 @@
 #include "../code-generation/code.h"
 
 ASTNode *root = NULL;
+extern int scopes;
 extern ht *HashTable;
 %}
 

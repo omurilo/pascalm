@@ -30,6 +30,7 @@ int yycolumn = 1;
         } \
     }
 int comment_nesting = 0;
+ // STRING N COMO COLEÇÃO DE CARACTERES
 %}
 
 DIGIT [0-9]

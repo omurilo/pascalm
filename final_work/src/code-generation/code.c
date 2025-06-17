@@ -1,5 +1,6 @@
 #include "code.h"
 #include "../symbol-table/symbol-table.h"
+#include "utils.c"
 
 extern ht *HashTable;
 
@@ -19,11 +20,13 @@ void print_indent(CodeGenerator *code_gen) {
 }
 
 const char *cast_pascal_to_c_type(TypeIdentifierNode *node) {
-  printf("[DEBUG - cast] node type -> %s : node kind -> %s - name:",
+  printf("[DEBUG - cast] node type -> %s : node kind -> %s - name: ",
          get_node_type_name(node->base.type), get_symbol_kind_name(node->kind));
   switch (node->kind) {
   case SYMBOL_BUILTIN: {
-    printf("%s\n", node->name);
+    printf("%s (%d.%d-%d.%d)\n", node->name, node->base.location.first_line,
+           node->base.location.first_column, node->base.location.last_line,
+           node->base.location.last_column);
     if (strcmp(node->name, "char") == 0)
       return "char";
     if (strcmp(node->name, "integer") == 0)
@@ -40,9 +43,97 @@ const char *cast_pascal_to_c_type(TypeIdentifierNode *node) {
     printf("struct\n\n\n");
     return "struct";
   default:
-    printf("void\n\n\n");
+    printf("void (%d.%d-%d.%d)\n\n\n", node->base.location.first_line,
+           node->base.location.first_column, node->base.location.last_line,
+           node->base.location.last_column);
     return "void";
   }
+}
+
+const char *resolve_expression(ASTNode *node) {
+  switch (node->type) {
+  case NODE_BINARY_EXPR:
+    // left - op - right
+    break;
+  case NODE_UNARY_EXPR:
+    // op - right
+    break;
+  case NODE_SET_CONSTRUCTOR:
+    // lower - upper (elemet) / elements - capacity - count
+    break;
+  case NODE_FUNC_CALL:
+    break;
+  case NODE_LITERAL: {
+    LiteralNode *literal = (LiteralNode *)node;
+    char *final;
+    if (literal->literal_type == LITERAL_INTEGER) {
+      if (asprintf(&final, "%d", literal->value.int_val) < 0) {
+        yyerror("Out of memory");
+        exit(2);
+      }
+      return (const char *) final;
+    } else if (literal->literal_type == LITERAL_STRING) {
+      if (asprintf(&final, "%s", literal->value.str_val) < 0) {
+        yyerror("Out of memory");
+        exit(2);
+      }
+      return (const char *) final;
+    } else if (literal->literal_type == LITERAL_CHAR) {
+      char *final;
+      if (asprintf(&final, "%c", literal->value.char_val) < 0) {
+        yyerror("Out of memory");
+        exit(2);
+      }
+      return (const char *) final;
+    } else if (literal->literal_type == LITERAL_BOOLEAN) {
+      if (asprintf(&final, "%s", literal->value.bool_val ? "true" : "false") <
+          0) {
+        yyerror("Out of memory");
+        exit(2);
+      }
+      return (const char *) final;
+    } else if (literal->literal_type == LITERAL_REAL) {
+      if (asprintf(&final, "%.2f", literal->value.real_val) < 0) {
+        yyerror("Out of memory");
+        exit(2);
+      }
+      return (const char *) final;
+    } else if (literal->literal_type == LITERAL_NIL) {
+      printf("[DEBUG] Literal value nil: (null)\n");
+      return NULL;
+    }
+    break;
+  }
+  case NODE_IDENTIFIER: {
+    const char *id = resolve_variable_identifier(node);
+    printf("NODE_IDENTIFIER: %s\n", id);
+    return id;
+  }
+
+  case NODE_ARRAY_ACCESS: {
+    const char *id = resolve_variable_identifier(node);
+    printf("NODE_ARRAY_ACCESS: %s\n", id);
+    return id;
+  }
+
+  case NODE_MEMBER_ACCESS: {
+    const char *id = resolve_variable_identifier(node);
+    printf("NODE_MEMBER_ACCESS: %s\n", id);
+    return id;
+  }
+
+  case NODE_POINTER_DEREF: {
+    const char *id = resolve_variable_identifier(node);
+    printf("NODE_POINTER_DEREF: %s\n", id);
+    return id;
+  }
+  default:
+    printf(
+        "[DEBUG resolve expression] -> NODE NOT MAPPED - node type name %s\n",
+        get_node_type_name(node->type));
+    break;
+  }
+  return NULL;
 }
 
 const char *resolve_identifier(ASTNode *node) {
@@ -58,6 +149,74 @@ const char *resolve_type_identifier(ASTNode *node) {
   return cast_pascal_to_c_type(type_node);
 }
 
+const char *resolve_variable_identifier(ASTNode *node) {
+  if (node->type == NODE_IDENTIFIER) {
+    return resolve_identifier(node);
+  } else if (node->type == NODE_ARRAY_ACCESS) {
+    // array - subscript_list (array maybe any of this self if)
+    ArrayAccessNode *a_node = (ArrayAccessNode *)node;
+    const char *id = resolve_variable_identifier(a_node->array);
+    ListNode *subscripts = (ListNode *)a_node->subscript_list;
+    char *final;
+    if (asprintf(&final, "%s[", id) < 0) {
+      yyerror("Out of memory");
+      exit(2);
+    }
+
+    while (subscripts) {
+      if (subscripts->element) {
+        if (asprintf(&final, "%s%s", final,
+                     resolve_expression(subscripts->element)) < 0) {
+          yyerror("Out of memory");
+          exit(2);
+        }
+      }
+
+      subscripts = (ListNode *)subscripts->next;
+      if (subscripts) {
+        if (asprintf(&final, "%s, ", final) < 0) {
+          yyerror("Out of memory");
+          exit(2);
+        }
+      }
+    }
+
+    if (asprintf(&final, "%s]", final) < 0) {
+      yyerror("Out of memory");
+      exit(2);
+    }
+
+    return (const char *) final;
+  } else if (node->type == NODE_MEMBER_ACCESS) {
+    MemberAccessNode *m_node = (MemberAccessNode *)node;
+    // record - field
+    const char *record = resolve_variable_identifier(m_node->record);
+    const char *field = resolve_variable_identifier(m_node->field);
+    SymbolEntry *s = ht_get(HashTable, record);
+    int is_ref = 0;
+    if (s != NULL && s->kind == SYMBOL_VARIABLE) {
+      is_ref = s->info.var_info.is_ref;
+    }
+    char *final;
+    if (is_ref) {
+      if (asprintf(&final, "%s->%s", record, field) < 0) {
+        yyerror("Out of memory");
+        exit(2);
+      }
+    } else {
+      if (asprintf(&final, "%s.%s", record, field) < 0) {
+        yyerror("Out of memory");
+        exit(2);
+      }
+    }
+    return (const char *) final;
+  } else if (node->type == NODE_POINTER_DEREF) {
+    // PointerDerefNode *d_node = (PointerDerefNode *)node;
+    // pointer
+  }
+  return NULL;
+}
+
 void generate_program(CodeGenerator *code_gen, ASTNode *node) {
   ProgramNode *program = (ProgramNode *)node;
 
@@ -66,36 +225,28 @@ void generate_program(CodeGenerator *code_gen, ASTNode *node) {
   fprintf(code_gen->output_file, "#include <string.h>\n");
   fprintf(code_gen->output_file, "#include <stdbool.h>\n\n");
 
+  generate_string_definition(code_gen);
+
+  generate_block(code_gen, program->block, true);
+
+  print_indent(code_gen);
+  fprintf(code_gen->output_file, "return 0;\n");
+  code_gen->indent_level--;
+  fprintf(code_gen->output_file, "}\n");
+}
+
+void generate_block(CodeGenerator *code_gen, ASTNode *node, bool is_global) {
   /*
-   struct ProgramNode {
-    ASTNode base;
-    char *name;
-    ASTNode *block;
-    ASTNode *heading;
-  };
-
-  struct HeadingNode {
-    ASTNode base;
-    ASTNode *list;
-  };
-
-  struct BlockNode {
-    ASTNode base;
-    ASTNode *labels;
-    ASTNode *types;
-    ASTNode *constants;
-    ASTNode *variables;
-    ASTNode *procs_funcs;
-    ASTNode *statements;
-  }
-   */
-
-  BlockNode *block = (BlockNode *)program->block;
-
-  fprintf(code_gen->output_file, "typedef struct {\n");
-  fprintf(code_gen->output_file, "    unsigned char length;\n");
-  fprintf(code_gen->output_file, "    char data[255];\n");
-  fprintf(code_gen->output_file, "} string;\n\n");
+   struct BlockNode {
+     ASTNode *labels;
+     ->ASTNode *types;
+     ASTNode *constants;
+     ->ASTNode *variables;
+     ->+-ASTNode *procs_funcs;
+     ->ASTNode *statements;
+   }
+    */
+  BlockNode *block = (BlockNode *)node;
 
   ListNode *types = (ListNode *)block->types;
   while (types) {
@@ -119,27 +270,10 @@ void generate_program(CodeGenerator *code_gen, ASTNode *node) {
       fprintf(code_gen->output_file, "\n");
   }
 
-  fprintf(code_gen->output_file, "string make_string(const char* c_str) {\n");
-  fprintf(code_gen->output_file, "    string ps;\n");
-  fprintf(code_gen->output_file, "    ps.length = strlen(c_str);\n");
-  fprintf(code_gen->output_file, "    if(ps.length > 255) ps.length = 255;\n");
-  fprintf(code_gen->output_file, "    strncpy(ps.data, c_str, ps.length);\n");
-  fprintf(code_gen->output_file, "    return ps;\n");
-  fprintf(code_gen->output_file, "}\n\n");
-
-  fprintf(code_gen->output_file,
-          "string concat_string(string s1, string s2) {\n");
-  fprintf(code_gen->output_file, "    string result;\n");
-  fprintf(code_gen->output_file,
-          "    result.length = s1.length + s2.length;\n");
-  fprintf(code_gen->output_file,
-          "    if(result.length > 255) result.length = 255;\n");
-  fprintf(code_gen->output_file,
-          "    memcpy(result.data, s1.data, s1.length);\n");
-  fprintf(code_gen->output_file, "    memcpy(result.data + s1.length, s2.data, "
-                                 "result.length - s1.length);\n");
-  fprintf(code_gen->output_file, "    return result;\n");
-  fprintf(code_gen->output_file, "}\n\n");
+  if (is_global) {
+    generate_strings_helper_functions(code_gen);
+    generate_set_helper_functions(code_gen);
+  }
 
   ListNode *procs_funcs = (ListNode *)block->procs_funcs;
   while (procs_funcs) {
@@ -150,8 +284,10 @@ void generate_program(CodeGenerator *code_gen, ASTNode *node) {
     procs_funcs = (ListNode *)procs_funcs->next;
   }
 
-  fprintf(code_gen->output_file, "int main() {\n");
-  code_gen->indent_level++;
+  if (is_global) {
+    fprintf(code_gen->output_file, "int main() {\n");
+    code_gen->indent_level++;
+  }
 
   ListNode *statements = (ListNode *)block->statements;
   while (statements) {
@@ -161,11 +297,6 @@ void generate_program(CodeGenerator *code_gen, ASTNode *node) {
 
     statements = (ListNode *)statements->next;
   }
-
-  print_indent(code_gen);
-  fprintf(code_gen->output_file, "return 0;\n");
-  code_gen->indent_level--;
-  fprintf(code_gen->output_file, "}\n");
 }
 
 void generate_vars(CodeGenerator *code_gen, ASTNode *node) {
@@ -202,6 +333,7 @@ void generate_vars(CodeGenerator *code_gen, ASTNode *node) {
       }
       break;
     } else if (st_node->type->type == NODE_SET_TYPE) {
+      printf("[DEBUG variables] -> NODE_SET_TYPE");
       if (code_gen->indent_level > 0) {
         print_indent(code_gen);
       }
@@ -233,6 +365,7 @@ void generate_vars(CodeGenerator *code_gen, ASTNode *node) {
     SimpleTypeNode *s_node = (SimpleTypeNode *)v_node->type_node;
     if (s_node->type->type == NODE_TYPE_IDENTIFIER) {
       c_type_id = (TypeIdentifierNode *)s_node->type;
+
       for (int i = 0; i < index; i++) {
         if (code_gen->indent_level > 0) {
           print_indent(code_gen);
@@ -247,6 +380,20 @@ void generate_vars(CodeGenerator *code_gen, ASTNode *node) {
         } else if (c_type_id->kind == SYMBOL_BUILTIN &&
                    strcmp(c_type_id->name, "boolean") == 0) {
           fprintf(code_gen->output_file, " = false");
+        } else if (c_type_id->kind == SYMBOL_TYPE) {
+          SymbolEntry *s =
+              ht_get(HashTable, resolve_type_identifier((ASTNode *)c_type_id));
+          if (s->info.type_info.definition->type == NODE_STRUCTURED_TYPE) {
+            StructuredTypeNode *sym_t_node =
+                (StructuredTypeNode *)s->info.type_info.definition;
+            if (sym_t_node->type->type == NODE_SET_TYPE) {
+              fprintf(code_gen->output_file, " = 0ULL");
+            }
+          } else if (s->info.type_info.definition->type == NODE_SIMPLE_TYPE) {
+            printf("NODE_SIMPLE_TYPE\n");
+          } else {
+            printf("NODE_POINTER_TYPE\n");
+          }
         }
         fprintf(code_gen->output_file, ";\n");
       }
@@ -259,7 +406,7 @@ void generate_vars(CodeGenerator *code_gen, ASTNode *node) {
     break;
   }
   case NODE_POINTER_TYPE: {
-    PointerTypeNode *pt_node = (PointerTypeNode *)v_node->type_node;
+    // PointerTypeNode *pt_node = (PointerTypeNode *)v_node->type_node;
     break;
   }
   default:
@@ -302,19 +449,23 @@ void generate_function(CodeGenerator *code_gen, ASTNode *node) {
 
   if (block_or_forward->type == NODE_FORWARD_DECL) {
     fprintf(code_gen->output_file, ");\n\n");
-    free_node(params);
-    free_node(block_or_forward);
+    free(s);
+    free(params);
+    free(block_or_forward);
     return;
   }
 
   fprintf(code_gen->output_file, "){\n");
   code_gen->indent_level++;
-  generate_statement(code_gen, block_or_forward);
+
+  generate_block(code_gen, s->info.func_info.body, false);
+
   code_gen->indent_level--;
   fprintf(code_gen->output_file, "}\n\n");
 
-  free_node(params);
-  free_node(block_or_forward);
+  // free(s);
+  free(params);
+  free(block_or_forward);
 }
 
 void generate_parameters(CodeGenerator *code_gen, ASTNode *node) {
@@ -326,15 +477,16 @@ void generate_parameters(CodeGenerator *code_gen, ASTNode *node) {
       FormalParameterSectionNode *param =
           (FormalParameterSectionNode *)params_list->element;
       ListNode *identifiers = (ListNode *)param->identifiers;
+      TypeIdentifierNode *p_t_id = (TypeIdentifierNode *)param->type;
       while (identifiers) {
         if (identifiers->element) {
           if (param->kind == PARAM_VALUE) {
             fprintf(code_gen->output_file, "%s %s",
-                    resolve_type_identifier(param->type),
+                    resolve_type_identifier((ASTNode *)p_t_id),
                     resolve_identifier(identifiers->element));
           } else if (param->kind == PARAM_VAR) {
             fprintf(code_gen->output_file, "%s *%s",
-                    resolve_type_identifier(param->type),
+                    resolve_type_identifier((ASTNode *)p_t_id),
                     resolve_identifier(identifiers->element));
           } else {
             if (param->kind == PARAM_PROCEDURE) {
@@ -372,8 +524,12 @@ void generate_type(CodeGenerator *code_gen, ASTNode *node) {
               resolve_type_identifier(s_node->type),
               resolve_type_identifier(type_node->identifier));
       break;
+    } else if (s_node->type->type == NODE_ENUMERATED_TYPE) {
+      break;
+    } else if (s_node->type->type == NODE_SUBRANGE_TYPE) {
+      break;
     }
-    // TODO: add another simple type possibilities
+
     break;
   }
   case NODE_STRUCTURED_TYPE: {
@@ -382,7 +538,6 @@ void generate_type(CodeGenerator *code_gen, ASTNode *node) {
       generate_record(code_gen, node);
       break;
     } else if (s_node->type->type == NODE_SET_TYPE) {
-      SetTypeNode *set = (SetTypeNode *)s_node->type;
       fprintf(code_gen->output_file, "typedef unsigned long long %s;\n",
               resolve_type_identifier(type_node->identifier));
     } else if (s_node->type->type == NODE_ARRAY_TYPE) {
@@ -475,9 +630,9 @@ void generate_array(CodeGenerator *code_gen, ASTNode *node,
       ConstantValue upper = evaluate_constant(sr_node->upper);
       array_size = upper.value.int_val - lower.value.int_val + 1;
     } else if (element->type == NODE_ENUMERATED_TYPE) {
-
+      // TODO:
     } else if (element->type == NODE_TYPE_IDENTIFIER) {
-
+      // TODO:
     } else {
       printf("era pra quebrar? %s", get_node_type_name(element->type));
       exit(1);
@@ -494,4 +649,452 @@ void generate_array(CodeGenerator *code_gen, ASTNode *node,
   fprintf(code_gen->output_file, ";\n");
 }
 
-void generate_statement(CodeGenerator *code_gen, ASTNode *node) {}
+void generate_assignment(CodeGenerator *code_gen, ASTNode *node) {
+  AssignmentNode *a = (AssignmentNode *)node;
+  const char *id = resolve_variable_identifier(a->target);
+
+  SymbolEntry *s = ht_get(HashTable, id);
+  if (a->target->type == NODE_IDENTIFIER && s != NULL &&
+      s->info.func_info.body != NULL) {
+    fprintf(code_gen->output_file, "return ");
+  } else {
+    fprintf(code_gen->output_file, "%s = ", id);
+  }
+
+  generate_expression(code_gen, a->expression, false);
+  fprintf(code_gen->output_file, ";\n");
+}
+
+void generate_if_statement(CodeGenerator *code_gen, ASTNode *node) {
+  IfNode *if_stmt = (IfNode *)node;
+  fprintf(code_gen->output_file, "if(");
+  generate_expression(code_gen, if_stmt->condition, true);
+  fprintf(code_gen->output_file, ") {\n");
+  code_gen->indent_level++;
+  generate_statement(code_gen, if_stmt->then_stmt);
+  code_gen->indent_level--;
+  if (if_stmt->else_stmt != NULL) {
+    fprintf(code_gen->output_file, "} else {\n");
+    code_gen->indent_level++;
+    generate_statement(code_gen, if_stmt->else_stmt);
+    code_gen->indent_level--;
+    fprintf(code_gen->output_file, "}\n");
+  } else {
+    if (code_gen->indent_level > 0) {
+      print_indent(code_gen);
+    }
+    fprintf(code_gen->output_file, "}\n");
+  }
+}
+
+void generate_while_statement(CodeGenerator *code_gen, ASTNode *node) {}
+
+void generate_for_statement(CodeGenerator *code_gen, ASTNode *node) {
+  ForStmtNode *for_stmt = (ForStmtNode *)node;
+  fprintf(code_gen->output_file, "for(");
+
+  SymbolEntry *f_var =
+      ht_get(HashTable, resolve_variable_identifier(for_stmt->variable));
+
+  if (f_var->info.var_info.type->type == NODE_SIMPLE_TYPE) {
+    SimpleTypeNode *s_t = (SimpleTypeNode *)f_var->info.var_info.type;
+    fprintf(code_gen->output_file,
+            "%s %s = ", resolve_type_identifier(s_t->type), f_var->name);
+  } else if (f_var->info.var_info.type->type == NODE_STRUCTURED_TYPE) {
+    StructuredTypeNode *st_t = (StructuredTypeNode *)f_var->info.var_info.type;
+    fprintf(code_gen->output_file,
+            "%s %s = ", resolve_type_identifier(st_t->type), f_var->name);
+  }
+
+  fprintf(code_gen->output_file, "(%s-1);",
+          for_stmt->is_downto ? resolve_expression(for_stmt->end_expr)
+                              : resolve_expression(for_stmt->start_expr));
+  fprintf(code_gen->output_file, for_stmt->is_downto ? " %s > " : " %s < ",
+          f_var->name);
+  fprintf(code_gen->output_file, "%s;",
+          for_stmt->is_downto ? resolve_expression(for_stmt->start_expr)
+                              : resolve_expression(for_stmt->end_expr));
+  fprintf(code_gen->output_file, for_stmt->is_downto ? " %s--)" : " %s++)",
+          f_var->name);
+  fprintf(code_gen->output_file, "{\n");
+
+  code_gen->indent_level++;
+  generate_statement(code_gen, for_stmt->body);
+  code_gen->indent_level--;
+
+  if (code_gen->indent_level > 0) {
+    print_indent(code_gen);
+  }
+
+  fprintf(code_gen->output_file, "}\n");
+}
+
+void generate_repeat_until_statement(CodeGenerator *code_gen, ASTNode *node) {}
+
+void generate_list(CodeGenerator *code_gen, ASTNode *node) {
+  ListNode *list = (ListNode *)node;
+
+  while (list) {
+    if (list->element) {
+      // TODO: generate anything
+    }
+
+    list = (ListNode *)list->next;
+  }
+}
+
+void generate_write(CodeGenerator *code_gen, ASTNode *node, bool line) {
+  fprintf(code_gen->output_file, "printf(\"");
+
+  ProcedureCallNode *proc = (ProcedureCallNode *)node;
+  ListNode *params = (ListNode *)proc->params;
+
+  while (params) {
+    if (params->element) {
+      const char *x = resolve_expression(params->element);
+      printf("[DEBUG writeln] -> %s - %s\n", x,
+             get_node_type_name(params->element->type));
+      switch (params->element->type) {
+      case NODE_LITERAL: {
+        // LiteralNode *l = (LiteralNode *)params->element;
+        fprintf(code_gen->output_file, "%s", x);
+        break;
+      }
+      case NODE_ARRAY_ACCESS:
+        fprintf(code_gen->output_file, "%%d");
+        break;
+      case NODE_BINARY_EXPR:
+        break;
+      case NODE_IDENTIFIER: {
+        IdentifierNode *id = (IdentifierNode *)params->element;
+        if (id->kind == SYMBOL_VARIABLE) {
+          SymbolEntry *id_sym = ht_get(HashTable, id->name);
+          if (id_sym->info.var_info.type->type == NODE_SIMPLE_TYPE) {
+            SimpleTypeNode *s_t =
+                (SimpleTypeNode *)id_sym->info.type_info.definition;
+            TypeIdentifierNode *s_t_id = (TypeIdentifierNode *)s_t->type;
+            if (s_t_id->kind == SYMBOL_BUILTIN) {
+              const char *type_name =
+                  resolve_type_identifier((ASTNode *)s_t_id);
+              if (strcmp(type_name, "int") == 0) {
+                fprintf(code_gen->output_file, "%%d");
+                break;
+              } else if (strcmp(type_name, "char") == 0) {
+                fprintf(code_gen->output_file, "%%c");
+                break;
+              } else if (strcmp(type_name, "bool") == 0) {
+                fprintf(code_gen->output_file, "%%s");
+                break;
+              } else if (strcmp(type_name, "string") == 0) {
+                fprintf(code_gen->output_file, "%%s");
+                break;
+              }
+            }
+          }
+        }
+        break;
+      }
+      default:
+        printf("[DEBUG writeln] -> %s not mapped",
+               get_node_type_name(params->element->type));
+        break;
+      }
+    }
+
+    params = (ListNode *)params->next;
+    if (params)
+      fprintf(code_gen->output_file, " ");
+  }
+
+  fprintf(code_gen->output_file, line ? "\\n\"" : "\"");
+
+  ListNode *curr = (ListNode *)proc->params;
+
+  while (curr) {
+    if (curr->element && curr->element->type != NODE_LITERAL) {
+      const char *x = resolve_expression(curr->element);
+      fprintf(code_gen->output_file, "%s", x);
+    }
+    curr = (ListNode *)curr->next;
+    if (curr && curr->element->type != NODE_LITERAL)
+      fprintf(code_gen->output_file, ", ");
+  }
+
+  fprintf(code_gen->output_file, ")");
+}
+
+void generate_read(CodeGenerator *code_gen, ASTNode *node, bool line) {
+  fprintf(code_gen->output_file, "scanf(");
+  generate_expression(code_gen, node, true);
+  fprintf(code_gen->output_file, line ? "\\n\")" : "\")");
+}
+
+void generate_proc_call_statement(CodeGenerator *code_gen, ASTNode *node) {
+  bool is_function = node->type == NODE_FUNC_CALL;
+  const char *func_name = "";
+  if (is_function) {
+    FunctionCallNode *f_call = (FunctionCallNode *)node;
+    func_name = resolve_identifier(f_call->function);
+  } else {
+    ProcedureCallNode *p_call = (ProcedureCallNode *)node;
+    func_name = resolve_identifier(p_call->procedure);
+  }
+
+  SymbolEntry *s = ht_get(HashTable, func_name);
+
+  if (s->kind == SYMBOL_BUILTIN) {
+    if (strcmp(func_name, "write") == 0) {
+      generate_write(code_gen, node, false);
+      return;
+    } else if (strcmp(func_name, "writeln") == 0) {
+      generate_write(code_gen, node, true);
+      return;
+    } else if (strcmp(func_name, "read") == 0) {
+      generate_write(code_gen, node, false);
+      return;
+    } else if (strcmp(func_name, "readln") == 0) {
+      generate_write(code_gen, node, true);
+      return;
+    }
+  } else {
+    fprintf(code_gen->output_file, "%s(", func_name);
+  }
+
+  int var_params[255] = {0};
+  int index = 0;
+
+  if (s && s->info.func_info.params != NULL) {
+    ParameterNode *s_params = (ParameterNode *)s->info.func_info.params;
+    ListNode *s_params_list = (ListNode *)s_params->params_list;
+    while (s_params_list) {
+      if (s_params_list->element) {
+        FormalParameterSectionNode *p =
+            (FormalParameterSectionNode *)s_params_list->element;
+        var_params[index] = p->kind == PARAM_VAR;
+        index++;
+      }
+      s_params_list = (ListNode *)s_params_list->next;
+    }
+  }
+
+  ListNode *params = is_function
+                         ? (ListNode *)((FunctionCallNode *)node)->params
+                         : (ListNode *)((ProcedureCallNode *)node)->params;
+
+  index = 0;
+  while (params) {
+    if (params->element) {
+      if (var_params[index] == 1)
+        fprintf(code_gen->output_file, "&");
+      generate_expression(code_gen, params->element, false);
+    }
+
+    params = (ListNode *)params->next;
+    index++;
+    if (params)
+      fprintf(code_gen->output_file, ", ");
+  }
+
+  fprintf(code_gen->output_file, ")");
+}
+
+void generate_statement(CodeGenerator *code_gen, ASTNode *node) {
+  if (code_gen->indent_level > 0) {
+    print_indent(code_gen);
+  }
+  switch (node->type) {
+  case NODE_ASSIGN_STMT: {
+    generate_assignment(code_gen, node);
+    break;
+  }
+  case NODE_LIST:
+    generate_list(code_gen, node);
+    break;
+  case NODE_IF_STMT:
+    generate_if_statement(code_gen, node);
+    break;
+  case NODE_CASE_STMT:
+    fprintf(code_gen->output_file, "/* case or case else */\n");
+    break;
+  case NODE_WHILE_STMT:
+    generate_while_statement(code_gen, node);
+    break;
+  case NODE_REPEAT_STMT:
+    generate_repeat_until_statement(code_gen, node);
+    break;
+  case NODE_FOR_STMT:
+    generate_for_statement(code_gen, node);
+    break;
+  case NODE_IDENTIFIER:
+    fprintf(code_gen->output_file, "%s", resolve_identifier(node));
+    break;
+  case NODE_FUNC_CALL:
+  case NODE_PROC_CALL:
+    generate_proc_call_statement(code_gen, node);
+    fprintf(code_gen->output_file, ";\n");
+    break;
+  case NODE_GOTO_STMT:
+    fprintf(code_gen->output_file, "/* statement list */\n");
+    break;
+  case NODE_WITH_STMT:
+    fprintf(code_gen->output_file, "/* statement list */\n");
+    break;
+  case NODE_LABELED_STMT:
+    fprintf(code_gen->output_file, "/* statement list */\n");
+    break;
+  default:
+    break;
+  }
+}
+
+void generate_expression(CodeGenerator *code_gen, ASTNode *node, bool plain) {
+  printf("[DEBUG generate_expression] node type %s\n",
+         get_node_type_name(node->type));
+  switch (node->type) {
+  case NODE_BINARY_EXPR: {
+    BinaryOperationNode *bin_node = (BinaryOperationNode *)node;
+    if (bin_node->op == BINOP_IN) {
+      fprintf(code_gen->output_file, "((");
+      generate_expression(code_gen, bin_node->right, false);
+      fprintf(code_gen->output_file, " & (1ULL << ");
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " %% 64)) != 0)");
+    } else if (bin_node->op == BINOP_LT) {
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " < ");
+      generate_expression(code_gen, bin_node->right, false);
+    } else if (bin_node->op == BINOP_LTE) {
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " <= ");
+      generate_expression(code_gen, bin_node->right, false);
+    } else if (bin_node->op == BINOP_GT) {
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " > ");
+      generate_expression(code_gen, bin_node->right, false);
+    } else if (bin_node->op == BINOP_GTE) {
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " >= ");
+      generate_expression(code_gen, bin_node->right, false);
+    } else if (false) {
+      // TODO: else if's for lt, lte, gt, gte, and, or, div, mod
+    } else if (bin_node->op == BINOP_PLUS) {
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " + ");
+      generate_expression(code_gen, bin_node->right, false);
+    } else if (bin_node->op == BINOP_TIMES) {
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " * ");
+      generate_expression(code_gen, bin_node->right, false);
+    } else if (bin_node->op == BINOP_MINUS) {
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " - ");
+      generate_expression(code_gen, bin_node->right, false);
+    } else if (bin_node->op == BINOP_DIVIDE) {
+      generate_expression(code_gen, bin_node->left, false);
+      fprintf(code_gen->output_file, " / ");
+      generate_expression(code_gen, bin_node->right, false);
+    }
+    break;
+  }
+  case NODE_UNARY_EXPR: {
+    UnaryOperationNode *u_node = (UnaryOperationNode *)node;
+    if (u_node->op == UNOP_MINUS) {
+      fprintf(code_gen->output_file, "-");
+      generate_expression(code_gen, u_node->operand, false);
+    } else if (u_node->op == UNOP_NOT) {
+      fprintf(code_gen->output_file, "!");
+      generate_expression(code_gen, u_node->operand, false);
+    } else if (u_node->op == UNOP_PLUS) {
+      fprintf(code_gen->output_file, "+");
+      generate_expression(code_gen, u_node->operand, false);
+    }
+    break;
+  }
+  case NODE_SET_CONSTRUCTOR: {
+    // lower - upper (elemet) / elements - capacity - count
+    SetLiteral *sl = (SetLiteral *)node;
+    if (sl->count > 0) {
+      fprintf(code_gen->output_file, "(0ULL");
+      for (int i = 0; i < sl->count; i++) {
+        SetElement *se = sl->elements[i];
+        if (se->type == SET_ELEMENT_SINGLE) {
+          LiteralNode *literal = (LiteralNode *)se->value.single_value;
+          fprintf(code_gen->output_file, " | (1ULL << ");
+          if (literal->literal_type == LITERAL_INTEGER) {
+            fprintf(code_gen->output_file, "%d %% 64", literal->value.int_val);
+          } else if (literal->literal_type == LITERAL_REAL) {
+            fprintf(code_gen->output_file, "%.2f %% 64",
+                    literal->value.real_val);
+          } else if (literal->literal_type == LITERAL_BOOLEAN) {
+            fprintf(code_gen->output_file, "%s",
+                    literal->value.bool_val ? "true" : "false");
+          } else if (literal->literal_type == LITERAL_STRING) {
+            fprintf(code_gen->output_file,
+                    plain ? "%s %% 64" : "make_string(\"%s\") %% 64",
+                    literal->value.str_val);
+          } else if (literal->literal_type == LITERAL_CHAR) {
+            fprintf(code_gen->output_file, plain ? "%c %% 64" : "'%c' %% 64",
+                    literal->value.char_val);
+          }
+          fprintf(code_gen->output_file, ")");
+        } else if (se->type == SET_ELEMENT_RANGE) {
+          printf("[DEBUG generate expression] - SET LITERAL -> elements %d "
+                 "range start: %s - end: %s\n",
+                 i, get_node_type_name(se->value.range.start->type),
+                 get_node_type_name(se->value.range.end->type));
+        }
+      }
+      fprintf(code_gen->output_file, ")");
+    }
+    break;
+  }
+  case NODE_FUNC_CALL: {
+    generate_proc_call_statement(code_gen, node);
+    break;
+  }
+  case NODE_LITERAL: {
+    LiteralNode *literal = (LiteralNode *)node;
+    if (literal->literal_type == LITERAL_INTEGER) {
+      fprintf(code_gen->output_file, "%d", literal->value.int_val);
+    } else if (literal->literal_type == LITERAL_REAL) {
+      fprintf(code_gen->output_file, "%.2f", literal->value.real_val);
+    } else if (literal->literal_type == LITERAL_BOOLEAN) {
+      fprintf(code_gen->output_file, "%s",
+              literal->value.bool_val ? "true" : "false");
+    } else if (literal->literal_type == LITERAL_STRING) {
+      fprintf(code_gen->output_file, plain ? "%s" : "make_string(\"%s\")",
+              literal->value.str_val);
+    } else if (literal->literal_type == LITERAL_CHAR) {
+      fprintf(code_gen->output_file, plain ? "%c" : "'%c'",
+              literal->value.char_val);
+    }
+
+    break;
+  }
+  case NODE_IDENTIFIER: {
+    fprintf(code_gen->output_file, "%s", resolve_identifier(node));
+    break;
+  }
+  case NODE_ARRAY_ACCESS: {
+    const char *id = resolve_variable_identifier(node);
+    fprintf(code_gen->output_file, "%s", id);
+    break;
+  }
+  case NODE_MEMBER_ACCESS: {
+    const char *id = resolve_variable_identifier(node);
+    fprintf(code_gen->output_file, "%s", id);
+    break;
+  }
+  case NODE_POINTER_DEREF: {
+    break;
+  }
+  case NODE_SET_ELEMENT: {
+    break;
+  }
+  default:
+    printf("[DEBUG resolve expression] -> NODE NOT MAPPED - node type name "
+           "%s\n",
+           get_node_type_name(node->type));
+    break;
+  }
+}

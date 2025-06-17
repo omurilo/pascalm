@@ -139,7 +139,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 20 "parser/parser.y"
+#line 21 "parser/parser.y"
 
   int integer;
   bool boolean;

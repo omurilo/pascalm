@@ -3,6 +3,7 @@
 #include "../symbol-table/symbol-table.h"
 
 extern ht *HashTable;
+extern int scopes;
 
 SourceLocation create_location(YYLTYPE loc) {
   SourceLocation result;
@@ -307,13 +308,12 @@ void print_stmt_list(ASTNode *node, int indent) {
         if (ft->variable->type == NODE_IDENTIFIER) {
           ft->variable->print(ft->variable, indent + 2);
         }
-        ForListNode *fln = (ForListNode *)ft->for_list;
         printf("%*sNODE_FOR_LIST-> (%s)\n", indent + 2, "",
-               fln->is_downto ? "downto" : "to");
+               ft->is_downto ? "downto" : "to");
         printf("%*sStart Expression\n", indent + 4, "");
-        fln->start_expr->print(fln->start_expr, indent + 6);
+        ft->start_expr->print(ft->start_expr, indent + 6);
         printf("%*sEnd Expression\n", indent + 4, "");
-        fln->end_expr->print(fln->end_expr, indent + 6);
+        ft->end_expr->print(ft->end_expr, indent + 6);
         printf("%*sBody\n", indent + 4, "");
         print_stmt_list(ft->body, indent + 6);
         break;
@@ -557,7 +557,7 @@ ASTNode *create_constant_declaration_node(ASTNode *identifier,
   node->const_expr = constant;
 
   IdentifierNode *id = (IdentifierNode *)identifier;
-  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_CONSTANT, -1, loc);
+  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_CONSTANT, scopes, loc);
   s->info.const_info.value = constant;
   const char *key = ht_set(HashTable, id->name, s);
   id->kind = SYMBOL_CONSTANT;
@@ -587,10 +587,10 @@ ASTNode *create_type_declaration_node(ASTNode *identifier, ASTNode *type,
 
   if (type_id->id != NULL) {
     IdentifierNode *id = (IdentifierNode *)type_id->id;
-    SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_TYPE, -1, loc);
+    SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_TYPE, scopes, loc);
     s->info.type_info.definition = type;
     s->info.type_info.size = sizeof(&type);
-    const char *key = ht_set(HashTable, s->name, s);
+    const char *key = ht_set(HashTable, id->name, s);
     id->kind = SYMBOL_TYPE;
     id->symbol_entry_key = key;
   }
@@ -638,6 +638,11 @@ ASTNode *create_builtin_identifier(char *name, SourceLocation loc) {
   built->base.print = print_identifier_node;
   built->name = strdup(name);
   built->kind = SYMBOL_PROCEDURE;
+
+  SymbolEntry *s = create_symbol_entry(built->name, SYMBOL_BUILTIN, scopes, loc);
+  const char *key = ht_set(HashTable, built->name, s);
+  built->symbol_entry_key = key;
+
   return (ASTNode *)built;
 }
 
@@ -780,7 +785,7 @@ ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
   decl->base.print = print_variable_declaration;
   decl->var_list = list;
   decl->type_node = type;
-  decl->scope_level = 0;
+  decl->scope_level = scopes;
 
   ListNode *curr = (ListNode *)list;
   int offset = 0;
@@ -842,13 +847,12 @@ ASTNode *create_proc_declaration_node(ASTNode *identifier, ASTNode *parameters,
   proc->parameters = parameters;
   proc->block_or_forward = block_or_forward;
 
+  scopes++;
   IdentifierNode *id = (IdentifierNode *)identifier;
-  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_PROCEDURE, -1, loc);
+  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_PROCEDURE, scopes, loc);
   s->info.func_info.return_type = NULL;
   s->info.func_info.params = parameters;
 
-  printf("[DEBUG] forward declaration block to %s type: %s\n", s->name,
-         get_node_type_name(block_or_forward->type));
   if (block_or_forward->type == NODE_FORWARD_DECL) {
     s->info.func_info.is_forward = true;
   } else {
@@ -859,12 +863,14 @@ ASTNode *create_proc_declaration_node(ASTNode *identifier, ASTNode *parameters,
   id->kind = SYMBOL_PROCEDURE;
   id->symbol_entry_key = key;
 
+  scopes--;
   return (ASTNode *)proc;
 };
 
 ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
                                       ASTNode *type, ASTNode *block_or_forward,
                                       SourceLocation loc) {
+  scopes++;
   FuncDeclarationNode *func =
       (FuncDeclarationNode *)malloc(sizeof(FuncDeclarationNode));
   func->base.type = NODE_FUNC_DECL;
@@ -876,12 +882,10 @@ ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
   func->block_or_forward = block_or_forward;
 
   IdentifierNode *id = (IdentifierNode *)identifier;
-  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_FUNCTION, -1, loc);
+  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_FUNCTION, scopes, loc);
   s->info.func_info.return_type = type;
   s->info.func_info.params = parameters;
 
-  printf("[DEBUG] forward declaration block to %s type: %s\n", s->name,
-         get_node_type_name(block_or_forward->type));
   if (block_or_forward->type == NODE_FORWARD_DECL) {
     s->info.func_info.is_forward = true;
   } else {
@@ -892,6 +896,7 @@ ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
   id->kind = SYMBOL_FUNCTION;
   id->symbol_entry_key = key;
 
+  scopes--;
   return (ASTNode *)func;
 };
 
@@ -912,20 +917,6 @@ ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc) {
   new_list->next = NULL;
   return (ASTNode *)new_list;
 };
-
-ASTNode *create_expression_range_node(ASTNode *expression1,
-                                      ASTNode *expression2,
-                                      SourceLocation loc) {
-  // TODO: In Semantic analysis, the expressions must match types
-  ElementNode *element = (ElementNode *)malloc(sizeof(ElementNode));
-  element->base.type = NODE_SET_CONSTRUCTOR;
-  element->base.location = loc;
-  element->base.print = print_todo;
-  element->lower = expression1;
-  element->upper = expression2;
-
-  return (ASTNode *)element;
-}
 
 ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
                                 SourceLocation loc) {
@@ -1190,27 +1181,20 @@ ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
   return (ASTNode *)cf;
 };
 
-ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_list,
+ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_stmt,
                               ASTNode *body, SourceLocation loc) {
-  ForStmtNode *node = (ForStmtNode *)malloc(sizeof(ForStmtNode));
-  node->base.type = NODE_FOR_STMT;
+  ForStmtNode *node = (ForStmtNode *)for_stmt;
   node->base.location = loc;
-  node->base.print = print_todo;
   node->variable = variable;
-  node->for_list = for_list;
   node->body = body;
-
-  // Extrair o is_downto do for_list
-  ForListNode *fl = (ForListNode *)for_list;
-  node->is_downto = fl->is_downto;
 
   return (ASTNode *)node;
 };
 
 ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto,
                               SourceLocation loc) {
-  ForListNode *node = (ForListNode *)malloc(sizeof(ForListNode));
-  node->base.type = NODE_FOR_LIST;
+  ForStmtNode *node = (ForStmtNode*)malloc(sizeof(ForStmtNode));
+  node->base.type = NODE_FOR_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
   node->start_expr = start;
@@ -1254,10 +1238,7 @@ ASTNode *create_function_call_node(ASTNode *func, ASTNode *params,
   node->function = func;
   node->params = params; // Pode ser NULL se não houver parâmetros
 
-  if (func->type == NODE_IDENTIFIER) {
-    IdentifierNode *id = (IdentifierNode *)func;
-    id->kind = SYMBOL_FUNCTION; // Será verificado durante análise semântica
-  }
+  check_params(func, params);
 
   return (ASTNode *)node;
 };
@@ -1354,7 +1335,8 @@ ASTNode *create_parameter_identifier_list_node(ASTNode *list, ASTNode *element,
   return list;
 };
 
-ASTNode *create_formal_parameter_section_node(ParameterKind kind, ASTNode *identifiers,
+ASTNode *
+create_formal_parameter_section_node(ParameterKind kind, ASTNode *identifiers,
                                      ASTNode *type, ASTNode *parameters,
                                      ASTNode *return_type, SourceLocation loc) {
   FormalParameterSectionNode *node =
@@ -1367,6 +1349,29 @@ ASTNode *create_formal_parameter_section_node(ParameterKind kind, ASTNode *ident
   node->type = type;
   node->parameters = parameters;
   node->return_type = return_type;
+
+  scopes++;
+  ListNode *curr = (ListNode *)identifiers;
+  int offset = 0;
+  while (curr) {
+    if (curr->element) {
+      IdentifierNode *id = (IdentifierNode *)curr->element;
+      SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_VARIABLE, scopes, loc);
+
+      if (kind == PARAM_VAR) {
+        s->kind = SYMBOL_VARIABLE;
+        s->info.var_info.is_ref = true;
+        s->info.var_info.type = return_type;
+        s->info.var_info.offset = offset;
+        const char *key = ht_set(HashTable, s->name, s);
+        id->symbol_entry_key = key;
+        offset++;
+      }
+    }
+
+    curr = (ListNode *)curr->next;
+  }
+  scopes--;
 
   return (ASTNode *)node;
 };
@@ -1400,10 +1405,18 @@ ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params,
   node->procedure = proc;
   node->params = params; // Pode ser NULL se não houver parâmetros
 
-  // Definir o tipo do identificador como procedimento
-  if (proc->type == NODE_IDENTIFIER) {
-    IdentifierNode *id = (IdentifierNode *)proc;
-    id->kind = SYMBOL_PROCEDURE; // Será verificado durante análise semântica
+  check_params(proc, params);
+
+  IdentifierNode *id = (IdentifierNode*)proc;
+  SymbolEntry *s = ht_get(HashTable, id->name);
+  if (
+      s->kind == SYMBOL_PROCEDURE &&
+      (strcmp(id->name, "write") == 0 || strcmp(id->name, "writeln") == 0
+      || strcmp(id->name, "read") == 0 || strcmp(id->name, "readln") == 0)
+    ) {
+      s->kind = SYMBOL_BUILTIN;
+      ASTNode* parameters = create_parameters_node(params, loc);
+      s->info.func_info.params = parameters;
   }
 
   return (ASTNode *)node;
@@ -1521,15 +1534,12 @@ ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body,
 ASTNode *create_identifier_node(char *name, SourceLocation loc) {
   IdentifierNode *node = (IdentifierNode *)malloc(sizeof(IdentifierNode));
 
-  // SymbolEntry *s = create_symbol_entry(name, SYMBOL_UNKNOWN, -1, loc);
-  // const char *key = ht_set(HashTable, s->name, s);
-
   node->base.type = NODE_IDENTIFIER;
   node->base.location = loc;
   node->base.print = print_identifier_node;
   node->name = strdup(name);
   node->kind = SYMBOL_UNKNOWN;
-  // node->symbol_entry_key = key;
+
   return (ASTNode *)node;
 };
 
@@ -2082,6 +2092,25 @@ ASTNode *get_statements_from_block(ASTNode *block) {
   return ((BlockNode *)block)->statements;
 };
 
+const char *get_literal_type_name(LiteralType type) {
+  switch (type) {
+  case LITERAL_INTEGER:
+    return "LITERAL_INTEGER";
+  case LITERAL_REAL:
+    return "LITERAL_REAL";
+  case LITERAL_BOOLEAN:
+    return "LITERAL_BOOLEAN";
+  case LITERAL_STRING:
+    return "LITERAL_STRING";
+  case LITERAL_CHAR:
+    return "LITERAL_CHAR";
+  case LITERAL_NIL:
+    return "LITERAL_NIL";
+  default:
+    return "UNKNOWN_LITERAL";
+  }
+}
+
 const char *binary_op_to_string(BinaryOperator op) {
   switch (op) {
   case BINOP_LT:
@@ -2203,8 +2232,6 @@ const char *get_node_type_name(NodeType type) {
     return "NODE_REPEAT_STMT";
   case NODE_FOR_STMT:
     return "NODE_FOR_STMT";
-  case NODE_FOR_LIST:
-    return "NODE_FOR_LIST";
   case NODE_WITH_STMT:
     return "NODE_WITH_STMT";
   case NODE_GOTO_STMT:
@@ -2313,6 +2340,147 @@ void print_todo(ASTNode *node, int indent) {
 };
 
 /* Evaluate fns */
+void check_params(ASTNode *func_or_proc, ASTNode *parameters) {
+  IdentifierNode *id = (IdentifierNode *)func_or_proc;
+  ListNode *params = (ListNode *)parameters;
+
+  int count_params_call = 0;
+  while (params) {
+    if (params->element) {
+      count_params_call++;
+    }
+    params = (ListNode *)params->next;
+  }
+
+  SymbolEntry *s_proc_func = ht_get(HashTable, id->name);
+  if (s_proc_func != NULL && s_proc_func->kind != SYMBOL_BUILTIN) {
+    ParameterNode *p_node = (ParameterNode *)s_proc_func->info.func_info.params;
+    ListNode *decl_params = (ListNode *)p_node->params_list;
+    ListNode *call_params = (ListNode *)parameters;
+
+    int count_params_definition = 0;
+    while (decl_params) {
+      if (decl_params->element) {
+        FormalParameterSectionNode *fp =
+            (FormalParameterSectionNode *)decl_params->element;
+        if (call_params->element) {
+          TypeIdentifierNode *t_id = (TypeIdentifierNode *)fp->type;
+          const char *type_name = t_id->name == NULL
+                                      ? ((IdentifierNode *)t_id->id)->name
+                                      : t_id->name;
+          SymbolEntry *decl_symb = ht_get(HashTable, type_name);
+          switch (call_params->element->type) {
+          case NODE_ARRAY_ACCESS: {
+            ArrayAccessNode *ac = (ArrayAccessNode *)call_params->element;
+            IdentifierNode *ac_id = (IdentifierNode *)ac->array;
+            SymbolEntry *call_symb = ht_get(HashTable, ac_id->name);
+            ASTNode *call_type = (ASTNode *)malloc(sizeof(ASTNode));
+            if (call_symb->kind == SYMBOL_VARIABLE) {
+              call_type = call_symb->info.var_info.type;
+            }
+
+            if (decl_symb->info.type_info.definition->type == call_type->type) {
+              switch (decl_symb->info.type_info.definition->type) {
+              case NODE_STRUCTURED_TYPE: {
+                StructuredTypeNode *decl =
+                    (StructuredTypeNode *)decl_symb->info.type_info.definition;
+                StructuredTypeNode *call = (StructuredTypeNode *)call_type;
+                if (call->type->type == NODE_ARRAY_TYPE &&
+                    decl->type->type != call->type->type) {
+                  ArrayTypeNode *arr = (ArrayTypeNode *)call->type;
+                  if (arr->type->type == NODE_SIMPLE_TYPE) {
+                    SimpleTypeNode *at = (SimpleTypeNode *)arr->type;
+                    TypeIdentifierNode *at_id = (TypeIdentifierNode *)at->type;
+                    if (strcmp(type_name,
+                               at_id->name
+                                   ? at_id->name
+                                   : ((IdentifierNode *)at_id->id)->name) !=
+                        0) {
+                      yyerror("Function call parameters mismatch!");
+                      exit(1);
+                    }
+                  }
+                } else if (decl->type->type != call->type->type) {
+                  yyerror("Function call parameters mismatch!");
+                  exit(1);
+                }
+                break;
+              }
+              case NODE_SIMPLE_TYPE: {
+                SimpleTypeNode *call = (SimpleTypeNode *)call_type;
+                TypeIdentifierNode *st_id = (TypeIdentifierNode *)call->type;
+                if (strcmp(type_name,
+                           st_id->name
+                               ? strdup(st_id->name)
+                               : strdup(((IdentifierNode *)st_id->id)->name)) !=
+                    0) {
+                  yyerror("Function call parameters mismatch!");
+                  exit(1);
+                }
+                break;
+              }
+              default:
+                break;
+              }
+            }
+            break;
+          }
+          case NODE_LITERAL: {
+            LiteralNode *l = (LiteralNode *)call_params->element;
+            if (strcmp(type_name, "integer") == 0 &&
+                l->literal_type == LITERAL_INTEGER) {
+              break;
+            } else if (strcmp(type_name, "string") == 0 &&
+                       l->literal_type == LITERAL_STRING) {
+              break;
+            } else if (strcmp(type_name, "boolean") == 0 &&
+                       l->literal_type == LITERAL_BOOLEAN) {
+              break;
+            } else if (strcmp(type_name, "char") == 0 &&
+                       l->literal_type == LITERAL_CHAR) {
+              break;
+            } else if (strcmp(type_name, "real") == 0 &&
+                       l->literal_type == LITERAL_REAL) {
+              break;
+            } else {
+              yyerror("Function call parameters mismatch!");
+              exit(1);
+            }
+
+            break;
+          }
+          default:
+            yyerror("Function call parameters mismatch!");
+            printf("%s - %s", get_node_type_name(call_params->element->type),
+                   type_name);
+            exit(1);
+            break;
+          }
+        }
+        count_params_call--;
+        count_params_definition++;
+      }
+
+      decl_params = (ListNode *)decl_params->next;
+      call_params = (ListNode *)call_params->next;
+    }
+
+    if (count_params_call != 0) {
+      char *err;
+      if (asprintf(&err,
+                   "The function %s is called with %d params and expected be "
+                   "called with %d.",
+                   id->name, count_params_call + count_params_definition,
+                   count_params_definition) < 0) {
+        yyerror("Out of memory");
+        exit(2);
+      }
+      yyerror(err);
+      exit(1);
+    }
+  }
+}
+
 ConstantValue evaluate_constant(ASTNode *const_node) {
   ConstantValue result = {0};
 
@@ -2393,6 +2561,21 @@ ConstantValue evaluate_constant(ASTNode *const_node) {
   }
   }
   return result;
+}
+
+const char *get_param_kind_name(ParameterKind kind) {
+  switch (kind) {
+  case PARAM_VAR:
+    return "PARAM_VAR";
+  case PARAM_VALUE:
+    return "PARAM_VALUE";
+  case PARAM_PROCEDURE:
+    return "PARAM_PROCEDURE";
+  case PARAM_FUNCTION:
+    return "PARAM_FUNCTION";
+  default:
+    return "UNKNOWN_PARAM";
+  }
 }
 
 void free_node(ASTNode *node) {
@@ -2529,7 +2712,6 @@ void free_node(ASTNode *node) {
   case NODE_FORWARD_DECL:
   case NODE_SIMPLE_TYPE:
   case NODE_CASE_LABEL:
-  case NODE_FOR_LIST:
   case NODE_LABELED_STMT:
   case NODE_CONSTANT:
   case NODE_RECORD_FIELD:

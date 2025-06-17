@@ -28,3 +28,4 @@ final_work/.venv/bin/pyserial-ports
 final_work/.venv/bin/register-python-argcomplete
 final_work/.venv/bin/python-argcomplete-check-easy-install-script
 final_work/.venv/bin/activate-global-python-argcomplete
+final_work/src/test

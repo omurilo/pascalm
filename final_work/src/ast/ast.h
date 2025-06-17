@@ -43,7 +43,6 @@ typedef struct WhileNode WhileNode;   // Laço while
 typedef struct WhileStmtNode WhileStmtNode;
 typedef struct RepeatUntilNode RepeatUntilNode;
 typedef struct ForStmtNode ForStmtNode;       // Laço for
-typedef struct ForListNode ForListNode;
 typedef struct WithNode WithNode;     // Estrutura with
 typedef struct GotoNode GotoNode;     // Comando goto
 
@@ -352,15 +351,9 @@ struct RepeatUntilNode {
 struct ForStmtNode {
     ASTNode base;
     ASTNode *variable;      // Variável de controle
-    ASTNode *for_list;      // Informações do intervalo (inicial, final, step)
-    ASTNode *body;          // Statement a executar
-    bool is_downto;         // true se for downto, false se for to
-};
-
-struct ForListNode {
-    ASTNode base;
     ASTNode *start_expr;    // Expressão inicial
     ASTNode *end_expr;      // Expressão final
+    ASTNode *body;          // Statement a executar
     bool is_downto;         // true se for downto, false se for to
 };
 
@@ -644,7 +637,6 @@ ASTNode *create_case_label_list(ASTNode* case_label, SourceLocation loc);
 ASTNode *create_constant_declaration_node(ASTNode *identifier,
                                           ASTNode *constant,
                                           SourceLocation loc);
-ASTNode *create_expression_range_node(ASTNode *expr1, ASTNode *expr2, SourceLocation loc);
 ASTNode *create_constant_range_node(ASTNode *constant1, ASTNode *constant2, SourceLocation loc);
 ASTNode *create_function_call_node(ASTNode *id, ASTNode *params, SourceLocation loc);
 ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc);
@@ -775,6 +767,9 @@ const char* get_node_type_name(NodeType type);
 const char* binary_op_to_string(BinaryOperator op);
 const char* unary_op_to_string(UnaryOperator op);
 const char* get_symbol_kind_name(SymbolKind symb);
+void check_params(ASTNode *id, ASTNode *params);
+const char* get_literal_type_name(LiteralType type);
+const char *get_param_kind_name(ParameterKind kind);
 // void print_binary_expr_node(ASTNode *node, int indent);
 // void print_heading(ASTNode *node, int indent);
 #endif

@@ -21,6 +21,7 @@ void yyerror(const char *msg) {
 }
 
 ht *HashTable = NULL;
+int scopes = 0;
 
 int main(int argc, char **argv) {
   if (argc > 1) {
@@ -53,7 +54,7 @@ int main(int argc, char **argv) {
 
   if (root) {
     printf("AST construída com sucesso:\n");
-    root->print(root, 0);
+    // root->print(root, 0);
     generate_program(root->code_gen, root);
     fclose(root->code_gen->output_file);
     free_node(root);
