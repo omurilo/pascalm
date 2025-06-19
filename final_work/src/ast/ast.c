@@ -1,6 +1,7 @@
 #include "ast.h"
 #include <string.h>
-#include "../symbol-table/symbol-table.h"
+#include <assert.h>
+#include "../logger.h"
 
 SourceLocation create_location(YYLTYPE loc) {
   SourceLocation result;
@@ -21,8 +22,8 @@ char *debug_location(SourceLocation loc) {
 
 void print_program_node(ASTNode *node, int indent) {
   ProgramNode *prog = (ProgramNode *)node;
-  printf("%*sProgram: %s - at: %s [%s]\n", indent, "", prog->name,
-         debug_location(prog->base.location), prog->base.location.file_name);
+  fprintf(stderr, "%*sProgram: %s - at: %s [%s]\n", indent, "", prog->name,
+          debug_location(prog->base.location), prog->base.location.file_name);
   if (prog->heading != NULL) {
     prog->heading->print(prog->heading, indent += 2);
   }
@@ -33,7 +34,7 @@ void print_program_node(ASTNode *node, int indent) {
 
 void print_heading(ASTNode *node, int indent) {
   HeadingNode *h = (HeadingNode *)node;
-  printf("%*sHeading parameters: (", indent, "");
+  fprintf(stderr, "%*sHeading parameters: (", indent, "");
   ListNode *current = (ListNode *)h->list;
   int first = 1;
 
@@ -41,15 +42,15 @@ void print_heading(ASTNode *node, int indent) {
     if (current->element) {
       IdentifierNode *id = (IdentifierNode *)current->element;
       if (!first)
-        printf(", ");
-      printf("%s", id->name);
+        fprintf(stderr, ", ");
+      fprintf(stderr, "%s", id->name);
       first = 0;
     } else {
-      printf("[NULL]");
+      fprintf(stderr, "[NULL]");
     }
     current = (ListNode *)current->next;
   }
-  printf(")\n");
+  fprintf(stderr, ")\n");
 }
 
 void print_list_identifiers(ASTNode *node, int indent) {
@@ -64,7 +65,7 @@ void print_list_identifiers(ASTNode *node, int indent) {
         break;
       }
       case NODE_PROC_DECL: {
-        ProcDeclarationNode *pd = (ProcDeclarationNode *)current->element;
+        FuncDeclarationNode *pd = (FuncDeclarationNode *)current->element;
         pd->identifier->print(pd->identifier, indent);
         break;
       }
@@ -72,6 +73,7 @@ void print_list_identifiers(ASTNode *node, int indent) {
         // current->element->print(current->element, indent);
         TypeDeclarationNode *td = (TypeDeclarationNode *)current->element;
         td->identifier->print(td->identifier, indent);
+        td->type_expr->print(td->type_expr, indent);
         break;
       }
       case NODE_CONST_DECL: {
@@ -84,13 +86,13 @@ void print_list_identifiers(ASTNode *node, int indent) {
         break;
       }
       default: {
-        printf("%*sUnknown Identifier Type %s\n", indent, "",
-               get_node_type_name(current->element->type));
+        fprintf(stderr, "%*sUnknown Identifier Type %s\n", indent, "",
+                get_node_type_name(current->element->type));
         break;
       }
       }
     } else {
-      printf("%*sprint_list_identifiers: [NULL]\n", indent, "");
+      fprintf(stderr, "%*sprint_list_identifiers: [NULL]\n", indent, "");
     }
     current = (ListNode *)current->next;
   }
@@ -98,23 +100,73 @@ void print_list_identifiers(ASTNode *node, int indent) {
 
 void print_literal_value(ASTNode *node, int indent) {
   if (node->type != NODE_LITERAL) {
-    printf("%*s[WARNING] try print literal value from type: %s\n", indent, "",
-           get_node_type_name(node->type));
+    fprintf(stderr, "%*s[WARNING] try print literal value from type: %s\n",
+            indent, "", get_node_type_name(node->type));
     return;
   };
 
   LiteralNode *lit = (LiteralNode *)node;
   if (lit->literal_type == LITERAL_STRING) {
-    printf("%*sLiteral %s\n", indent, "", lit->value.str_val);
+    fprintf(stderr, "%*sLiteral %s\n", indent, "", lit->value.str_val);
   } else if (lit->literal_type == LITERAL_INTEGER) {
-    printf("%*sLiteral %d\n", indent, "", lit->value.int_val);
+    fprintf(stderr, "%*sLiteral %d\n", indent, "", lit->value.int_val);
   } else if (lit->literal_type == LITERAL_REAL) {
-    printf("%*sLiteral %.2f\n", indent, "", lit->value.real_val);
+    fprintf(stderr, "%*sLiteral %.2f\n", indent, "", lit->value.real_val);
   } else if (lit->literal_type == LITERAL_BOOLEAN) {
-    printf("%*sLiteral %s\n", indent, "",
-           lit->value.bool_val ? "true" : "false");
+    fprintf(stderr, "%*sLiteral %s\n", indent, "",
+            lit->value.bool_val ? "true" : "false");
   } else if (lit->literal_type == LITERAL_CHAR) {
-    printf("%*sLiteral %c\n", indent, "", lit->value.char_val);
+    fprintf(stderr, "%*sLiteral %c\n", indent, "", lit->value.char_val);
+  }
+}
+
+void print_types(ASTNode *node, int indent) {
+  switch (node->type) {
+  case NODE_STRUCTURED_TYPE: {
+    StructuredTypeNode *s = (StructuredTypeNode *)node;
+    print_types(s->type, indent);
+    break;
+  }
+  case NODE_SIMPLE_TYPE: {
+    SimpleTypeNode *s = (SimpleTypeNode *)node;
+    print_types(s->type, indent);
+    break;
+  }
+  case NODE_POINTER_TYPE: {
+    print_types(node, indent);
+    break;
+  }
+  case NODE_ARRAY_TYPE: {
+    ArrayTypeNode *arr = (ArrayTypeNode *)node;
+    print_types(arr->type, indent);
+    break;
+  }
+  case NODE_RECORD_TYPE: {
+    RecordTypeNode *rt = (RecordTypeNode *)node;
+    print_stmt_list(rt->field_list, indent + 2);
+    print_stmt_list(rt->variant_part, indent + 2);
+    break;
+  }
+  case NODE_ENUMERATED_TYPE:
+    break;
+  case NODE_SUBRANGE_TYPE:
+    break;
+  case NODE_SET_TYPE: {
+    SetTypeNode *st = (SetTypeNode *)node;
+    print_types(st->type, indent);
+    break;
+  }
+  case NODE_TYPE_IDENTIFIER: {
+    TypeIdentifierNode *tid = (TypeIdentifierNode *)node;
+    IdentifierNode *id = (IdentifierNode *)tid->id;
+    fprintf(stderr, "%*s Type name: %s\n", indent, "", id->name);
+    break;
+  }
+  case NODE_FILE_TYPE:
+  default:
+    fprintf(stderr, "%*s[WARNING] try print literal value from type: %s\n",
+            indent, "", get_node_type_name(node->type));
+    break;
   }
 }
 
@@ -129,11 +181,11 @@ void print_list_values(ASTNode *node, int indent) {
         LabelDeclarationNode *d = (LabelDeclarationNode *)current->element;
         print_literal_value(d->value, indent);
       } else {
-        printf("%*s(print_list_values) Unknown type: %s\n", indent, "",
-               get_node_type_name(current->element->type));
+        fprintf(stderr, "%*s(print_list_values) Unknown type: %s\n", indent, "",
+                get_node_type_name(current->element->type));
       }
     } else {
-      printf("%*sprint_list_values [NULL]\n", indent, "");
+      fprintf(stderr, "%*sprint_list_values [NULL]\n", indent, "");
     }
     current = (ListNode *)current->next;
   }
@@ -146,24 +198,24 @@ void print_variable_declaration(ASTNode *node, int indent) {
     if (current->element) {
       VarDeclarationNode *v_decl = (VarDeclarationNode *)current->element;
       ListNode *new_curr = (ListNode *)v_decl->var_list;
-      printf("%*s(", indent, "");
+      fprintf(stderr, "%*s(", indent, "");
       int first = 1;
       while (new_curr) {
         if (new_curr->element) {
           IdentifierNode *id = (IdentifierNode *)new_curr->element;
           if (first > 1) {
-            printf(", ");
+            fprintf(stderr, ", ");
           }
-          printf("%s", id->name);
+          fprintf(stderr, "%s", id->name);
         } else {
-          printf("%*sprint_variable_declaration [NULL]\n", indent, "");
+          fprintf(stderr, "%*sprint_variable_declaration [NULL]\n", indent, "");
         }
         first += 1;
         new_curr = (ListNode *)new_curr->next;
       }
-      printf(")\n");
+      fprintf(stderr, ")\n");
     } else {
-      printf("%*sprint_variable_declaration [NULL]\n", indent, "");
+      fprintf(stderr, "%*sprint_variable_declaration [NULL]\n", indent, "");
     }
     current = (ListNode *)current->next;
   }
@@ -171,26 +223,27 @@ void print_variable_declaration(ASTNode *node, int indent) {
 
 void debug_lists(ListNode *node, int indent) {
   if (node->base.type != NODE_LIST) {
-    printf(
+    fprintf(
+        stderr,
         "%*s[WARNING] Attempt to print list node with type %s, location: %s\n",
         indent + 4, "", get_node_type_name(node->base.type),
         debug_location(node->base.location));
     return;
   }
-  printf("%*sTypes: %s - location: %s\n", indent + 4, "",
-         get_node_type_name(node->base.type),
-         debug_location(node->base.location));
+  fprintf(stderr, "%*sTypes: %s - location: %s\n", indent + 4, "",
+          get_node_type_name(node->base.type),
+          debug_location(node->base.location));
   while (node) {
     if (node->element) {
-      printf("%*sElement: %s - location: %s\n", indent + 4, "",
-             get_node_type_name(node->element->type),
-             debug_location(node->element->location));
+      fprintf(stderr, "%*sElement: %s - location: %s\n", indent + 4, "",
+              get_node_type_name(node->element->type),
+              debug_location(node->element->location));
       debug_lists((ListNode *)node->element, indent + 5);
     }
     if (node->next) {
-      printf("%*sNext: %s - location: %s\n", indent + 4, "",
-             get_node_type_name(node->next->type),
-             debug_location(node->next->location));
+      fprintf(stderr, "%*sNext: %s - location: %s\n", indent + 4, "",
+              get_node_type_name(node->next->type),
+              debug_location(node->next->location));
       debug_lists((ListNode *)node->next, indent + 10);
     }
     node = (ListNode *)node->next;
@@ -199,30 +252,30 @@ void debug_lists(ListNode *node, int indent) {
 
 void print_block(ASTNode *node, int indent) {
   BlockNode *block = (BlockNode *)node;
-  printf("%*sBlock:\n", indent, "");
+  fprintf(stderr, "%*sBlock:\n", indent, "");
 
   if (block->labels != NULL) {
-    printf("%*sLabels: \n", indent + 2, "");
+    fprintf(stderr, "%*sLabels: \n", indent + 2, "");
     block->labels->print(block->labels, indent + 4);
   }
   if (block->constants != NULL) {
-    printf("%*sConstants: \n", indent + 2, "");
+    fprintf(stderr, "%*sConstants: \n", indent + 2, "");
     block->constants->print(block->constants, indent + 4);
   }
   if (block->types != NULL) {
-    printf("%*sTypes: \n", indent + 2, "");
+    fprintf(stderr, "%*sTypes: \n", indent + 2, "");
     block->types->print(block->types, indent + 4);
   }
   if (block->variables != NULL) {
-    printf("%*sVariables: \n", indent + 2, "");
+    fprintf(stderr, "%*sVariables: \n", indent + 2, "");
     block->variables->print(block->variables, indent + 4);
   }
   if (block->procs_funcs != NULL) {
-    printf("%*sProcedures e Functions: \n", indent + 2, "");
+    fprintf(stderr, "%*sProcedures e Functions: \n", indent + 2, "");
     block->procs_funcs->print(block->procs_funcs, indent + 4);
   }
   if (block->statements != NULL) {
-    printf("%*sStatements: \n", indent + 2, "");
+    fprintf(stderr, "%*sStatements: \n", indent + 2, "");
     block->statements->print(block->statements, indent + 4);
   }
 }
@@ -234,14 +287,14 @@ void print_stmt_list(ASTNode *node, int indent) {
     if (current->element) {
       switch (current->element->type) {
       case NODE_COMPOUND_STMT: {
-        printf("%*sNODE_COMPOUND_STMT-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_COMPOUND_STMT-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         current->element->print(current->element, indent + 2);
         break;
       }
       case NODE_ASSIGN_STMT: {
-        printf("%*sNODE_ASSIGN_STMT-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_ASSIGN_STMT-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         AssignmentNode *a = (AssignmentNode *)current->element;
         if (a->target->type == NODE_IDENTIFIER) {
           a->target->print(a->target, indent + 2);
@@ -250,122 +303,134 @@ void print_stmt_list(ASTNode *node, int indent) {
         break;
       }
       case NODE_PROC_CALL: {
-        printf("%*sNODE_PROC_CALL-> (%s)\n", indent, "",
-               debug_location(current->element->location));
-        ProcedureCallNode *proc = (ProcedureCallNode *)current->element;
-        if (proc->procedure->type == NODE_IDENTIFIER) {
-          proc->procedure->print(proc->procedure, indent + 2);
+        fprintf(stderr, "%*sNODE_PROC_CALL-> (%s)\n", indent, "",
+                debug_location(current->element->location));
+        FunctionCallNode *proc = (FunctionCallNode *)current->element;
+        if (proc->function->type == NODE_IDENTIFIER) {
+          proc->function->print(proc->function, indent + 2);
           break;
         }
         proc->base.print((ASTNode *)proc, indent + 2);
         break;
       }
       case NODE_IF_STMT: {
-        printf("%*sNODE_IF_STMT-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_IF_STMT-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         current->element->print(current->element, indent + 2);
         break;
       }
       case NODE_CASE_STMT: {
-        printf("%*sNODE_CASE_STMT-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_CASE_STMT-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         current->element->print(current->element, indent + 2);
         break;
       }
       case NODE_CASE_ITEM: {
-        printf("%*sNODE_CASE_ITEM-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_CASE_ITEM-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         current->element->print(current->element, indent + 2);
         break;
       }
       case NODE_CASE_ELSE: {
-        printf("%*sNODE_CASE_ELSE-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_CASE_ELSE-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         current->element->print(current->element, indent + 2);
         break;
       }
       case NODE_WHILE_STMT: {
-        printf("%*sNODE_WHILE-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_WHILE-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         WhileStmtNode *w = (WhileStmtNode *)current->element;
         print_stmt_list(w->body, indent + 2);
         break;
       }
       case NODE_REPEAT_STMT: {
-        printf("%*sNODE_REPEAT-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_REPEAT-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         RepeatUntilNode *r = (RepeatUntilNode *)current->element;
         print_stmt_list(r->body, indent + 2);
         break;
       }
       case NODE_FOR_STMT: {
-        printf("%*sNODE_FOR-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_FOR-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         ForStmtNode *ft = (ForStmtNode *)current->element;
         if (ft->variable->type == NODE_IDENTIFIER) {
           ft->variable->print(ft->variable, indent + 2);
         }
-        printf("%*sNODE_FOR_LIST-> (%s)\n", indent + 2, "",
-               ft->is_downto ? "downto" : "to");
-        printf("%*sStart Expression\n", indent + 4, "");
+        fprintf(stderr, "%*sNODE_FOR_LIST-> (%s)\n", indent + 2, "",
+                ft->is_downto ? "downto" : "to");
+        fprintf(stderr, "%*sStart Expression\n", indent + 4, "");
         ft->start_expr->print(ft->start_expr, indent + 6);
-        printf("%*sEnd Expression\n", indent + 4, "");
+        fprintf(stderr, "%*sEnd Expression\n", indent + 4, "");
         ft->end_expr->print(ft->end_expr, indent + 6);
-        printf("%*sBody\n", indent + 4, "");
+        fprintf(stderr, "%*sBody\n", indent + 4, "");
         print_stmt_list(ft->body, indent + 6);
         break;
       }
       case NODE_WITH_STMT: {
-        printf("%*sNODE_WITH-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_WITH-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         current->element->print(current->element, indent + 2);
         break;
       }
       case NODE_GOTO_STMT: {
-        printf("%*sNODE_GOTO-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_GOTO-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         current->element->print(current->element, indent + 2);
         break;
       }
       case NODE_IDENTIFIER: {
-        printf("%*sNODE_IDENTIFIER-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_IDENTIFIER-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         current->element->print(current->element, indent + 2);
         break;
       }
       case NODE_LIST: {
-        printf("%*sNODE_LIST-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_LIST-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         print_stmt_list(current->element, indent + 2);
         break;
       }
       case NODE_BINARY_EXPR: {
-        printf("%*sNODE_BINARY_EXPR-> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_BINARY_EXPR-> (%s)\n", indent, "",
+                debug_location(current->element->location));
         print_binary_operation(current->element, indent + 2);
         break;
       }
       case NODE_LITERAL: {
-        printf("%*sNODE_LITERAL -> (%s)\n", indent, "",
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNODE_LITERAL -> (%s)\n", indent, "",
+                debug_location(current->element->location));
         print_literal_value(current->element, indent + 2);
         break;
       }
+      case NODE_RECORD_FIELD: {
+        RecordFieldNode *rf = (RecordFieldNode *)current->element;
+        print_types(rf->record_type, indent + 2);
+        break;
+      }
+      case NODE_FIXED_PART: {
+        FixedPartNode *fp = (FixedPartNode *)current->element;
+        fprintf(stderr, "%*sNODE_FIXED_PART -> (%s)\n", indent, "",
+                debug_location(current->element->location));
+        print_stmt_list(fp->fields, indent);
+        break;
+      }
       default:
-        printf("%*sNode Type %s (%s)\n", indent, "",
-               get_node_type_name(current->element->type),
-               debug_location(current->element->location));
+        fprintf(stderr, "%*sNode Type %s (%s)\n", indent, "",
+                get_node_type_name(current->element->type),
+                debug_location(current->element->location));
         break;
       }
     } else {
       if (current->next) {
-        printf("%*s Element (null) but next -> %s (%s)\n", indent, "",
-               get_node_type_name(current->next->type),
-               debug_location(current->next->location));
+        fprintf(stderr, "%*s Element (null) but next -> %s (%s)\n", indent, "",
+                get_node_type_name(current->next->type),
+                debug_location(current->next->location));
       }
-      printf("%*sElement (null), current type: %s (%s)\n", indent, "",
-             get_node_type_name(current->base.type),
-             debug_location(current->element->location));
+      fprintf(stderr, "%*sElement (null), current type: %s (%s)\n", indent, "",
+              get_node_type_name(current->base.type),
+              debug_location(current->element->location));
     }
     current = (ListNode *)current->next;
   }
@@ -373,36 +438,33 @@ void print_stmt_list(ASTNode *node, int indent) {
 
 void print_type_identifier_node(ASTNode *node, int indent) {
   if (node->type != NODE_TYPE_IDENTIFIER) {
-    printf("WARN: Tentou imprimir NODE_TYPE_IDENTIFIER, mas o tipo é %s!\n",
-           get_node_type_name(node->type));
+    fprintf(stderr,
+            "WARN: Tentou imprimir NODE_TYPE_IDENTIFIER, mas o tipo é %s!\n",
+            get_node_type_name(node->type));
   }
 
   TypeIdentifierNode *tid = (TypeIdentifierNode *)node;
-  if (tid->id != NULL) {
-    tid->id->base.print((ASTNode *)tid->id, indent);
-  } else {
-    printf("%*sType Identifier: %s\n", indent, "", tid->name);
-  }
+  tid->id->base.print((ASTNode *)tid->id, indent);
 }
 
 void print_identifier_node(ASTNode *node, int indent) {
   if (node->type != NODE_IDENTIFIER) {
-    printf("WARN: Tentou imprimir NODE_IDENTIFIER, mas o tipo é %s!\n",
-           get_node_type_name(node->type));
+    fprintf(stderr, "WARN: Tentou imprimir NODE_IDENTIFIER, mas o tipo é %s!\n",
+            get_node_type_name(node->type));
   }
 
   IdentifierNode *id = (IdentifierNode *)node;
   if (id->name != NULL) {
-    printf("%*sIdentifier: %s\n", indent, "", id->name);
+    fprintf(stderr, "%*sIdentifier: %s\n", indent, "", id->name);
   } else {
-    printf("%*sIdentifier: <unnamed>\n", indent, "");
+    fprintf(stderr, "%*sIdentifier: <unnamed>\n", indent, "");
   }
 }
 
 void print_constant_identifier_node(ASTNode *node, int indent) {
   if (node->type != NODE_CONSTANT) {
-    printf("WARN: Tentou imprimir NODE_CONSTANT, mas o tipo é %s!\n",
-           get_node_type_name(node->type));
+    fprintf(stderr, "WARN: Tentou imprimir NODE_CONSTANT, mas o tipo é %s!\n",
+            get_node_type_name(node->type));
   }
 
   ConstantNode *constant = (ConstantNode *)node;
@@ -415,64 +477,66 @@ void print_constant_identifier_node(ASTNode *node, int indent) {
 
 void print_member_access_node(ASTNode *node, int indent) {
   if (node->type != NODE_MEMBER_ACCESS) {
-    printf("WARN: Tentou imprimir NODE_MEMBER_ACCESS, mas o tipo é %s!\n",
-           get_node_type_name(node->type));
+    fprintf(stderr,
+            "WARN: Tentou imprimir NODE_MEMBER_ACCESS, mas o tipo é %s!\n",
+            get_node_type_name(node->type));
   }
 
   MemberAccessNode *mnode = (MemberAccessNode *)node;
-  printf("%*sMember Access -> Record:\n", indent, "");
+  fprintf(stderr, "%*sMember Access -> Record:\n", indent, "");
   mnode->record->print(mnode->record, indent + 2);
-  printf("%*sMember Access -> Field:\n", indent, "");
+  fprintf(stderr, "%*sMember Access -> Field:\n", indent, "");
   mnode->field->print(mnode->field, indent + 2);
 }
 
 void print_array_access_node(ASTNode *node, int indent) {
   if (node->type != NODE_ARRAY_ACCESS) {
-    printf("WARN: Tentou imprimir NODE_ARRAY_ACCESS, mas o tipo é %s!\n",
-           get_node_type_name(node->type));
+    fprintf(stderr,
+            "WARN: Tentou imprimir NODE_ARRAY_ACCESS, mas o tipo é %s!\n",
+            get_node_type_name(node->type));
   }
 
   ArrayAccessNode *anode = (ArrayAccessNode *)node;
   anode->array->print(anode->array, indent);
-  printf("%*sIndexes List:\n", indent + 2, "");
+  fprintf(stderr, "%*sIndexes List:\n", indent + 2, "");
   anode->subscript_list->print(anode->subscript_list, indent + 4);
 }
 
 void print_case_stmt_node(ASTNode *node, int indent) {
   if (node->type != NODE_CASE_STMT) {
-    printf("WARN: Tentou imprimir NODE_CASE_STMT, mas o tipo é %s!\n",
-           get_node_type_name(node->type));
+    fprintf(stderr, "WARN: Tentou imprimir NODE_CASE_STMT, mas o tipo é %s!\n",
+            get_node_type_name(node->type));
   }
 
   CaseNode *cnode = (CaseNode *)node;
-  printf("%*sExpression:\n", indent + 2, "");
+  fprintf(stderr, "%*sExpression:\n", indent + 2, "");
   cnode->expr->print(cnode->expr, indent + 4);
-  printf("%*sCase List:\n", indent + 2, "");
+  fprintf(stderr, "%*sCase List:\n", indent + 2, "");
   cnode->case_list->print(cnode->case_list, indent + 4);
   if (cnode->else_part != NULL) {
-    printf("%*sElse:\n", indent + 2, "");
+    fprintf(stderr, "%*sElse:\n", indent + 2, "");
     cnode->else_part->print(cnode->else_part, indent + 4);
   }
 }
 
 void print_binary_operation(ASTNode *node, int indent) {
   BinaryOperationNode *expr = (BinaryOperationNode *)node;
-  printf("%*sBinary Expression (op: %s)\n", indent, "",
-         binary_op_to_string(expr->op));
+  fprintf(stderr, "%*sBinary Expression (op: %s)\n", indent, "",
+          binary_op_to_string(expr->op));
   if (expr->left) {
-    printf("%*sLeft:\n", indent + 2, "");
+    fprintf(stderr, "%*sLeft:\n", indent + 2, "");
     expr->left->print(expr->left, indent + 4);
   }
   if (expr->right) {
-    printf("%*sRight:\n", indent + 2, "");
+    fprintf(stderr, "%*sRight:\n", indent + 2, "");
     expr->right->print(expr->right, indent + 4);
   }
 }
 
 void print_unary_operation(ASTNode *node, int indent) {
   UnaryOperationNode *expr = (UnaryOperationNode *)node;
-  printf("%*sUnary Expression (op: %s)\n", indent, "",
-         unary_op_to_string(expr->op));
+  fprintf(stderr, "%*sUnary Expression (op: %s)\n", indent, "",
+          unary_op_to_string(expr->op));
   if (expr->operand) {
     expr->operand->print(expr->operand, indent + 2);
   }
@@ -480,16 +544,16 @@ void print_unary_operation(ASTNode *node, int indent) {
 
 void print_function_call(ASTNode *node, int indent) {
   FunctionCallNode *fc = (FunctionCallNode *)node;
-  printf("%*sNODE_FUNC_CALL->\n", indent, "");
+  fprintf(stderr, "%*sNODE_FUNC_CALL->\n", indent, "");
   print_identifier_node(fc->function, indent + 2);
   // fc->params->print(fc->params, indent);
-  printf("%*sFUNC_CALL_PARAMS->\n", indent + 2, "");
+  fprintf(stderr, "%*sFUNC_CALL_PARAMS->\n", indent + 2, "");
   print_stmt_list(fc->params, indent + 4);
 }
 
 ASTNode *create_program_node(char *name, ASTNode *heading, ASTNode *block,
                              SourceLocation loc) {
-  ProgramNode *node = (ProgramNode *)malloc(sizeof(ProgramNode));
+  ProgramNode *node = calloc(1, sizeof(ProgramNode));
   node->base.type = NODE_PROGRAM;
   node->base.location = loc;
   node->base.print = print_program_node;
@@ -502,7 +566,7 @@ ASTNode *create_program_node(char *name, ASTNode *heading, ASTNode *block,
 ASTNode *create_block_node(ASTNode *labels, ASTNode *types, ASTNode *constants,
                            ASTNode *variables, ASTNode *procs_funcs,
                            ASTNode *statements, SourceLocation loc) {
-  BlockNode *node = (BlockNode *)malloc(sizeof(BlockNode));
+  BlockNode *node = calloc(1, sizeof(BlockNode));
   node->base.type = NODE_BLOCK;
   node->base.location = loc;
   node->base.print = print_block;
@@ -516,7 +580,7 @@ ASTNode *create_block_node(ASTNode *labels, ASTNode *types, ASTNode *constants,
 }
 
 ASTNode *create_heading_node(ASTNode *list, SourceLocation loc) {
-  HeadingNode *node = (HeadingNode *)malloc(sizeof(HeadingNode));
+  HeadingNode *node = calloc(1, sizeof(HeadingNode));
   node->base.type = NODE_HEADING;
   node->base.location = loc;
   node->base.print = print_heading;
@@ -525,14 +589,13 @@ ASTNode *create_heading_node(ASTNode *list, SourceLocation loc) {
 }
 
 ASTNode *create_label_declaration_node(ASTNode *value, SourceLocation loc) {
-  LabelDeclarationNode *node =
-      (LabelDeclarationNode *)malloc(sizeof(LabelDeclarationNode));
+  LabelDeclarationNode *node = calloc(1, sizeof(LabelDeclarationNode));
   node->base.type = NODE_LABEL_DECL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value = value;
 
-  ListNode *list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *list = calloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_values;
@@ -545,15 +608,14 @@ ASTNode *create_label_declaration_node(ASTNode *value, SourceLocation loc) {
 ASTNode *create_constant_declaration_node(ASTNode *identifier,
                                           ASTNode *constant,
                                           SourceLocation loc) {
-  ConstDeclarationNode *node =
-      (ConstDeclarationNode *)malloc(sizeof(ConstDeclarationNode));
+  ConstDeclarationNode *node = calloc(1, sizeof(ConstDeclarationNode));
   node->base.type = NODE_CONST_DECL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->identifier = identifier;
   node->const_expr = constant;
 
-  ListNode *list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *list = calloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_identifiers;
@@ -565,15 +627,14 @@ ASTNode *create_constant_declaration_node(ASTNode *identifier,
 
 ASTNode *create_type_declaration_node(ASTNode *identifier, ASTNode *type,
                                       SourceLocation loc) {
-  TypeDeclarationNode *node =
-      (TypeDeclarationNode *)malloc(sizeof(TypeDeclarationNode));
+  TypeDeclarationNode *node = calloc(1, sizeof(TypeDeclarationNode));
   node->base.type = NODE_TYPE_DECL;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
   node->identifier = identifier;
   node->type_expr = type;
 
-  ListNode *list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *list = calloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_identifiers;
@@ -584,8 +645,7 @@ ASTNode *create_type_declaration_node(ASTNode *identifier, ASTNode *type,
 }
 
 ASTNode *create_type_identifier(ASTNode *id, SourceLocation loc) {
-  TypeIdentifierNode *typeid =
-      (TypeIdentifierNode *)malloc(sizeof(TypeIdentifierNode));
+  TypeIdentifierNode *typeid = calloc(1, sizeof(TypeIdentifierNode));
   typeid->base.type = NODE_TYPE_IDENTIFIER;
   typeid->base.location = loc;
   typeid->base.print = print_type_identifier_node;
@@ -597,31 +657,34 @@ ASTNode *create_type_identifier(ASTNode *id, SourceLocation loc) {
 }
 
 ASTNode *create_builtin_type_identifier(char *name, SourceLocation loc) {
-  TypeIdentifierNode *typeid =
-      (TypeIdentifierNode *)malloc(sizeof(TypeIdentifierNode));
+  TypeIdentifierNode *typeid = calloc(1, sizeof(TypeIdentifierNode));
   typeid->base.type = NODE_TYPE_IDENTIFIER;
   typeid->base.location = loc;
   typeid->base.print = print_type_identifier_node;
-  typeid->name = strdup(name);
   typeid->kind = SYMBOL_BUILTIN;
+
+  IdentifierNode *id = (IdentifierNode*)create_identifier_node(strdup(name), loc);
+  id->kind = SYMBOL_BUILTIN;
+
+  typeid->id = id;
   typeid->is_base_type = true;
 
   return (ASTNode *)typeid;
 }
 
 ASTNode *create_builtin_identifier(char *name, SourceLocation loc) {
-  IdentifierNode *built = (IdentifierNode *)malloc(sizeof(IdentifierNode));
+  IdentifierNode *built = calloc(1, sizeof(IdentifierNode));
   built->base.type = NODE_IDENTIFIER;
   built->base.location = loc;
   built->base.print = print_identifier_node;
   built->name = strdup(name);
-  built->kind = SYMBOL_PROCEDURE;
+  built->kind = SYMBOL_BUILTIN;
 
   return (ASTNode *)built;
 }
 
 ASTNode *create_identifier_list_node(ASTNode *element, SourceLocation loc) {
-  ListNode *node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *node = calloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -632,7 +695,7 @@ ASTNode *create_identifier_list_node(ASTNode *element, SourceLocation loc) {
 
 ASTNode *create_case_stmt_node(ASTNode *expr, ASTNode *case_list,
                                ASTNode *else_part, SourceLocation loc) {
-  CaseNode *node = (CaseNode *)malloc(sizeof(CaseNode));
+  CaseNode *node = calloc(1, sizeof(CaseNode));
   node->base.type = NODE_CASE_STMT;
   node->base.location = loc;
   node->base.print = print_case_stmt_node;
@@ -649,7 +712,7 @@ ASTNode *create_case_stmt_with_else_node(ASTNode *expression,
 }
 
 ASTNode *create_case_list_node(ASTNode *element, SourceLocation loc) {
-  ListNode *list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *list = calloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_identifiers;
@@ -660,14 +723,14 @@ ASTNode *create_case_list_node(ASTNode *element, SourceLocation loc) {
 
 ASTNode *create_case_item_node(ASTNode *value_list, ASTNode *stmt,
                                SourceLocation loc) {
-  CaseItemNode *node = (CaseItemNode *)malloc(sizeof(CaseItemNode));
+  CaseItemNode *node = calloc(1, sizeof(CaseItemNode));
   node->base.type = NODE_CASE_ITEM;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value_list = value_list;
   node->statement = stmt;
 
-  ListNode *list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *list = calloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_identifiers;
@@ -677,7 +740,7 @@ ASTNode *create_case_item_node(ASTNode *value_list, ASTNode *stmt,
 }
 
 ASTNode *create_case_else_node(ASTNode *stmt, SourceLocation loc) {
-  CaseElseNode *node = (CaseElseNode *)malloc(sizeof(CaseElseNode));
+  CaseElseNode *node = calloc(1, sizeof(CaseElseNode));
   node->base.type = NODE_CASE_ELSE;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -686,7 +749,7 @@ ASTNode *create_case_else_node(ASTNode *stmt, SourceLocation loc) {
 };
 
 ASTNode *create_case_label_list(ASTNode *case_label, SourceLocation loc) {
-  ListNode *new_list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_list = calloc(1, sizeof(ListNode));
   new_list->base.type = NODE_LIST;
   new_list->base.location = loc;
   new_list->base.print = print_list_identifiers;
@@ -698,7 +761,7 @@ ASTNode *create_case_label_list(ASTNode *case_label, SourceLocation loc) {
 ASTNode *create_constant_range_node(ASTNode *constant1, ASTNode *constant2,
                                     SourceLocation loc) {
   // TODO: In a semantic analysis, the type of lower and upper must be equal
-  SubrangeTypeNode *node = (SubrangeTypeNode *)malloc(sizeof(SubrangeTypeNode));
+  SubrangeTypeNode *node = calloc(1, sizeof(SubrangeTypeNode));
   node->base.type = NODE_SUBRANGE_TYPE;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -710,7 +773,7 @@ ASTNode *create_constant_range_node(ASTNode *constant1, ASTNode *constant2,
 
 ASTNode *create_array_access_node(ASTNode *array, ASTNode *subscripts,
                                   SourceLocation loc) {
-  ArrayAccessNode *node = (ArrayAccessNode *)malloc(sizeof(ArrayAccessNode));
+  ArrayAccessNode *node = calloc(1, sizeof(ArrayAccessNode));
   node->base.type = NODE_ARRAY_ACCESS;
   node->base.location = loc;
   node->base.print = print_array_access_node;
@@ -722,17 +785,18 @@ ASTNode *create_array_access_node(ASTNode *array, ASTNode *subscripts,
 ASTNode *create_record_access_node(ASTNode *record, ASTNode *field,
                                    SourceLocation loc) {
   // TODO: verificar se existe antes de acessar
-  MemberAccessNode *node = (MemberAccessNode *)malloc(sizeof(MemberAccessNode));
+  MemberAccessNode *node = calloc(1, sizeof(MemberAccessNode));
   node->base.type = NODE_MEMBER_ACCESS;
   node->base.location = loc;
   node->base.print = print_member_access_node;
   node->record = record;
   node->field = field;
+
   return (ASTNode *)node;
 }
 
 ASTNode *create_pointer_deref_node(ASTNode *pointer, SourceLocation loc) {
-  PointerDerefNode *node = (PointerDerefNode *)malloc(sizeof(PointerDerefNode));
+  PointerDerefNode *node = calloc(1, sizeof(PointerDerefNode));
   node->base.type = NODE_POINTER_DEREF;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -741,7 +805,7 @@ ASTNode *create_pointer_deref_node(ASTNode *pointer, SourceLocation loc) {
 }
 
 ASTNode *create_subscript_list_node(ASTNode *expr, SourceLocation loc) {
-  ListNode *node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *node = calloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -752,16 +816,15 @@ ASTNode *create_subscript_list_node(ASTNode *expr, SourceLocation loc) {
 
 ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
                                           SourceLocation loc) {
-  VarDeclarationNode *decl =
-      (VarDeclarationNode *)malloc(sizeof(VarDeclarationNode));
+  VarDeclarationNode *decl = calloc(1, sizeof(VarDeclarationNode));
   decl->base.type = NODE_VAR_DECL;
   decl->base.location = loc;
   decl->base.print = print_variable_declaration;
   decl->var_list = list;
   decl->type_node = type;
-  decl->scope_level = scopes;
+  decl->scope_level = 0;
 
-  ListNode *new_list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_list = calloc(1, sizeof(ListNode));
   new_list->base.type = NODE_LIST;
   new_list->base.location = loc;
   new_list->base.print = print_variable_declaration;
@@ -771,7 +834,7 @@ ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
 };
 
 ASTNode *create_variable_identifier_list_node(ASTNode *id, SourceLocation loc) {
-  ListNode *list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *list = calloc(1, sizeof(ListNode));
 
   list->base.type = NODE_LIST;
   list->base.location = loc;
@@ -783,7 +846,7 @@ ASTNode *create_variable_identifier_list_node(ASTNode *id, SourceLocation loc) {
 
 ASTNode *create_proc_and_func_declarations_node(ASTNode *proc_and_func,
                                                 SourceLocation loc) {
-  ListNode *node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *node = calloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -795,14 +858,14 @@ ASTNode *create_proc_and_func_declarations_node(ASTNode *proc_and_func,
 ASTNode *create_proc_declaration_node(ASTNode *identifier, ASTNode *parameters,
                                       ASTNode *block_or_forward,
                                       SourceLocation loc) {
-  ProcDeclarationNode *proc =
-      (ProcDeclarationNode *)malloc(sizeof(ProcDeclarationNode));
+  FuncDeclarationNode *proc = calloc(1, sizeof(FuncDeclarationNode));
   proc->base.type = NODE_PROC_DECL;
   proc->base.location = loc;
   proc->base.print = print_todo;
   proc->identifier = identifier;
   proc->parameters = parameters;
   proc->block_or_forward = block_or_forward;
+  proc->type = NULL;
 
   return (ASTNode *)proc;
 };
@@ -810,9 +873,7 @@ ASTNode *create_proc_declaration_node(ASTNode *identifier, ASTNode *parameters,
 ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
                                       ASTNode *type, ASTNode *block_or_forward,
                                       SourceLocation loc) {
-  scopes++;
-  FuncDeclarationNode *func =
-      (FuncDeclarationNode *)malloc(sizeof(FuncDeclarationNode));
+  FuncDeclarationNode *func = calloc(1, sizeof(FuncDeclarationNode));
   func->base.type = NODE_FUNC_DECL;
   func->base.location = loc;
   func->base.print = print_todo;
@@ -821,16 +882,11 @@ ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
   func->parameters = parameters;
   func->block_or_forward = block_or_forward;
 
-  IdentifierNode *id = (IdentifierNode *)identifier;
-  SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_FUNCTION, scopes, loc);
-  s->info.func_info.return_type = type;
-  s->info.func_info.params = parameters;
-
   return (ASTNode *)func;
 };
 
 ASTNode *create_forward_declaration_node(SourceLocation loc) {
-  ASTNode *node = (ASTNode *)malloc(sizeof(ASTNode));
+  ASTNode *node = calloc(1, sizeof(ASTNode));
   node->type = NODE_FORWARD_DECL;
   node->location = loc;
   node->print = print_todo;
@@ -838,7 +894,7 @@ ASTNode *create_forward_declaration_node(SourceLocation loc) {
 }
 
 ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc) {
-  ListNode *new_list = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_list = calloc(1, sizeof(ListNode));
   new_list->base.type = NODE_LIST;
   new_list->base.location = loc;
   new_list->base.print = print_stmt_list;
@@ -849,7 +905,7 @@ ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc) {
 
 ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
                                 SourceLocation loc) {
-  ArrayTypeNode *node = (ArrayTypeNode *)malloc(sizeof(ArrayTypeNode));
+  ArrayTypeNode *node = calloc(1, sizeof(ArrayTypeNode));
   node->base.type = NODE_ARRAY_TYPE;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -861,7 +917,7 @@ ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
 
 ASTNode *create_assign_node(ASTNode *variable, ASTNode *expression,
                             SourceLocation loc) {
-  AssignmentNode *node = (AssignmentNode *)malloc(sizeof(AssignmentNode));
+  AssignmentNode *node = calloc(1, sizeof(AssignmentNode));
   node->base.type = NODE_ASSIGN_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -873,7 +929,7 @@ ASTNode *create_assign_node(ASTNode *variable, ASTNode *expression,
 
 ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
                                      SourceLocation loc) {
-  VariantPartNode *part = (VariantPartNode *)malloc(sizeof(VariantPartNode));
+  VariantPartNode *part = calloc(1, sizeof(VariantPartNode));
   part->base.type = NODE_VARIANT_PART;
   part->base.location = loc;
   part->base.print = print_todo;
@@ -884,7 +940,7 @@ ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
 };
 
 ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {
-  ConstantNode *node = (ConstantNode *)malloc(sizeof(ConstantNode));
+  ConstantNode *node = calloc(1, sizeof(ConstantNode));
   node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
@@ -896,7 +952,7 @@ ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {
 };
 
 ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {
-  ConstantNode *node = (ConstantNode *)malloc(sizeof(ConstantNode));
+  ConstantNode *node = calloc(1, sizeof(ConstantNode));
   node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
@@ -930,7 +986,7 @@ ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {
 };
 
 ASTNode *create_integer_literal(int integer, SourceLocation loc) {
-  LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
+  LiteralNode *node = calloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -940,7 +996,7 @@ ASTNode *create_integer_literal(int integer, SourceLocation loc) {
 };
 
 ASTNode *create_real_literal(double real, SourceLocation loc) {
-  LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
+  LiteralNode *node = calloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -950,7 +1006,7 @@ ASTNode *create_real_literal(double real, SourceLocation loc) {
 };
 
 ASTNode *create_string_literal(char *string, SourceLocation loc) {
-  LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
+  LiteralNode *node = calloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -960,7 +1016,7 @@ ASTNode *create_string_literal(char *string, SourceLocation loc) {
 };
 
 ASTNode *create_char_literal(char character, SourceLocation loc) {
-  LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
+  LiteralNode *node = calloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -970,7 +1026,7 @@ ASTNode *create_char_literal(char character, SourceLocation loc) {
 };
 
 ASTNode *create_boolean_literal(bool boolean, SourceLocation loc) {
-  LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
+  LiteralNode *node = calloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -980,7 +1036,7 @@ ASTNode *create_boolean_literal(bool boolean, SourceLocation loc) {
 };
 
 ASTNode *create_nil_literal(SourceLocation loc) {
-  LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
+  LiteralNode *node = calloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -991,7 +1047,7 @@ ASTNode *create_nil_literal(SourceLocation loc) {
 ASTNode *create_constant_signed_identifier(ASTNode *identifier,
                                            const char *sign,
                                            SourceLocation loc) {
-  ConstantNode *node = (ConstantNode *)malloc(sizeof(ConstantNode));
+  ConstantNode *node = calloc(1, sizeof(ConstantNode));
   node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
@@ -1009,7 +1065,7 @@ ASTNode *create_field_identifier_list_node(ASTNode *list, ASTNode *identifier,
     return list;
   }
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1031,7 +1087,7 @@ ASTNode *create_field_identifier_list_node(ASTNode *list, ASTNode *identifier,
 };
 
 ASTNode *create_file_of_type_node(ASTNode *type, SourceLocation loc) {
-  FileTypeNode *node = (FileTypeNode *)malloc(sizeof(FileTypeNode));
+  FileTypeNode *node = calloc(1, sizeof(FileTypeNode));
   node->base.type = NODE_FILE_TYPE;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1047,7 +1103,7 @@ ASTNode *create_file_of_type_node(ASTNode *type, SourceLocation loc) {
 
 ASTNode *create_field_list(ASTNode *fixed, ASTNode *variant,
                            SourceLocation loc) {
-  FieldListNode *node = (FieldListNode *)malloc(sizeof(FieldListNode));
+  FieldListNode *node = calloc(1, sizeof(FieldListNode));
   node->base.type = NODE_FIELD_LIST;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1063,7 +1119,7 @@ ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
     return fixed;
   }
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1071,7 +1127,7 @@ ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
   new_node->next = NULL;
 
   if (fixed == NULL) {
-    FixedPartNode *node = (FixedPartNode *)malloc(sizeof(FixedPartNode));
+    FixedPartNode *node = calloc(1, sizeof(FixedPartNode));
 
     node->base.type = NODE_FIXED_PART;
     node->base.location = loc;
@@ -1096,6 +1152,7 @@ ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
 ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_stmt,
                               ASTNode *body, SourceLocation loc) {
   ForStmtNode *node = (ForStmtNode *)for_stmt;
+  node->base.type = NODE_FOR_STMT;
   node->base.location = loc;
   node->variable = variable;
   node->body = body;
@@ -1105,7 +1162,7 @@ ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_stmt,
 
 ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto,
                               SourceLocation loc) {
-  ForStmtNode *node = (ForStmtNode *)malloc(sizeof(ForStmtNode));
+  ForStmtNode *node = calloc(1, sizeof(ForStmtNode));
   node->base.type = NODE_FOR_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1121,7 +1178,7 @@ ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
     return list;
   }
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1143,7 +1200,7 @@ ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
 
 ASTNode *create_function_call_node(ASTNode *func, ASTNode *params,
                                    SourceLocation loc) {
-  FunctionCallNode *node = (FunctionCallNode *)malloc(sizeof(FunctionCallNode));
+  FunctionCallNode *node = calloc(1, sizeof(FunctionCallNode));
   node->base.type = NODE_FUNC_CALL;
   node->base.location = loc;
   node->base.print = print_function_call;
@@ -1154,7 +1211,7 @@ ASTNode *create_function_call_node(ASTNode *func, ASTNode *params,
 };
 
 ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc) {
-  GotoNode *node = (GotoNode *)malloc(sizeof(GotoNode));
+  GotoNode *node = calloc(1, sizeof(GotoNode));
   node->base.type = NODE_GOTO_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1164,7 +1221,7 @@ ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc) {
 
 ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt,
                              ASTNode *else_stmt, SourceLocation loc) {
-  IfNode *node = (IfNode *)malloc(sizeof(IfNode));
+  IfNode *node = calloc(1, sizeof(IfNode));
   node->base.type = NODE_IF_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1175,11 +1232,11 @@ ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt,
 };
 
 ASTNode *create_index_list_start(ASTNode *first_index, SourceLocation loc) {
-  IndexList *new_list = (IndexList *)malloc(sizeof(IndexList));
+  IndexList *new_list = calloc(1, sizeof(IndexList));
   new_list->base.type = NODE_INDEX_LIST;
   new_list->base.location = loc;
   new_list->base.print = print_todo;
-  new_list->indexes = (ASTNode **)malloc(sizeof(ASTNode **));
+  new_list->indexes = calloc(1, sizeof(ASTNode **));
   new_list->indexes[0] = first_index;
   new_list->count = 1;
   new_list->capacity = 1;
@@ -1188,7 +1245,7 @@ ASTNode *create_index_list_start(ASTNode *first_index, SourceLocation loc) {
 
 ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
                                 SourceLocation loc) {
-  LabeledStmtNode *node = (LabeledStmtNode *)malloc(sizeof(LabeledStmtNode));
+  LabeledStmtNode *node = calloc(1, sizeof(LabeledStmtNode));
   node->base.type = NODE_LABELED_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1199,21 +1256,19 @@ ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
 
 ASTNode *create_enumerated_type_node(ASTNode *identifiers_list,
                                      SourceLocation loc) {
-  EnumeratedTypeNode *node =
-      (EnumeratedTypeNode *)malloc(sizeof(EnumeratedTypeNode));
+  EnumeratedTypeNode *node = calloc(1, sizeof(EnumeratedTypeNode));
   node->base.type = NODE_ENUMERATED_TYPE;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_types;
   node->identifiers_list = identifiers_list;
   return (ASTNode *)node;
 };
 
 ASTNode *create_packed_type(ASTNode *type, SourceLocation loc) {
-  StructuredTypeNode *node =
-      (StructuredTypeNode *)malloc(sizeof(StructuredTypeNode));
+  StructuredTypeNode *node = calloc(1, sizeof(StructuredTypeNode));
   node->base.type = NODE_STRUCTURED_TYPE;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_types;
   node->type = type;
   node->is_packed = true;
   return (ASTNode *)node;
@@ -1225,7 +1280,7 @@ ASTNode *create_parameter_identifier_list_node(ASTNode *list, ASTNode *element,
     return list;
   }
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1250,7 +1305,7 @@ create_formal_parameter_section_node(ParameterKind kind, ASTNode *identifiers,
                                      ASTNode *type, ASTNode *parameters,
                                      ASTNode *return_type, SourceLocation loc) {
   FormalParameterSectionNode *node =
-      (FormalParameterSectionNode *)malloc(sizeof(FormalParameterSectionNode));
+      calloc(1, sizeof(FormalParameterSectionNode));
   node->base.type = NODE_FORMAL_PARAM_SECTION;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1264,7 +1319,7 @@ create_formal_parameter_section_node(ParameterKind kind, ASTNode *identifiers,
 };
 
 ASTNode *create_parameters_node(ASTNode *parameters_list, SourceLocation loc) {
-  ParameterNode *node = (ParameterNode *)malloc(sizeof(ParameterNode));
+  ParameterNode *node = calloc(1, sizeof(ParameterNode));
   node->base.type = NODE_PARAMETER;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1274,22 +1329,21 @@ ASTNode *create_parameters_node(ASTNode *parameters_list, SourceLocation loc) {
 };
 
 ASTNode *create_pointer_type_node(ASTNode *type, SourceLocation loc) {
-  PointerTypeNode *node = (PointerTypeNode *)malloc(sizeof(PointerTypeNode));
+  PointerTypeNode *node = calloc(1, sizeof(PointerTypeNode));
   node->base.type = NODE_POINTER_TYPE;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_types;
   node->type = type;
   return (ASTNode *)node;
 };
 
 ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params,
                                     SourceLocation loc) {
-  ProcedureCallNode *node =
-      (ProcedureCallNode *)malloc(sizeof(ProcedureCallNode));
+  FunctionCallNode *node = calloc(1, sizeof(FunctionCallNode));
   node->base.type = NODE_PROC_CALL;
   node->base.location = loc;
   node->base.print = print_todo;
-  node->procedure = proc;
+  node->function = proc;
   node->params = params; // Pode ser NULL se não houver parâmetros
 
   return (ASTNode *)node;
@@ -1297,7 +1351,7 @@ ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params,
 
 ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,
                                   SourceLocation loc) {
-  RecordFieldNode *record = (RecordFieldNode *)malloc(sizeof(RecordFieldNode));
+  RecordFieldNode *record = calloc(1, sizeof(RecordFieldNode));
   record->base.type = NODE_RECORD_FIELD;
   record->base.location = loc;
   record->base.print = print_todo;
@@ -1308,17 +1362,17 @@ ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,
 };
 
 ASTNode *create_record_type_node(ASTNode *field_list, SourceLocation loc) {
-  RecordTypeNode *node = (RecordTypeNode *)malloc(sizeof(RecordTypeNode));
+  RecordTypeNode *node = calloc(1, sizeof(RecordTypeNode));
   node->base.type = NODE_RECORD_TYPE;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_types;
   node->field_list = field_list;
   return (ASTNode *)node;
 };
 
 ASTNode *create_repeat_until_stmt_list_node(ASTNode *body, ASTNode *condition,
                                             SourceLocation loc) {
-  RepeatUntilNode *node = (RepeatUntilNode *)malloc(sizeof(RepeatUntilNode));
+  RepeatUntilNode *node = calloc(1, sizeof(RepeatUntilNode));
   node->base.type = NODE_REPEAT_STMT;
   node->base.location = loc;
   node->base.print = body->print;
@@ -1328,38 +1382,38 @@ ASTNode *create_repeat_until_stmt_list_node(ASTNode *body, ASTNode *condition,
 };
 
 ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc) {
-  SetTypeNode *node = (SetTypeNode *)malloc(sizeof(SetTypeNode));
+  SetTypeNode *node = calloc(1, sizeof(SetTypeNode));
   node->base.type = NODE_SET_TYPE;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_types;
   node->type = type;
   return (ASTNode *)node;
 };
 
 ASTNode *create_simple_type_node(ASTNode *type, SourceLocation loc) {
-  SimpleTypeNode *node = (SimpleTypeNode *)malloc(sizeof(SimpleTypeNode));
+  SimpleTypeNode *node = calloc(1, sizeof(SimpleTypeNode));
   node->base.type = NODE_SIMPLE_TYPE;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_types;
   node->type = type;
 
   return (ASTNode *)node;
 };
 
 ASTNode *create_structure_type_node(ASTNode *type, SourceLocation loc) {
-  StructuredTypeNode *node =
-      (StructuredTypeNode *)malloc(sizeof(StructuredTypeNode));
+  StructuredTypeNode *node = calloc(1, sizeof(StructuredTypeNode));
   node->base.type = NODE_STRUCTURED_TYPE;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_types;
   node->type = type;
+  node->is_packed = false;
 
   return (ASTNode *)node;
 };
 
 ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
                                SourceLocation loc) {
-  TagFieldNode *tag = (TagFieldNode *)malloc(sizeof(TagFieldNode));
+  TagFieldNode *tag = calloc(1, sizeof(TagFieldNode));
   tag->base.type = NODE_TAG_FIELD;
   tag->base.location = loc;
   tag->base.print = print_todo;
@@ -1371,8 +1425,7 @@ ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
 
 ASTNode *create_variant_node(ASTNode *label_list, ASTNode *field_list,
                              SourceLocation loc) {
-  VariantRecordNode *node =
-      (VariantRecordNode *)malloc(sizeof(VariantRecordNode));
+  VariantRecordNode *node = calloc(1, sizeof(VariantRecordNode));
   node->base.type = NODE_VARIANT_RECORD;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1384,7 +1437,7 @@ ASTNode *create_variant_node(ASTNode *label_list, ASTNode *field_list,
 
 ASTNode *create_while_stmt_node(ASTNode *condition, ASTNode *body,
                                 SourceLocation loc) {
-  WhileStmtNode *node = (WhileStmtNode *)malloc(sizeof(WhileStmtNode));
+  WhileStmtNode *node = calloc(1, sizeof(WhileStmtNode));
   node->base.type = NODE_WHILE_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1395,7 +1448,7 @@ ASTNode *create_while_stmt_node(ASTNode *condition, ASTNode *body,
 
 ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body,
                                       SourceLocation loc) {
-  WithNode *node = (WithNode *)malloc(sizeof(WithNode));
+  WithNode *node = calloc(1, sizeof(WithNode));
   node->base.type = NODE_WITH_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1405,7 +1458,7 @@ ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body,
 }
 
 ASTNode *create_identifier_node(char *name, SourceLocation loc) {
-  IdentifierNode *node = (IdentifierNode *)malloc(sizeof(IdentifierNode));
+  IdentifierNode *node = calloc(1, sizeof(IdentifierNode));
 
   node->base.type = NODE_IDENTIFIER;
   node->base.location = loc;
@@ -1417,7 +1470,7 @@ ASTNode *create_identifier_node(char *name, SourceLocation loc) {
 };
 
 ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc) {
-  LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
+  LiteralNode *node = calloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1427,7 +1480,7 @@ ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc) {
 };
 
 ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
-  LiteralNode *node = (LiteralNode *)malloc(sizeof(LiteralNode));
+  LiteralNode *node = calloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1438,7 +1491,7 @@ ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
 
 ASTNode *create_record_variable_list_node(ASTNode *record_var,
                                           SourceLocation loc) {
-  ListNode *node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *node = calloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -1452,6 +1505,8 @@ ASTNode *append_case_item(ASTNode *list, ASTNode *case_item,
   if (case_item == NULL) {
     return list;
   }
+
+  case_item->location = loc;
 
   ListNode *head = (ListNode *)list;
 
@@ -1471,6 +1526,8 @@ ASTNode *append_case_label_list(ASTNode *list, ASTNode *case_label,
   if (case_label == NULL) {
     return list;
   }
+
+  case_label->location = loc;
 
   ListNode *head = (ListNode *)list;
 
@@ -1494,7 +1551,7 @@ ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1513,7 +1570,7 @@ ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var,
 };
 
 ASTNode *create_expression_list(ASTNode *element, SourceLocation loc) {
-  ListNode *node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *node = calloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -1531,7 +1588,7 @@ ASTNode *append_expression_list(ASTNode *list, ASTNode *element,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1557,7 +1614,7 @@ ASTNode *append_identifier_list_node(ASTNode *list, ASTNode *element,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1669,7 +1726,7 @@ ASTNode *append_case_list_node(ASTNode *list, ASTNode *expr,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1688,7 +1745,7 @@ ASTNode *append_case_list_node(ASTNode *list, ASTNode *expr,
 };
 
 ASTNode *create_set_literal(SourceLocation loc) {
-  SetLiteral *node = (SetLiteral *)malloc(sizeof(SetLiteral));
+  SetLiteral *node = calloc(1, sizeof(SetLiteral));
   node->base.type = NODE_SET_CONSTRUCTOR;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1700,11 +1757,11 @@ ASTNode *create_set_literal(SourceLocation loc) {
 };
 
 ASTNode *create_set_literal_with_element(ASTNode *element, SourceLocation loc) {
-  SetLiteral *node = (SetLiteral *)malloc(sizeof(SetLiteral));
+  SetLiteral *node = calloc(1, sizeof(SetLiteral));
   node->base.type = NODE_SET_CONSTRUCTOR;
   node->base.location = loc;
   node->base.print = print_todo;
-  node->elements = (SetElement **)malloc(sizeof(SetElement *));
+  node->elements = calloc(1, sizeof(SetElement *));
   node->elements[0] = (SetElement *)element;
   node->capacity = 1;
   node->count = 1;
@@ -1714,6 +1771,8 @@ ASTNode *create_set_literal_with_element(ASTNode *element, SourceLocation loc) {
 
 ASTNode *add_element_to_set_literal(ASTNode *set_literal, ASTNode *element,
                                     SourceLocation loc) {
+  element->location = loc;
+
   SetLiteral *node = (SetLiteral *)set_literal;
   if (node->count >= node->capacity) {
     node->capacity *= 2;
@@ -1725,7 +1784,7 @@ ASTNode *add_element_to_set_literal(ASTNode *set_literal, ASTNode *element,
 };
 
 ASTNode *create_set_element(ASTNode *expr, SourceLocation loc) {
-  SetElement *element = (SetElement *)malloc(sizeof(SetElement));
+  SetElement *element = calloc(1, sizeof(SetElement));
   element->base.type = NODE_SET_ELEMENT;
   element->base.location = loc;
   element->base.print = print_todo;
@@ -1737,7 +1796,7 @@ ASTNode *create_set_element(ASTNode *expr, SourceLocation loc) {
 
 ASTNode *create_set_range_element(ASTNode *const1, ASTNode *const2,
                                   SourceLocation loc) {
-  SetElement *element = (SetElement *)malloc(sizeof(SetElement));
+  SetElement *element = calloc(1, sizeof(SetElement));
   element->base.type = NODE_SET_ELEMENT;
   element->base.location = loc;
   element->base.print = print_todo;
@@ -1798,7 +1857,7 @@ ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
     return list;
   }
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1806,7 +1865,7 @@ ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
   new_node->next = NULL;
 
   if (list == NULL) {
-    VariantListNode *vlist = (VariantListNode *)malloc(sizeof(VariantListNode));
+    VariantListNode *vlist = calloc(1, sizeof(VariantListNode));
 
     vlist->base.type = NODE_VARIANT_LIST;
     vlist->base.location = loc;
@@ -1859,7 +1918,7 @@ ASTNode *append_proc_and_func_declarations(ASTNode *list,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = (ListNode *)malloc(sizeof(ListNode));
+  ListNode *new_node = calloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1914,6 +1973,8 @@ ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *procs_funcs) {
 
 ASTNode *append_index_to_list(ASTNode *list, ASTNode *new_index,
                               SourceLocation loc) {
+  new_index->location = loc;
+
   IndexList *curr_list = (IndexList *)list;
   if (curr_list->count >= curr_list->capacity) {
     curr_list->capacity *= 2;
@@ -1926,8 +1987,7 @@ ASTNode *append_index_to_list(ASTNode *list, ASTNode *new_index,
 
 ASTNode *create_binary_expression(ASTNode *left, BinaryOperator op,
                                   ASTNode *right, SourceLocation loc) {
-  BinaryOperationNode *node =
-      (BinaryOperationNode *)malloc(sizeof(BinaryOperationNode));
+  BinaryOperationNode *node = calloc(1, sizeof(BinaryOperationNode));
   node->base.type = NODE_BINARY_EXPR;
   node->base.location = loc;
   node->base.print = print_binary_operation;
@@ -1940,8 +2000,7 @@ ASTNode *create_binary_expression(ASTNode *left, BinaryOperator op,
 
 ASTNode *create_unary_expression(UnaryOperator unary_op, ASTNode *operand,
                                  SourceLocation loc) {
-  UnaryOperationNode *node =
-      (UnaryOperationNode *)malloc(sizeof(UnaryOperationNode));
+  UnaryOperationNode *node = calloc(1, sizeof(UnaryOperationNode));
   node->base.type = NODE_UNARY_EXPR;
   node->base.location = loc;
   node->base.print = print_unary_operation;
@@ -2209,91 +2268,8 @@ const char *get_symbol_kind_name(SymbolKind symb) {
 }
 
 void print_todo(ASTNode *node, int indent) {
-  printf("%*sTODO %s\n", indent, "", get_node_type_name(node->type));
+  fprintf(stderr, "%*sTODO %s\n", indent, "", get_node_type_name(node->type));
 };
-
-/* Evaluate fns */
-// ConstantValue evaluate_constant(ASTNode *const_node) {
-//   ConstantValue result = {0};
-//
-//   if (const_node->type != NODE_CONSTANT) {
-//     result.is_valid = false;
-//     return result;
-//   }
-//
-//   ConstantNode *node = (ConstantNode *)const_node;
-//
-//   switch (node->const_type) {
-//   case CONST_INTEGER:
-//     result.type = CONST_INTEGER;
-//     result.value.int_val = ((LiteralNode *)node->value)->value.int_val;
-//     result.is_valid = true;
-//     break;
-//
-//   case CONST_REAL:
-//     result.type = CONST_REAL;
-//     result.value.real_val = ((LiteralNode *)node->value)->value.real_val;
-//     result.is_valid = true;
-//     break;
-//
-//   case CONST_STRING:
-//     result.type = CONST_STRING;
-//     result.value.str_val = ((LiteralNode *)node->value)->value.str_val;
-//     result.is_valid = true;
-//     break;
-//
-//   case CONST_CHAR:
-//     result.type = CONST_CHAR;
-//     result.value.char_val = ((LiteralNode *)node->value)->value.char_val;
-//     result.is_valid = true;
-//     break;
-//
-//   case CONST_BOOLEAN:
-//     result.type = CONST_BOOLEAN;
-//     result.value.bool_val = ((LiteralNode *)node->value)->value.bool_val;
-//     result.is_valid = true;
-//     break;
-//
-//   case CONST_IDENTIFIER:
-//   case CONST_SIGNED_IDENTIFIER: {
-//     IdentifierNode *id = (IdentifierNode *)node->identifier;
-//     SymbolEntry *entry = ht_get(
-//         HashTable, id->symbol_entry_key ? id->symbol_entry_key : id->name);
-//
-//     if (!entry || entry->kind != SYMBOL_CONSTANT) {
-//       char *err;
-//       if (asprintf(&err, "Constant of identifier: %s is not declared",
-//                    id->name) < 0) {
-//         yyerror("Out of memory");
-//         exit(2);
-//       };
-//       yyerror((const char *)err);
-//       result.is_valid = false;
-//       free(err);
-//       exit(1);
-//       break;
-//     }
-//
-//     result = evaluate_constant(entry->info.const_info.value);
-//
-//     if (node->const_type == CONST_SIGNED_IDENTIFIER && node->sign &&
-//         strcmp(node->sign, "-") == 0) {
-//
-//       if (result.type == CONST_INTEGER) {
-//         result.value.int_val = -result.value.int_val;
-//       } else if (result.type == CONST_REAL) {
-//         result.value.real_val = -result.value.real_val;
-//       } else {
-//         yyerror("Cannot apply sign to non-numeric constant");
-//         result.is_valid = false;
-//         exit(1);
-//       }
-//     }
-//     break;
-//   }
-//   }
-//   return result;
-// }
 
 const char *get_param_kind_name(ParameterKind kind) {
   switch (kind) {
@@ -2310,9 +2286,84 @@ const char *get_param_kind_name(ParameterKind kind) {
   }
 }
 
+ConstantValue evaluate_constant(CompilerContext *context, ASTNode *const_node) {
+  ConstantValue result = {
+      .type = CONST_INTEGER, .is_valid = false, .value = {.int_val = 0}};
+
+  if (const_node->type != NODE_CONSTANT) {
+    result.is_valid = false;
+    return result;
+  }
+
+  ConstantNode *node = (ConstantNode *)const_node;
+
+  switch (node->const_type) {
+  case CONST_INTEGER:
+    result.type = CONST_INTEGER;
+    result.value.int_val = ((LiteralNode *)node->value)->value.int_val;
+    result.is_valid = true;
+    break;
+
+  case CONST_REAL:
+    result.type = CONST_REAL;
+    result.value.real_val = ((LiteralNode *)node->value)->value.real_val;
+    result.is_valid = true;
+    break;
+
+  case CONST_STRING:
+    result.type = CONST_STRING;
+    result.value.str_val = ((LiteralNode *)node->value)->value.str_val;
+    result.is_valid = true;
+    break;
+
+  case CONST_CHAR:
+    result.type = CONST_CHAR;
+    result.value.char_val = ((LiteralNode *)node->value)->value.char_val;
+    result.is_valid = true;
+    break;
+
+  case CONST_BOOLEAN:
+    result.type = CONST_BOOLEAN;
+    result.value.bool_val = ((LiteralNode *)node->value)->value.bool_val;
+    result.is_valid = true;
+    break;
+
+  case CONST_IDENTIFIER:
+  case CONST_SIGNED_IDENTIFIER: {
+    IdentifierNode *id = (IdentifierNode *)node->identifier;
+    SymbolEntry *entry = context_lookup(context, id->name);
+
+    if (!entry || entry->kind != SYMBOL_CONSTANT) {
+      fprintf(stderr, "Constant of identifier: %s is not declared", id->name);
+      exit(1);
+    }
+
+    result = evaluate_constant(context, entry->info.const_info.value);
+
+    if (node->const_type == CONST_SIGNED_IDENTIFIER && node->sign &&
+        strcmp(node->sign, "-") == 0) {
+
+      if (result.type == CONST_INTEGER) {
+        result.value.int_val = -result.value.int_val;
+      } else if (result.type == CONST_REAL) {
+        result.value.real_val = -result.value.real_val;
+      } else {
+        yyerror("Cannot apply sign to non-numeric constant");
+        exit(1);
+      }
+    }
+    break;
+  }
+  }
+  return result;
+}
+
 void free_node(ASTNode *node) {
-  if (!node)
+  if (node == NULL) {
     return;
+  }
+  LOG_TRACE("Freeing node %p of type", (void *)node);
+  assert(node->type >= 0 && node->type <= NODE_SET_ELEMENT);
 
   switch (node->type) {
   case NODE_PROGRAM: {
@@ -2320,11 +2371,13 @@ void free_node(ASTNode *node) {
     free(prog->name);
     free_node(prog->heading);
     free_node(prog->block);
+    free(prog);
     break;
   }
   case NODE_HEADING: {
     HeadingNode *heading = (HeadingNode *)node;
     free_node(heading->list);
+    free(heading);
     break;
   }
   case NODE_BLOCK: {
@@ -2335,39 +2388,49 @@ void free_node(ASTNode *node) {
     free_node(block->variables);
     free_node(block->procs_funcs);
     free_node(block->statements);
+    free(block);
     break;
   }
   case NODE_USES: {
+    free(node);
     break;
   }
   case NODE_LABEL_DECL: {
     LabelDeclarationNode *label = (LabelDeclarationNode *)node;
     free_node(label->value);
+    free(label);
     break;
   }
   case NODE_CONST_DECL: {
     ConstDeclarationNode *constant = (ConstDeclarationNode *)node;
     free_node(constant->const_expr);
     free_node(constant->identifier);
+    free(constant);
     break;
   }
   case NODE_TYPE_DECL: {
     TypeDeclarationNode *type = (TypeDeclarationNode *)node;
     free_node(type->identifier);
     free_node(type->type_expr);
+    free(type);
     break;
   }
   case NODE_VAR_DECL: {
     VarDeclarationNode *vars = (VarDeclarationNode *)node;
+    fprintf(stderr,
+            "[VAR_DECL] VarDeclarationNode %p — var_list=%p type_node=%p\n",
+            (void *)vars, (void *)vars->var_list, (void *)vars->type_node);
     free_node(vars->type_node);
     free_node(vars->var_list);
+    free(vars);
     break;
   }
   case NODE_PROC_DECL: {
-    ProcDeclarationNode *proc = (ProcDeclarationNode *)node;
+    FuncDeclarationNode *proc = (FuncDeclarationNode *)node;
     free_node(proc->identifier);
     free_node(proc->block_or_forward);
     free_node(proc->parameters);
+    free(proc);
     break;
   }
   case NODE_FUNC_DECL: {
@@ -2375,73 +2438,88 @@ void free_node(ASTNode *node) {
     free_node(func->parameters);
     free_node(func->block_or_forward);
     free_node(func->type);
+    free(func);
     break;
   }
   case NODE_ENUMERATED_TYPE: {
+    EnumeratedTypeNode *en = (EnumeratedTypeNode *)node;
+    free_node(en->identifiers_list);
+    free(en);
     break;
   }
   case NODE_SUBRANGE_TYPE: {
     SubrangeTypeNode *sub = (SubrangeTypeNode *)node;
     free_node(sub->lower);
     free_node(sub->upper);
+    free(sub);
     break;
   }
   case NODE_TYPE_IDENTIFIER: {
     TypeIdentifierNode *tid = (TypeIdentifierNode *)node;
     free_node((ASTNode *)tid->id);
-    free(tid->name);
+    free(tid);
     break;
   }
   case NODE_STRUCTURED_TYPE: {
     StructuredTypeNode *st = (StructuredTypeNode *)node;
     free_node(st->type);
+    free(st);
     break;
   }
   case NODE_ARRAY_TYPE: {
     ArrayTypeNode *arr = (ArrayTypeNode *)node;
     free_node(arr->type);
     free_node(arr->index_list);
+    free(arr);
     break;
   }
   case NODE_RECORD_TYPE: {
     RecordTypeNode *r = (RecordTypeNode *)node;
     free_node(r->field_list);
     free_node(r->variant_part);
+    free(r);
     break;
   }
   case NODE_SET_TYPE: {
     SetTypeNode *s = (SetTypeNode *)node;
     free_node(s->type);
+    free(s);
     break;
   }
   case NODE_FILE_TYPE: {
     FileTypeNode *f = (FileTypeNode *)node;
     free_node(f->type);
+    free(f);
     break;
   }
   case NODE_POINTER_TYPE: {
     PointerTypeNode *pt = (PointerTypeNode *)node;
     free_node(pt->type);
+    free(pt);
     break;
   }
   case NODE_POINTER_DEREF: {
     PointerDerefNode *pd = (PointerDerefNode *)node;
     free_node(pd->pointer);
+    free(pd);
     break;
   }
   case NODE_COMPOUND_STMT: {
+    free(node);
     break;
   }
   case NODE_ASSIGN_STMT: {
     AssignmentNode *a = (AssignmentNode *)node;
     free_node(a->expression);
     free_node(a->target);
+    free(a);
     break;
   }
   case NODE_PROC_CALL: {
-    ProcedureCallNode *pc = (ProcedureCallNode *)node;
-    free_node(pc->procedure);
+    FunctionCallNode *pc = (FunctionCallNode *)node;
+    free_node(pc->function);
     free_node(pc->params);
+    free(pc);
     break;
   }
   case NODE_IF_STMT: {
@@ -2449,6 +2527,7 @@ void free_node(ASTNode *node) {
     free_node(ifn->else_stmt);
     free_node(ifn->then_stmt);
     free_node(ifn->condition);
+    free(ifn);
     break;
   }
   case NODE_CASE_STMT: {
@@ -2456,29 +2535,34 @@ void free_node(ASTNode *node) {
     free_node(cn->case_list);
     free_node(cn->else_part);
     free_node(cn->expr);
+    free(cn);
     break;
   }
   case NODE_CASE_ITEM: {
     CaseItemNode *ci = (CaseItemNode *)node;
     free_node(ci->statement);
     free_node(ci->value_list);
+    free(ci);
     break;
   }
   case NODE_CASE_ELSE: {
     CaseElseNode *ce = (CaseElseNode *)node;
     free_node(ce->stmt);
+    free(ce);
     break;
   }
   case NODE_WHILE_STMT: {
     WhileStmtNode *wl = (WhileStmtNode *)node;
     free_node(wl->condition);
     free_node(wl->body);
+    free(wl);
     break;
   }
   case NODE_REPEAT_STMT: {
     RepeatUntilNode *rp = (RepeatUntilNode *)node;
     free_node(rp->condition);
     free_node(rp->body);
+    free(rp);
     break;
   }
   case NODE_FOR_STMT: {
@@ -2487,54 +2571,65 @@ void free_node(ASTNode *node) {
     free_node(ft->end_expr);
     free_node(ft->start_expr);
     free_node(ft->variable);
+    free(ft);
     break;
   }
   case NODE_WITH_STMT: {
     WithNode *wn = (WithNode *)node;
     free_node(wn->body);
     free_node(wn->record_list);
+    free(wn);
     break;
   }
   case NODE_GOTO_STMT: {
     GotoNode *gt = (GotoNode *)node;
     free_node(gt->label);
+    free(gt);
     break;
   }
   case NODE_BINARY_EXPR: {
     BinaryOperationNode *bp = (BinaryOperationNode *)node;
     free_node(bp->left);
     free_node(bp->right);
+    free(bp);
     break;
   }
   case NODE_UNARY_EXPR: {
     UnaryOperationNode *up = (UnaryOperationNode *)node;
     free_node(up->operand);
+    free(up);
     break;
   }
   case NODE_LITERAL: {
+    LiteralNode *l = (LiteralNode *)node;
+    free(l);
     break;
   }
   case NODE_IDENTIFIER: {
     IdentifierNode *id = (IdentifierNode *)node;
     free(id->name);
+    free(id);
     break;
   }
   case NODE_MEMBER_ACCESS: {
     MemberAccessNode *mc = (MemberAccessNode *)node;
     free_node(mc->field);
     free_node(mc->record);
+    free(mc);
     break;
   }
   case NODE_ARRAY_ACCESS: {
     ArrayAccessNode *ac = (ArrayAccessNode *)node;
     free_node(ac->array);
     free_node(ac->subscript_list);
+    free(ac);
     break;
   }
   case NODE_FUNC_CALL: {
     FunctionCallNode *fc = (FunctionCallNode *)node;
     free_node(fc->params);
     free_node(fc->function);
+    free(fc);
     break;
   }
   case NODE_SET_CONSTRUCTOR: {
@@ -2542,36 +2637,46 @@ void free_node(ASTNode *node) {
     for (int i = 0; i < sl->count; i++) {
       free_node((ASTNode *)sl->elements[i]);
     }
+    free(sl->elements);
+    free(sl);
     break;
   }
-  case NODE_FORWARD_DECL:
+  case NODE_FORWARD_DECL: {
+    free(node);
+    break;
+  }
   case NODE_SIMPLE_TYPE: {
     SimpleTypeNode *st = (SimpleTypeNode *)node;
     free_node(st->type);
+    free(st);
+    break;
   }
   case NODE_CASE_LABEL: {
     CaseLabelNode *cl = (CaseLabelNode *)node;
     free_node(cl->upper);
     free_node(cl->lower);
+    free(cl);
     break;
   }
   case NODE_LABELED_STMT: {
     LabeledStmtNode *lb = (LabeledStmtNode *)node;
     free_node(lb->label);
     free_node(lb->statement);
+    free(lb);
     break;
   }
   case NODE_CONSTANT: {
     ConstantNode *c = (ConstantNode *)node;
     free_node(c->value);
     free_node(c->identifier);
-    free(c->sign);
+    free(c);
     break;
   }
   case NODE_RECORD_FIELD: {
     RecordFieldNode *rf = (RecordFieldNode *)node;
     free_node(rf->field_list);
     free_node(rf->record_type);
+    free(rf);
     break;
   }
   case NODE_INDEX_LIST: {
@@ -2579,28 +2684,34 @@ void free_node(ASTNode *node) {
     for (int i = 0; i < idx->count; i++) {
       free_node(idx->indexes[i]);
     }
+    free(idx->indexes);
+    free(idx);
     break;
   }
   case NODE_VARIANT_LIST: {
     VariantListNode *vl = (VariantListNode *)node;
     free_node(vl->variants);
+    free(vl);
     break;
   }
   case NODE_VARIANT_PART: {
     VariantPartNode *vp = (VariantPartNode *)node;
     free_node(vp->variant_list);
     free_node(vp->tag_field);
+    free(vp);
     break;
   }
   case NODE_TAG_FIELD: {
     TagFieldNode *tf = (TagFieldNode *)node;
     free_node(tf->field);
     free_node(tf->tag_type);
+    free(tf);
     break;
   }
   case NODE_FIXED_PART: {
     FixedPartNode *fp = (FixedPartNode *)node;
     free_node(fp->fields);
+    free(fp);
     break;
   }
   case NODE_FORMAL_PARAM_SECTION: {
@@ -2609,41 +2720,61 @@ void free_node(ASTNode *node) {
     free_node(fp->parameters);
     free_node(fp->return_type);
     free_node(fp->identifiers);
+    free(fp);
     break;
   }
   case NODE_OPERATION: {
+    free(node);
     break;
   }
   case NODE_SET_ELEMENT: {
+    SetElement *st = (SetElement *)node;
+    free(st);
     break;
   }
   case NODE_FIELD_LIST: {
     FieldListNode *fl = (FieldListNode *)node;
     free_node(fl->variant_part);
     free_node(fl->fixed_part);
+    free(fl);
     break;
   }
   case NODE_PARAMETER: {
     ParameterNode *p = (ParameterNode *)node;
     free_node(p->params_list);
+    free(p);
     break;
   }
   case NODE_VARIANT_RECORD: {
     VariantRecordNode *vr = (VariantRecordNode *)node;
     free_node(vr->field_list);
     free_node(vr->case_labels);
+    free(vr);
     break;
   }
   case NODE_LIST: {
     ListNode *l = (ListNode *)node;
-    free_node(l->element);
-    free_node(l->next);
+    while (l) {
+      LOG_TRACE("Freeing ListNode %p — element=%p next=%p\n",(void *)l, (void *)l->element, (void *)l->next);
+
+      if (l->element != NULL) {
+        free_node(l->element);
+      } else {
+        LOG_ERROR("[WARN] ListNode %p has NULL element\n", (void *)l);
+      }
+
+      ListNode *next = (ListNode *)l->next;
+      free(l);
+      l = next;
+    }
     break;
   }
   case NODE_ERROR: {
+    free(node);
     break;
   }
+  default:
+    LOG_ERROR("[FATAL] Tipo desconhecido ou não tratado no free_node: %d\n", node->type);
+    abort();
   }
-
-  free(node);
 };

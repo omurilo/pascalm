@@ -56,25 +56,30 @@ void generate_set_helper_functions(CodeGenerator *code_gen) {
 
   // Função para imprimir set (debug)
   fprintf(code_gen->output_file, "void print_set(unsigned long long s) {\n");
-  fprintf(code_gen->output_file, "    printf(\"[\");\n");
+  fprintf(code_gen->output_file, "    fprintf(\"[\");\n");
   fprintf(code_gen->output_file, "    int first = 1;\n");
   fprintf(code_gen->output_file, "    for(int i = 0; i < 64; i++) {\n");
   fprintf(code_gen->output_file, "        if(s & (1ULL << i %% 64)) {\n");
-  fprintf(code_gen->output_file, "            if(!first) printf(\", \");\n");
-  fprintf(code_gen->output_file, "            printf(\"%%llu\", (1ULL << i %% 64));\n");
+  fprintf(code_gen->output_file, "            if(!first) fprintf(\", \");\n");
+  fprintf(code_gen->output_file,
+          "            fprintf(\"%%llu\", (1ULL << i %% 64));\n");
   fprintf(code_gen->output_file, "            first = 0;\n");
   fprintf(code_gen->output_file, "        }\n");
   fprintf(code_gen->output_file, "    }\n");
-  fprintf(code_gen->output_file, "    printf(\"]\\n\");\n");
+  fprintf(code_gen->output_file, "    fprintf(\"]\\n\");\n");
   fprintf(code_gen->output_file, "}\n\n");
 }
 
-void generate_array_helper_functions(CodeGenerator* code_gen) {
-    fprintf(code_gen->output_file, "void check_array_bounds(int index, int low, int high, const char* array_name) {\n");
-    fprintf(code_gen->output_file, "    if(index < low || index > high) {\n");
-    fprintf(code_gen->output_file, "        fprintf(stderr, \"Array index out of bounds: %%d not in [%%d..%%d] for array %%s\\n\",\n");
-    fprintf(code_gen->output_file, "                index, low, high, array_name);\n");
-    fprintf(code_gen->output_file, "        exit(1);\n");
-    fprintf(code_gen->output_file, "    }\n");
-    fprintf(code_gen->output_file, "}\n\n");
+void generate_array_helper_functions(CodeGenerator *code_gen) {
+  fprintf(code_gen->output_file, "void check_array_bounds(int index, int low, "
+                                 "int high, const char* array_name) {\n");
+  fprintf(code_gen->output_file, "    if(index < low || index > high) {\n");
+  fprintf(code_gen->output_file,
+          "        fprintf(\"Array index out of bounds: %%d not in "
+          "[%%d..%%d] for array %%s\\n\",\n");
+  fprintf(code_gen->output_file,
+          "                index, low, high, array_name);\n");
+  fprintf(code_gen->output_file, "        exit(1);\n");
+  fprintf(code_gen->output_file, "    }\n");
+  fprintf(code_gen->output_file, "}\n\n");
 }

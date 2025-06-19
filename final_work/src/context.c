@@ -59,7 +59,9 @@ void context_insert(CompilerContext *context, const char *key,
   ht *current_scope_table = scope_stack_peek(context->scope_stack);
   if (current_scope_table) {
     if (ht_get(current_scope_table, key) != NULL) {
-      yyerror("Error: Symbol already declared in this scope");
+      char err[255];
+      sprintf(err, "Error: Symbol (%s) already declared in this scope (%d)", key, context->scope_stack->scope_level);
+      yyerror(err);
     }
     ht_set(current_scope_table, key, entry);
   }

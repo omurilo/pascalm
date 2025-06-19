@@ -98,7 +98,7 @@ ASTNode *root = NULL;
 %type <node> case_item
 %type <node> case_else
 %type <node> for_list
-%type <node> expression_list
+%type <node> expression_list optional_expression_list
 %type <node> label
 %type <node> record_variable_list
 %type <node> expression
@@ -137,7 +137,6 @@ pascal_program:
    PROGRAM IDENTIFIER program_headingopt SEMICOLON block DOT {
       $$ = create_program_node($2, $3, $5, create_location(@$));
       root = $$;
-      root->code_gen = create_code_generator("../output.c");
     }
 
 program_headingopt:
@@ -389,7 +388,7 @@ statement:
   | REPEAT statement_list UNTIL expression { $$ = create_repeat_until_stmt_list_node($2, $4, create_location(@$)); }
   | FOR varid ASSIGN for_list DO statement { $$ = create_for_stmt_node($2, $4, $6, create_location(@$)); }
   | procid { $$ = $1; }
-  | procid L_PAREN expression_list R_PAREN { $$ = create_procedure_call_node($1, $3, create_location(@$)); } 
+  | procid L_PAREN optional_expression_list R_PAREN { $$ = create_procedure_call_node($1, $3, create_location(@$)); } 
   | GOTO label { $$ = create_goto_label_node($2, create_location(@$)); }
   | WITH record_variable_list DO statement { $$ = create_with_record_list_node($2, $4, create_location(@$)); }
   | label COLON statement { $$ = create_label_stmt_node($1, $3, create_location(@$)); }
@@ -444,7 +443,11 @@ for_list:
       $$ = create_for_list_node($1, $3, true, create_location(@$)); 
     }  
 
-expression_list:  
+optional_expression_list:
+    empty
+  | expression_list { $$ = $1; }
+
+expression_list:
     expression { $$ = create_expression_list($1, create_location(@$)); }
   | expression_list COMMA expression { $$ = append_expression_list($1, $3, create_location(@$)); }
 
@@ -532,7 +535,7 @@ primary_expression:
   | NIL {
       $$ = create_nil_literal(create_location(@$));
     }
-  | funcid L_PAREN expression_list R_PAREN {
+  | funcid L_PAREN optional_expression_list R_PAREN {
       $$ = create_function_call_node($1, $3, create_location(@$));
     }
   | L_BRACKET element_list R_BRACKET { $$ = $2; }

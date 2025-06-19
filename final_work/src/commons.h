@@ -8,6 +8,8 @@
 #include <stdbool.h>
 #include "parser/types.h"
 
+#define MAX_PARAMS 64
+
 typedef struct ASTNode ASTNode;
 typedef struct SourceLocation SourceLocation;
 typedef struct SymbolEntry SymbolEntry;
@@ -15,6 +17,7 @@ typedef struct SymbolEntry SymbolEntry;
 typedef struct CodeGenerator {
   FILE *output_file;
   int indent_level;
+  SymbolEntry *current_function;
 } CodeGenerator;
 
 typedef enum ParameterKind {
@@ -33,6 +36,18 @@ typedef enum ConstantType {
   CONST_IDENTIFIER,
   CONST_SIGNED_IDENTIFIER
 } ConstantType;
+
+typedef struct ConstantValue {
+  ConstantType type;
+  union {
+    int int_val;
+    double real_val;
+    char *str_val;
+    int bool_val;
+    char char_val;
+  } value;
+  bool is_valid;
+} ConstantValue;
 
 typedef enum NodeType {
   /* Estrutura do programa */
@@ -183,7 +198,6 @@ struct ASTNode {
   NodeType type;
   SourceLocation location;
   void (*print)(struct ASTNode *, int);
-  CodeGenerator *code_gen;
   // Função para imprimir o nó (para debug)
   /*
   int data_type; // tipo dos dados (INTEGER, REAL, STRING, etc.)
@@ -192,6 +206,11 @@ struct ASTNode {
   void *pass_info;  // Informações específicas para diferentes passes
   */
 };
+
+typedef struct {
+  int lower;
+  int upper;
+} DimensionBounds;
 
 struct SymbolEntry {
   char *name;
@@ -203,6 +222,8 @@ struct SymbolEntry {
       ASTNode *type;
       int offset;
       bool is_ref;
+      DimensionBounds *dimensions;
+      int num_dimensions;
     } var_info;
 
     struct {

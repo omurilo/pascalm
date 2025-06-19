@@ -11,6 +11,7 @@ typedef struct {
 
 typedef struct {
   ScopeStack *scope_stack;
+  SymbolEntry *current_function;
 } CompilerContext;
 
 CompilerContext *context_create(void);

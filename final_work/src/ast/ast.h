@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "../commons.h"
+#include "../context.h"
 
 typedef struct ProgramNode ProgramNode; // Raiz da AST, contendo o nome do
                                         // programa e seu bloco principal
@@ -14,7 +15,6 @@ typedef struct UsesNode UsesNode;       // Lista de módulos importados
 typedef struct ConstDeclarationNode ConstDeclarationNode; // Declaração de constantes
 typedef struct TypeDeclarationNode TypeDeclarationNode; // Declaração de tipos
 typedef struct VarDeclarationNode VarDeclarationNode; // Declaração de variáveis
-typedef struct ProcDeclarationNode ProcDeclarationNode; // Declaração de procedimentos
 typedef struct FuncDeclarationNode FuncDeclarationNode; // Declaração de funções
 
 typedef struct SimpleTypeNode SimpleTypeNode;      // Tipos simples
@@ -31,7 +31,6 @@ typedef struct PointerDerefNode PointerDerefNode;
 
 typedef struct CompoundStatementNode CompoundStatementNode;                    // Bloco de comandos (begin...end)
 typedef struct AssignmentNode AssignmentNode; // Atribuição (:=)
-typedef struct ProcedureCallNode ProcedureCallNode; // Chamada de procedimento
 typedef struct IfNode IfNode; // Estrutura condicional if-then-else
 typedef struct LabeledStmtNode LabeledStmtNode;
 typedef struct CaseNode CaseNode;           // Estrutura de seleção case
@@ -251,13 +250,6 @@ typedef struct ParameterIdentifierList {
   ASTNode *params_type;
 } ParameterIdentifierList;
 
-struct ProcDeclarationNode {
-  ASTNode base;
-  ASTNode *identifier;
-  ASTNode *parameters;
-  ASTNode *block_or_forward;
-};
-
 struct FuncDeclarationNode {
   ASTNode base;
   ASTNode *identifier;
@@ -270,16 +262,16 @@ struct IdentifierNode {
     ASTNode base;
     char *name;                  // Identifier name
     SymbolKind kind;             // Inicialmente SYMBOL_UNKNOWN
-    const char *symbol_entry_key;          // Reference to symbol table entry
     // int is_lvalue;               // Is this usable as an l-value?
+    SymbolEntry *symbol;
 };
 
 struct TypeIdentifierNode {
   ASTNode base;
-  char *name;
   SymbolKind kind;
   bool is_base_type;
   IdentifierNode *id;
+  SymbolEntry *symbol;
 };
 
 struct AssignmentNode {
@@ -361,12 +353,6 @@ struct FunctionCallNode {
   ASTNode base;
   ASTNode *function;
   ASTNode *params;
-};
-
-struct ProcedureCallNode {
-    ASTNode base;
-    ASTNode *procedure;     // Identificador do procedimento
-    ASTNode *params;        // Lista de parâmetros (pode ser NULL)
 };
 
 struct GotoNode {
@@ -579,18 +565,6 @@ struct LiteralNode {
     } value;
 };
 
-typedef struct ConstantValue {
-    ConstantType type;
-    union {
-        int int_val;
-        double real_val;
-        char *str_val;
-        int bool_val;
-        char char_val;
-    } value;
-    bool is_valid;
-} ConstantValue;
-
 SourceLocation create_location(YYLTYPE loc);
 ASTNode *create_program_node(char *name, ASTNode *heading, ASTNode *block,
                              SourceLocation loc);
@@ -750,9 +724,6 @@ ASTNode *add_types_to_block(ASTNode *block, ASTNode *types);
 ASTNode *add_variables_to_block(ASTNode *block, ASTNode *variables);
 ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *proc_funcs);
 
-/* EVALUATE FNS */
-ConstantValue evaluate_constant(ASTNode *const_node);
-
 /* UTILS */
 ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind);
 ASTNode *get_statements_from_block(ASTNode *block);
@@ -772,6 +743,7 @@ const char* get_literal_type_name(LiteralType type);
 const char *get_param_kind_name(ParameterKind kind);
 // void print_binary_expr_node(ASTNode *node, int indent);
 // void print_heading(ASTNode *node, int indent);
+ConstantValue evaluate_constant(CompilerContext *context, ASTNode *const_node);
 #endif
 
 /*
