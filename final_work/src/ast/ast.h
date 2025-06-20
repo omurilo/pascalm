@@ -198,6 +198,8 @@ struct ProgramNode {
   char *name;
   ASTNode *block;
   ASTNode *heading;
+  bool need_set_helpers;
+  bool need_string_helpers;
 };
 
 struct HeadingNode {

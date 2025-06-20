@@ -560,6 +560,8 @@ ASTNode *create_program_node(char *name, ASTNode *heading, ASTNode *block,
   node->name = strdup(name);
   node->block = block;
   node->heading = heading;
+  node->need_string_helpers = NULL;
+  node->need_set_helpers = NULL;
   return (ASTNode *)node;
 }
 
@@ -2051,7 +2053,7 @@ const char *binary_op_to_string(BinaryOperator op) {
   case BINOP_LTE:
     return "<=";
   case BINOP_EQ:
-    return "=";
+    return "==";
   case BINOP_NEQ:
     return "<>";
   case BINOP_GTE:
@@ -2071,9 +2073,9 @@ const char *binary_op_to_string(BinaryOperator op) {
   case BINOP_DIV:
     return "div";
   case BINOP_MOD:
-    return "mod";
+    return "%";
   case BINOP_AND:
-    return "and";
+    return "&&";
   case BINOP_IN:
     return "in";
   default:
@@ -2425,9 +2427,6 @@ void free_node(ASTNode *node) {
   }
   case NODE_VAR_DECL: {
     VarDeclarationNode *vars = (VarDeclarationNode *)node;
-    fprintf(stderr,
-            "[VAR_DECL] VarDeclarationNode %p — var_list=%p type_node=%p\n",
-            (void *)vars, (void *)vars->var_list, (void *)vars->type_node);
     free_node(vars->type_node);
     free_node(vars->var_list);
     free(vars);

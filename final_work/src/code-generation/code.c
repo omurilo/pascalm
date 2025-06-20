@@ -30,11 +30,7 @@ const char *cast_pascal_to_c_type(TypeIdentifierNode *node) {
       return "bool";
     if (strcmp(id->name, "string") == 0)
       return "string";
-    return "void";
   }
-  case SYMBOL_TYPE:
-    LOG_ERROR("struct\n\n\n");
-    return "struct";
   default:
     LOG_ERROR("void (%d.%d-%d.%d)\n\n\n", node->base.location.first_line,
               node->base.location.first_column, node->base.location.last_line,
@@ -52,11 +48,23 @@ const char *resolve_type_identifier(ASTNode *node) {
   if (node->type == NODE_IDENTIFIER)
     return resolve_identifier(node);
 
-  TypeIdentifierNode *type_node = (TypeIdentifierNode *)node;
-  if (type_node->kind == SYMBOL_TYPE) {
-    return resolve_identifier((ASTNode *)type_node->id);
+  if (node->type == NODE_TYPE_IDENTIFIER) {
+    TypeIdentifierNode *type_node = (TypeIdentifierNode *)node;
+    if (type_node->kind == SYMBOL_TYPE) {
+      return resolve_identifier((ASTNode *)type_node->id);
+    } else if (type_node->kind == SYMBOL_BUILTIN) {
+      return cast_pascal_to_c_type(type_node);
+    }
   }
-  return cast_pascal_to_c_type(type_node);
+
+  if (node->type == NODE_SIMPLE_TYPE) {
+    SimpleTypeNode *s_type = (SimpleTypeNode *)node;
+    return resolve_type_identifier(s_type->type);
+  }
+
+  LOG_DEBUG("%s é o tipo do tipo que quer saber o c type;", 
+            get_node_type_name(node->type));
+  return NULL;
 }
 
 void generate_program(CodeGenerator *code_gen, CompilerContext *context,
@@ -68,9 +76,11 @@ void generate_program(CodeGenerator *code_gen, CompilerContext *context,
   fprintf(code_gen->output_file, "#include <string.h>\n");
   fprintf(code_gen->output_file, "#include <stdbool.h>\n\n");
 
-  generate_string_definition(code_gen);
+  if (program->need_string_helpers)
+    generate_string_definition(code_gen);
 
-  generate_block(code_gen, context, program->block, true);
+  generate_block(code_gen, context, program->block, true,
+                 program->need_set_helpers, program->need_string_helpers);
 
   print_indent(code_gen);
   fprintf(code_gen->output_file, "return 0;\n");
@@ -79,7 +89,8 @@ void generate_program(CodeGenerator *code_gen, CompilerContext *context,
 }
 
 void generate_block(CodeGenerator *code_gen, CompilerContext *context,
-                    ASTNode *node, bool is_global) {
+                    ASTNode *node, bool main, bool set_helpers,
+                    bool string_helpers) {
   BlockNode *block = (BlockNode *)node;
 
   ListNode *types = (ListNode *)block->types;
@@ -104,10 +115,10 @@ void generate_block(CodeGenerator *code_gen, CompilerContext *context,
       fprintf(code_gen->output_file, "\n");
   }
 
-  if (is_global) {
+  if (string_helpers)
     generate_strings_helper_functions(code_gen);
+  if (set_helpers)
     generate_set_helper_functions(code_gen);
-  }
 
   ListNode *procs_funcs = (ListNode *)block->procs_funcs;
   while (procs_funcs) {
@@ -118,8 +129,9 @@ void generate_block(CodeGenerator *code_gen, CompilerContext *context,
     procs_funcs = (ListNode *)procs_funcs->next;
   }
 
-  if (is_global) {
+  if (main) {
     fprintf(code_gen->output_file, "int main() {\n");
+    print_indent(code_gen);
     code_gen->indent_level++;
   }
 
@@ -277,7 +289,8 @@ void generate_function(CodeGenerator *code_gen, CompilerContext *context,
   fprintf(code_gen->output_file, "){\n");
   code_gen->indent_level++;
 
-  generate_block(code_gen, context, func->block_or_forward, false);
+  generate_block(code_gen, context, func->block_or_forward, false, false,
+                 false);
 
   code_gen->indent_level--;
   fprintf(code_gen->output_file, "}\n\n");
@@ -494,7 +507,9 @@ void generate_array(CodeGenerator *code_gen, CompilerContext *context,
 void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
                          ASTNode *node) {
   AssignmentNode *a = (AssignmentNode *)node;
-
+  if (code_gen->indent_level > 0) {
+    print_indent(code_gen);
+  }
   IdentifierNode *target_id = NULL;
   if (a->target->type == NODE_IDENTIFIER) {
     target_id = (IdentifierNode *)a->target;
@@ -532,6 +547,9 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
 
 void generate_if_statement(CodeGenerator *code_gen, CompilerContext *context,
                            ASTNode *node) {
+  if (code_gen->indent_level > 0) {
+    print_indent(code_gen);
+  }
   IfNode *if_stmt = (IfNode *)node;
   fprintf(code_gen->output_file, "if(");
   generate_expression(code_gen, context, if_stmt->condition);
@@ -554,13 +572,32 @@ void generate_if_statement(CodeGenerator *code_gen, CompilerContext *context,
 }
 
 void generate_while_statement(CodeGenerator *code_gen, CompilerContext *context,
-                              ASTNode *node) {}
+                              ASTNode *node) {
+  WhileStmtNode *while_stmt = (WhileStmtNode *)node;
+
+  if (code_gen->indent_level > 0) {
+    print_indent(code_gen);
+  }
+
+  fprintf(code_gen->output_file, "while (");
+  generate_expression(code_gen, context, while_stmt->condition);
+  fprintf(code_gen->output_file, ") {\n");
+  code_gen->indent_level++;
+  generate_statement(code_gen, context, while_stmt->body);
+  code_gen->indent_level--;
+
+  print_indent(code_gen);
+  fprintf(code_gen->output_file, "}\n");
+}
 
 void generate_for_statement(CodeGenerator *code_gen, CompilerContext *context,
                             ASTNode *node) {
   ForStmtNode *for_stmt = (ForStmtNode *)node;
   IdentifierNode *id = (IdentifierNode *)for_stmt->variable;
 
+  if (code_gen->indent_level > 0) {
+    print_indent(code_gen);
+  }
   fprintf(code_gen->output_file, "for (%s = ", id->name);
   generate_expression(code_gen, context,
                       for_stmt->start_expr); // Gera o valor inicial
@@ -586,7 +623,21 @@ void generate_for_statement(CodeGenerator *code_gen, CompilerContext *context,
 }
 
 void generate_repeat_until_statement(CodeGenerator *code_gen,
-                                     CompilerContext *context, ASTNode *node) {}
+                                     CompilerContext *context, ASTNode *node) {
+  RepeatUntilNode *repeat_stmt = (RepeatUntilNode *)node;
+
+  if (code_gen->indent_level > 0) {
+    print_indent(code_gen);
+  }
+  fprintf(code_gen->output_file, "do {\n");
+  code_gen->indent_level++;
+  generate_statement(code_gen, context, repeat_stmt->body);
+  code_gen->indent_level--;
+  print_indent(code_gen);
+  fprintf(code_gen->output_file, "} while(");
+  generate_expression(code_gen, context, repeat_stmt->condition);
+  fprintf(code_gen->output_file, ");\n");
+}
 
 void generate_list(CodeGenerator *code_gen, CompilerContext *context,
                    ASTNode *node) {
@@ -594,7 +645,7 @@ void generate_list(CodeGenerator *code_gen, CompilerContext *context,
 
   while (list) {
     if (list->element) {
-      // TODO: generate anything
+      generate_statement(code_gen, context, list->element);
     }
 
     list = (ListNode *)list->next;
@@ -603,36 +654,158 @@ void generate_list(CodeGenerator *code_gen, CompilerContext *context,
 
 void generate_write(CodeGenerator *code_gen, CompilerContext *context,
                     ASTNode *node, bool line) {
-  fprintf(code_gen->output_file, "printf(\"");
 
   FunctionCallNode *proc = (FunctionCallNode *)node;
   ListNode *params = (ListNode *)proc->params;
-
+  char format_string[255] = "";
   while (params) {
     if (params->element) {
       switch (params->element->type) {
       case NODE_LITERAL: {
         LiteralNode *literal = (LiteralNode *)params->element;
         if (literal->literal_type == LITERAL_INTEGER) {
-          fprintf(code_gen->output_file, "%d", literal->value.int_val);
+          // fprintf(code_gen->output_file, "%d", );
+          char str[255];
+          sprintf(str, "%d", literal->value.int_val);
+          strcat(format_string, str);
+          break;
         } else if (literal->literal_type == LITERAL_REAL) {
-          fprintf(code_gen->output_file, "%.2f", literal->value.real_val);
+          // fprintf(code_gen->output_file, "%.2f", );
+          char str[255];
+          sprintf(str, "%.2f", literal->value.real_val);
+          strcat(format_string, str);
+          break;
         } else if (literal->literal_type == LITERAL_BOOLEAN) {
-          fprintf(code_gen->output_file, "%s",
-                  literal->value.bool_val ? "true" : "false");
+          // fprintf(code_gen->output_file, "%s",
+          //         literal->value.bool_val ? "true" : "false");
+          strcat(format_string, literal->value.bool_val ? "true" : "false");
+          break;
         } else if (literal->literal_type == LITERAL_STRING) {
-          fprintf(code_gen->output_file, "%s", literal->value.str_val);
+          // fprintf(code_gen->output_file, "%s", literal->value.str_val);
+          strcat(format_string, literal->value.str_val);
+          break;
         } else if (literal->literal_type == LITERAL_CHAR) {
-          fprintf(code_gen->output_file, "%c", // : "'%c' %% 64",
-                  literal->value.char_val);
+          // fprintf(code_gen->output_file, "%c", // : "'%c' %% 64",
+          //         literal->value.char_val);
+          char str[1];
+          sprintf(str, "%c", literal->value.char_val);
+          strcat(format_string, str);
+          break;
         }
         break;
       }
       case NODE_ARRAY_ACCESS:
-        fprintf(code_gen->output_file, "%%d");
+        // fprintf(code_gen->output_file, "%%d");
+        strcat(format_string, "%d");
         break;
       case NODE_BINARY_EXPR:
+        // generate_operation()
         break;
+      case NODE_IDENTIFIER: {
+        IdentifierNode *id = (IdentifierNode *)params->element;
+        if (id->kind == SYMBOL_VARIABLE) {
+          SymbolEntry *id_sym = id->symbol;
+          LOG_ERROR(
+              "Beleza, é aqui, mas náo ta mapeado, precisa mapear será? %s", 
+              get_node_type_name(id_sym->info.var_info.type->type));
+
+          if (id_sym->info.var_info.type->type == NODE_TYPE_IDENTIFIER) {
+            TypeIdentifierNode *s_t_id =
+                (TypeIdentifierNode *)id_sym->info.var_info.type;
+            if (s_t_id->kind == SYMBOL_BUILTIN) {
+              const char *type_name =
+                  resolve_type_identifier((ASTNode *)s_t_id);
+              if (strcmp(type_name, "int") == 0) {
+                // fprintf(code_gen->output_file, "%%d");
+                strcat(format_string, "%d");
+                break;
+              } else if (strcmp(type_name, "char") == 0) {
+                // fprintf(code_gen->output_file, "%%c");
+                strcat(format_string, "%c");
+                break;
+              } else if (strcmp(type_name, "bool") == 0) {
+                // fprintf(code_gen->output_file, "%%s");
+                strcat(format_string, "%s");
+                break;
+              } else if (strcmp(type_name, "string") == 0) {
+                // fprintf(code_gen->output_file, "%%s");
+                strcat(format_string, "%s");
+                break;
+              }
+            }
+          } else if (id_sym->info.var_info.type->type == NODE_SIMPLE_TYPE) {
+            SimpleTypeNode *s_t =
+                (SimpleTypeNode *)id_sym->info.type_info.definition;
+            TypeIdentifierNode *s_t_id = (TypeIdentifierNode *)s_t->type;
+            if (s_t_id->kind == SYMBOL_BUILTIN) {
+              const char *type_name =
+                  resolve_type_identifier((ASTNode *)s_t_id);
+              if (strcmp(type_name, "int") == 0) {
+                // fprintf(code_gen->output_file, "%%d");
+                strcat(format_string, "%d");
+                break;
+              } else if (strcmp(type_name, "char") == 0) {
+                // fprintf(code_gen->output_file, "%%c");
+                strcat(format_string, "%c");
+                break;
+              } else if (strcmp(type_name, "bool") == 0) {
+                // fprintf(code_gen->output_file, "%%s");
+                strcat(format_string, "%s");
+                break;
+              } else if (strcmp(type_name, "string") == 0) {
+                // fprintf(code_gen->output_file, "%%s");
+                strcat(format_string, "%s");
+                break;
+              }
+            }
+          }
+        } else {
+          LOG_ERROR("%s is not mapped to generate write param",
+                    get_symbol_kind_name(id->kind));
+        }
+        break;
+      }
+      default:
+        LOG_DEBUG("[DEBUG writeln] -> %s not mapped",
+                  get_node_type_name(params->element->type));
+        break;
+      }
+    }
+
+    params = (ListNode *)params->next;
+    if (params)
+      fprintf(code_gen->output_file, " ");
+  }
+
+  fprintf(code_gen->output_file, line ? "printf(\"%s\\n\"" : "printf(\"%s\"",
+          format_string);
+
+  ListNode *curr = (ListNode *)proc->params;
+
+  bool first = true;
+  while (curr) {
+    if (curr->element && curr->element->type != NODE_LITERAL) {
+      if (first)
+        fprintf(code_gen->output_file, ", ");
+      generate_expression(code_gen, context, curr->element);
+    }
+    curr = (ListNode *)curr->next;
+    first = false;
+    if (curr && curr->element->type != NODE_LITERAL)
+      fprintf(code_gen->output_file, ", ");
+  }
+
+  fprintf(code_gen->output_file, ");\n");
+}
+
+void generate_read(CodeGenerator *code_gen, CompilerContext *context,
+                   ASTNode *node, bool line) {
+  FunctionCallNode *proc = (FunctionCallNode *)node;
+  ListNode *params = (ListNode *)proc->params;
+  char format_string[255] = "";
+  while (params) {
+    if (params->element) {
+      switch (params->element->type) {
       case NODE_IDENTIFIER: {
         IdentifierNode *id = (IdentifierNode *)params->element;
         if (id->kind == SYMBOL_VARIABLE) {
@@ -645,16 +818,16 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
               const char *type_name =
                   resolve_type_identifier((ASTNode *)s_t_id);
               if (strcmp(type_name, "int") == 0) {
-                fprintf(code_gen->output_file, "%%d");
+                strcat(format_string, "%d");
                 break;
               } else if (strcmp(type_name, "char") == 0) {
-                fprintf(code_gen->output_file, "%%c");
+                strcat(format_string, "%c");
                 break;
               } else if (strcmp(type_name, "bool") == 0) {
-                fprintf(code_gen->output_file, "%%s");
+                strcat(format_string, "%d");
                 break;
               } else if (strcmp(type_name, "string") == 0) {
-                fprintf(code_gen->output_file, "%%s");
+                strcat(format_string, "%s");
                 break;
               }
             }
@@ -663,38 +836,37 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
         break;
       }
       default:
-        LOG_ERROR("[DEBUG writeln] -> %s not mapped",
+        LOG_ERROR("[DEBUG readline] -> %s not is a varibale to accept assign",
                   get_node_type_name(params->element->type));
         break;
       }
     }
 
     params = (ListNode *)params->next;
-    if (params)
-      fprintf(code_gen->output_file, " ");
   }
 
-  fprintf(code_gen->output_file, line ? "\\n\"" : "\"");
+  fprintf(code_gen->output_file, "scanf(\"%s\", ", format_string);
 
   ListNode *curr = (ListNode *)proc->params;
-
+  bool first = true;
   while (curr) {
-    if (curr->element && curr->element->type != NODE_LITERAL) {
+    if (!first) {
+      fprintf(code_gen->output_file, ", ");
+    }
+    if (curr->element) {
+      fprintf(code_gen->output_file, "&");
       generate_expression(code_gen, context, curr->element);
     }
     curr = (ListNode *)curr->next;
-    if (curr && curr->element->type != NODE_LITERAL)
-      fprintf(code_gen->output_file, ", ");
+    first = false;
   }
 
-  fprintf(code_gen->output_file, ")");
-}
-
-void generate_read(CodeGenerator *code_gen, CompilerContext *context,
-                   ASTNode *node, bool line) {
-  fprintf(code_gen->output_file, "scanf(");
-  generate_expression(code_gen, context, node);
-  fprintf(code_gen->output_file, line ? "\\n\")" : "\")");
+  fprintf(code_gen->output_file, ");\n");
+  if (line) {
+    print_indent(code_gen);
+    fprintf(code_gen->output_file,
+            "while ((getchar()) != '\\n' && getchar() != EOF);\n");
+  }
 }
 
 void generate_proc_call_statement(CodeGenerator *code_gen,
@@ -703,6 +875,9 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
   IdentifierNode *id = (IdentifierNode *)f_call->function;
   SymbolEntry *s = context_lookup(context, id->name);
 
+  if (code_gen->indent_level > 0) {
+    print_indent(code_gen);
+  }
   if (s->kind == SYMBOL_BUILTIN) {
     if (strcmp(id->name, "write") == 0) {
       generate_write(code_gen, context, node, false);
@@ -711,10 +886,10 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
       generate_write(code_gen, context, node, true);
       return;
     } else if (strcmp(id->name, "read") == 0) {
-      generate_write(code_gen, context, node, false);
+      generate_read(code_gen, context, node, false);
       return;
     } else if (strcmp(id->name, "readln") == 0) {
-      generate_write(code_gen, context, node, true);
+      generate_read(code_gen, context, node, true);
       return;
     }
   } else {
@@ -732,8 +907,14 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
       if (s_params_list->element) {
         FormalParameterSectionNode *p =
             (FormalParameterSectionNode *)s_params_list->element;
-        var_params[index] = p->kind == PARAM_VAR;
-        index++;
+        ListNode *identifiers = (ListNode *)p->identifiers;
+        while (identifiers) {
+          if (identifiers->element) {
+            var_params[index] = p->kind == PARAM_VAR;
+            index++;
+          }
+          identifiers = (ListNode *)identifiers->next;
+        }
       }
       s_params_list = (ListNode *)s_params_list->next;
     }
@@ -761,14 +942,11 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
       fprintf(code_gen->output_file, ", ");
   }
 
-  fprintf(code_gen->output_file, ")");
+  fprintf(code_gen->output_file, ");\n");
 }
 
 void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
                         ASTNode *node) {
-  if (code_gen->indent_level > 0) {
-    print_indent(code_gen);
-  }
   switch (node->type) {
   case NODE_ASSIGN_STMT: {
     generate_assignment(code_gen, context, node);
@@ -798,7 +976,6 @@ void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
   case NODE_FUNC_CALL:
   case NODE_PROC_CALL:
     generate_proc_call_statement(code_gen, context, node);
-    fprintf(code_gen->output_file, ";\n");
     break;
   case NODE_GOTO_STMT:
     fprintf(code_gen->output_file, "/* statement list */\n");
@@ -822,24 +999,41 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
   switch (node->type) {
   case NODE_IDENTIFIER: {
     IdentifierNode *id = (IdentifierNode *)node;
-    fprintf(code_gen->output_file, "%s", id->name);
+    SymbolEntry *s = id->symbol;
+    LOG_DEBUG("%d - %s", s->info.var_info.is_ref,
+              s->info.var_info.is_ref ? "sim" : "não");
+    fprintf(code_gen->output_file, s->info.var_info.is_ref ? "*%s" : "%s",
+            id->name);
     break;
   }
   case NODE_BINARY_EXPR: {
     BinaryOperationNode *bin_op = (BinaryOperationNode *)node;
-    if (bin_op->op == BINOP_IN) {
+
+    switch (bin_op->op) {
+    case BINOP_IN: {
       fprintf(code_gen->output_file, "((");
       generate_expression(code_gen, context, bin_op->right);
       fprintf(code_gen->output_file, " & (1ULL << (");
       generate_expression(code_gen, context, bin_op->left);
       fprintf(code_gen->output_file, " %% 64))) != 0");
       fprintf(code_gen->output_file, ")");
-    } else {
+      break;
+    }
+    case BINOP_DIV: {
+      fprintf(code_gen->output_file, "(div(");
+      generate_expression(code_gen, context, bin_op->left);
+      fprintf(code_gen->output_file, ", ");
+      generate_expression(code_gen, context, bin_op->right);
+      fprintf(code_gen->output_file, ").quot)");
+      break;
+    }
+    default: {
       fprintf(code_gen->output_file, "(");
       generate_expression(code_gen, context, bin_op->left);
       fprintf(code_gen->output_file, " %s ", binary_op_to_string(bin_op->op));
       generate_expression(code_gen, context, bin_op->right);
       fprintf(code_gen->output_file, ")");
+    }
     }
     break;
   }

@@ -2,12 +2,6 @@
 #include "../logger.h"
 #include <assert.h>
 
-/* ================================================================== */
-/* DECLARAÇÕES ANTECIPADAS (FORWARD DECLS)                 */
-/* ================================================================== */
-// Funções estáticas internas ao módulo do analisador. Essencial para
-// permitir que as funções se chamem mutuamente de forma organizada.
-
 static void analyze_statement(ASTNode *statement, CompilerContext *context);
 static ASTNode *analyze_expression(ASTNode *expression,
                                    CompilerContext *context);
@@ -16,9 +10,8 @@ static void analyze_type_definition(SymbolEntry *type_symbol,
 static void analyze_sub_routine_body(SymbolEntry *func_symbol,
                                      CompilerContext *context);
 
-/* ================================================================== */
-/* FUNÇÕES AUXILIARES DE ANÁLISE                    */
-/* ================================================================== */
+bool need_string_helpers = false;
+bool need_set_helpers = false;
 
 static void insert_builtin_types(CompilerContext *context,
                                  SourceLocation location) {
@@ -42,7 +35,6 @@ static void insert_builtin_types(CompilerContext *context,
   }
 }
 
-// Retorna um nó de tipo built-in para um dado literal.
 static ASTNode *get_type_from_literal(ASTNode *literal_node,
                                       CompilerContext *context) {
   if (!literal_node || literal_node->type != NODE_LITERAL)
@@ -94,8 +86,6 @@ static SymbolEntry *resolve_to_type_symbol(ASTNode *type_node,
   return NULL;
 }
 
-// Navega por apelidos de tipo (ex: type T2 = T1) até encontrar a definição re
-// l.
 static ASTNode *resolve_to_actual_type_def(ASTNode *type_node,
                                            CompilerContext *context) {
   if (!type_node)
@@ -122,7 +112,6 @@ static ASTNode *resolve_to_actual_type_def(ASTNode *type_node,
   return type_node;
 }
 
-// Verifica se dois tipos são compatíveis para atribuição (dest := src).
 static int check_type_compatibility(ASTNode *dest_type, ASTNode *src_type,
                                     CompilerContext *context) {
   if (!dest_type || !src_type)
@@ -151,11 +140,6 @@ static int check_type_compatibility(ASTNode *dest_type, ASTNode *src_type,
   // TODO: Adicionar mais regras (ex: integer -> real)
   return 0;
 }
-
-/* ================================================================== */
-/* ANALISADOR DE EXPRESSÕES (RETORNA TIPO)                 */
-/* ================================================================== */
-#include "analyzer.h"
 
 void analyze_labels(ASTNode *label, CompilerContext *context) {
   LabelDeclarationNode *ld = (LabelDeclarationNode *)label;
@@ -256,8 +240,13 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
               id->name, SYMBOL_VARIABLE, context->scope_stack->scope_level,
               vars->base.location);
 
+          if (id->kind == SYMBOL_BUILTIN && strcmp(id->name, "string") == 0) {
+            need_string_helpers = true;
+          }
+
           s->info.var_info.offset = offset + index;
           s->info.var_info.type = variable->type_node;
+          s->info.var_info.is_ref = false;
           id->symbol = s;
           context_insert(context, id->name, s);
         }
@@ -756,7 +745,8 @@ static ASTNode *analyze_expression(ASTNode *expression,
   }
   case NODE_FUNC_CALL:
     break;
-  case NODE_LIST: { // Usado para listas de expressões (ex: subscripts de array)
+  case NODE_LIST: { // Usado para listas de expressões (ex: subscripts de 
+                    // rray)
     ListNode *list = (ListNode *)expression;
     while (list) {
       if (list->element)
@@ -765,14 +755,22 @@ static ASTNode *analyze_expression(ASTNode *expression,
     }
     return NULL;
   }
+  case NODE_TYPE_IDENTIFIER: {
+    TypeIdentifierNode *tid = (TypeIdentifierNode *)expression;
+    IdentifierNode *id = (IdentifierNode *)tid->id;
+    if (tid->kind == SYMBOL_BUILTIN && strcmp(id->name, "string") == 0) {
+      need_string_helpers = true;
+    }
+    break;
+  }
   default:
     LOG_ERROR("Compiler error: Unhandled node type '%s' in analyze_expression.",
               get_node_type_name(expression->type));
     return NULL;
   }
+  return NULL;
 }
 
-// NOVA FUNÇÃO: Analisa COMANDOS e estruturas de controle.
 static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   if (!statement)
     return;
@@ -788,7 +786,7 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   }
   case NODE_IF_STMT: {
     IfNode *if_stmt = (IfNode *)statement;
-    /* ASTNode* cond_type = */ analyze_expression(if_stmt->condition, context);
+    analyze_expression(if_stmt->condition, context);
     // TODO: if(cond_type is not boolean) yyerror(...)
 
     analyze_statement(if_stmt->then_stmt, context);
@@ -797,7 +795,6 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   }
   case NODE_BLOCK: {
     BlockNode *block = (BlockNode *)statement;
-    // Um bloco dentro de outro pode ter suas próprias declarações
     scope_stack_push(context->scope_stack);
     if (block->variables)
       analyze_variables(block->variables, context);
@@ -808,16 +805,54 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   case NODE_LIST: {
     ListNode *list = (ListNode *)statement;
     while (list) {
-      // A lista de um comando (ex: corpo de um FOR) contém outros comandos
       analyze_statement(list->element, context);
       list = (ListNode *)list->next;
     }
     break;
   }
+  case NODE_WHILE_STMT: {
+    WhileStmtNode *while_stmt = (WhileStmtNode *)statement;
+    analyze_expression(while_stmt->condition, context);
+    analyze_statement(while_stmt->body, context);
+    break;
+  }
+  case NODE_PROC_CALL: {
+    FunctionCallNode *func = (FunctionCallNode *)statement;
+    IdentifierNode *id = (IdentifierNode *)func->function;
+
+    LOG_DEBUG(" é builtin? %s", get_symbol_kind_name(id->kind));
+    if (id->kind == SYMBOL_BUILTIN) {
+      SymbolEntry *s = context_lookup(context, id->name);
+
+      if (!s) {
+        s = create_symbol_entry(id->name, SYMBOL_BUILTIN, 0,
+                                func->base.location);
+
+        context_insert(context, id->name, s);
+      }
+
+      s->info.func_info.return_type = NULL;
+      s->info.func_info.params = func->params;
+
+      id->symbol = s;
+    }
+
+    analyze_expression(func->function, context);
+    analyze_expression(func->params, context);
+
+    SymbolEntry *s = context_lookup(context, id->name);
+    id->symbol = s;
+    break;
+  }
+  case NODE_REPEAT_STMT: {
+    RepeatUntilNode *repeat_stmt = (RepeatUntilNode *)statement;
+    analyze_expression(repeat_stmt->condition, context);
+    analyze_statement(repeat_stmt->body, context);
+    break;
+  }
   default:
-    // Se não for um comando conhecido, pode ser uma chamada de procedimento
-    // ou um erro. A delegação para analyze_expression aqui é um ponto fraco
-    // e deve ser evitada. O ideal é ter cases para todos os tipos de COMANDOS.
+    fprintf(stderr, "O tipo %s não foi mapeado no analyze_statement", 
+            get_node_type_name(statement->type));
     break;
   }
 }
@@ -848,6 +883,13 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
           context_insert_field(context, record_type_symbol, field_symbol);
           id->symbol = field_symbol;
           ids = (ListNode *)ids->next;
+
+          SymbolEntry *field_type_symbol =
+              resolve_to_type_symbol(field_decl->record_type, context);
+          if (field_type_symbol->kind == SYMBOL_BUILTIN &&
+              strcmp(field_type_symbol->name, "string") == 0) {
+            need_string_helpers = true;
+          }
         }
         field_decls = (ListNode *)field_decls->next;
       }
@@ -858,8 +900,6 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
       TypeIdentifierNode *tag_tid = (TypeIdentifierNode *)tag->tag_type;
       SymbolEntry *tag_t_s =
           context_lookup(context, ((IdentifierNode *)tag_tid->id)->name);
-      LOG_DEBUG("Qual é status? %s - %s", ((IdentifierNode *)tag_tid->id)->name, 
-                tag_id->name);
 
       SymbolEntry *tag_symbol = create_symbol_entry(
           tag_id->name, SYMBOL_FIELD, record_type_symbol->scope_level + 1,
@@ -885,7 +925,6 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
   }
 }
 
-// A função pública que orquestra tudo.
 void analyze_semantics(ASTNode *root_node, CompilerContext *context) {
   if (!root_node) {
     LOG_ERROR("AST root is NULL. Aborting analysis.");
@@ -926,7 +965,6 @@ void analyze_semantics(ASTNode *root_node, CompilerContext *context) {
     analyze_variables(block->variables, context);
   }
 
-  // --- PASSAGEM 3: Analisar corpos de funções e o bloco principal ---
   LOG_TRACE("Passagem 3: Analisando comandos...");
   if (block->procs_funcs) {
     ListNode *funcs = (ListNode *)block->procs_funcs;
@@ -941,6 +979,9 @@ void analyze_semantics(ASTNode *root_node, CompilerContext *context) {
   if (block->statements) {
     analyze_statement(block->statements, context);
   }
+
+  program->need_string_helpers = need_string_helpers;
+  program->need_set_helpers = need_set_helpers;
 
   LOG_TRACE("Análise Semântica concluída.");
 }

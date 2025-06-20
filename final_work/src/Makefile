@@ -53,7 +53,7 @@ parser/parser.tab.c parser/parser.tab.h: parser/parser.y
 
 .PHONY: test
 test: $(TARGET)
-	./$(TARGET) $(FILE)
+	./$(TARGET) -f $(FILE)
 
 .PHONY: clean
 clean:

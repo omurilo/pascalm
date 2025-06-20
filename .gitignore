@@ -30,3 +30,8 @@ final_work/.venv/bin/python-argcomplete-check-easy-install-script
 final_work/.venv/bin/activate-global-python-argcomplete
 final_work/src/test
 final_work/src/pascalm
+final_work/tests/2-io-vars
+final_work/tests/6-procs-params
+final_work/tests/3-control-while-if
+final_work/tests/1-repeat-until
+final_work/src/teste

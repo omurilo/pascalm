@@ -9,8 +9,8 @@ CodeGenerator *create_code_generator(char *output_file);
 
 void generate_program(CodeGenerator *code_gen, CompilerContext *context,
                       ASTNode *node);
-void generate_block(CodeGenerator *code_gen, CompilerContext *context,
-                    ASTNode *node, bool is_global);
+void generate_block(CodeGenerator *code_gen, CompilerContext *context, ASTNode *node,
+               bool main, bool set_helpers, bool string_helpers);
 void generate_function(CodeGenerator *code_gen, CompilerContext *context,
                        ASTNode *node);
 void generate_type(CodeGenerator *code_gen, CompilerContext *context,

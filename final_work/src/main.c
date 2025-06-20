@@ -19,7 +19,7 @@ void yyerror(const char *msg) {
 
 int main(int argc, char **argv) {
   char *filename = NULL;
-  char *output = "./output.c";
+  char *output = NULL;
   int print_ast = 0;
   int semantic = 1;
   int generate_code = 1;
@@ -66,6 +66,19 @@ int main(int argc, char **argv) {
   yylloc.first_line = 1;
   yylloc.last_column = 1;
   yylloc.last_line = 1;
+
+  if (output == NULL) {
+    char temp[512];
+    strncpy(temp, filename, sizeof(temp));
+    temp[sizeof(temp) - 1] = '\0';
+
+    char *dot = strrchr(temp, '.');
+    if (dot != NULL) {
+      *dot = '\0';
+    }
+
+    output = strdup(strcat(temp, ".c"));
+  }
 
   yyparse();
 
