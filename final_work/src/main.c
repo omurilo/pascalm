@@ -83,8 +83,7 @@ int main(int argc, char **argv) {
     LOG_TRACE("AST construída com sucesso:\n");
     if (print_ast == 1)
       root->print(root, 0);
-    if (semantic){
-      LOG_TRACE("Iniciando a análise semântica...");
+    if (semantic) {
       analyze_semantics(root, context);
     }
     if (generate_code) {

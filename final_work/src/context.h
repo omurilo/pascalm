@@ -25,4 +25,6 @@ SymbolEntry *context_lookup(CompilerContext *context, const char *key);
 void context_insert(CompilerContext *context, const char *key,
                     SymbolEntry *entry);
 
+void context_insert_field(CompilerContext *context, SymbolEntry *record_type_symbol, SymbolEntry *field_symbol);
+SymbolEntry *context_lookup_field(ht *table, const char *key);
 #endif

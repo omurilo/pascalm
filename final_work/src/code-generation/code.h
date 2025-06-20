@@ -25,13 +25,19 @@ void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
                         ASTNode *node);
 void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
                    ASTNode *node);
-void generate_expression(CodeGenerator *code_gen, CompilerContext *context, ASTNode *node);
+void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
+                         ASTNode *node);
 const char *resolve_expression(CompilerContext *context, ASTNode *node);
-const char *resolve_variable_identifier(CompilerContext *context, ASTNode *node);
+const char *resolve_variable_identifier(CompilerContext *context,
+                                        ASTNode *node);
 
 void generate_string_definition(CodeGenerator *code_gen);
 void generate_strings_helper_functions(CodeGenerator *code_gen);
 void generate_set_helper_functions(CodeGenerator *code_gen);
 void generate_array_helper_functions(CodeGenerator *code_gen);
+
+void generate_field_list(CodeGenerator *code_gen, ASTNode *list_node,
+                         CompilerContext *context);
+ASTNode *get_expression_type(ASTNode *expression_node);
 
 #endif

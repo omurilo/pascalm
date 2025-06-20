@@ -1,5 +1,6 @@
 #include "context.h"
 #include <stdlib.h>
+#include <assert.h>
 
 ScopeStack *scope_stack_create() {
   ScopeStack *stack = malloc(sizeof(ScopeStack));
@@ -60,7 +61,8 @@ void context_insert(CompilerContext *context, const char *key,
   if (current_scope_table) {
     if (ht_get(current_scope_table, key) != NULL) {
       char err[255];
-      sprintf(err, "Error: Symbol (%s) already declared in this scope (%d)", key, context->scope_stack->scope_level);
+      sprintf(err, "Error: Symbol (%s) already declared in this scope (%d)",
+              key, context->scope_stack->scope_level);
       yyerror(err);
     }
     ht_set(current_scope_table, key, entry);
@@ -75,4 +77,35 @@ SymbolEntry *context_lookup(CompilerContext *context, const char *key) {
     }
   }
   return NULL;
+}
+
+void context_insert_field(CompilerContext *context,
+                          SymbolEntry *record_type_symbol,
+                          SymbolEntry *field_symbol) {
+  assert(record_type_symbol->kind == SYMBOL_TYPE);
+  assert(field_symbol->kind == SYMBOL_FIELD);
+
+  fprintf(stderr, "context insert field from %p\n",
+          (void *)record_type_symbol->info.type_info.fields);
+
+  if (record_type_symbol->info.type_info.fields == NULL) {
+    record_type_symbol->info.type_info.fields = ht_create();
+  }
+
+  ht *fields_table = record_type_symbol->info.type_info.fields;
+
+  if (ht_get(fields_table, field_symbol->name) != NULL) {
+    char err[255];
+    sprintf(err, "Error: Field '%s' already declared in record '%s'",
+            field_symbol->name, record_type_symbol->name);
+    yyerror(err);
+    exit(1);
+  }
+
+  ht_set(fields_table, field_symbol->name, field_symbol);
+}
+
+SymbolEntry *context_lookup_field(ht *table, const char *key) {
+  SymbolEntry *entry = ht_get(table, key);
+  return entry;
 }

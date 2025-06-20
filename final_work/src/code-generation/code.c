@@ -379,44 +379,66 @@ void generate_type(CodeGenerator *code_gen, CompilerContext *context,
 
 void generate_record(CodeGenerator *code_gen, CompilerContext *context,
                      ASTNode *node) {
-  TypeDeclarationNode *t_node = (TypeDeclarationNode *)node;
-  StructuredTypeNode *s_node = (StructuredTypeNode *)t_node->type_expr;
-  RecordTypeNode *r_node = (RecordTypeNode *)s_node->type;
-  const char *type_name = resolve_type_identifier(t_node->identifier);
-  fprintf(code_gen->output_file, "typedef struct %s {\n", type_name);
+  TypeDeclarationNode *type_decl = (TypeDeclarationNode *)node;
+  RecordTypeNode *r_node =
+      (RecordTypeNode *)((StructuredTypeNode *)type_decl->type_expr)->type;
+  IdentifierNode *type_name_node =
+      ((TypeIdentifierNode *)type_decl->identifier)->id;
+
+  fprintf(code_gen->output_file, "typedef struct {\\n");
   code_gen->indent_level++;
 
-  ListNode *fields = (ListNode *)r_node->field_list;
-  while (fields) {
-    if (fields->element) {
-      ListNode *fixed_part =
-          (ListNode *)((FieldListNode *)fields->element)->fixed_part;
-      while (fixed_part) {
-        if (fixed_part->element) {
-          print_indent(code_gen);
-          RecordFieldNode *rf_node = (RecordFieldNode *)fixed_part->element;
-          SimpleTypeNode *rf_type = (SimpleTypeNode *)rf_node->record_type;
+  if (r_node->field_list) {
+    FixedPartNode *fp_node =
+        (FixedPartNode *)((FieldListNode *)r_node->field_list)->fixed_part;
+    generate_field_list(code_gen, fp_node->fields, context);
+  }
+  if (r_node->variant_part) {
+    VariantPartNode *vp_node = (VariantPartNode *)r_node->variant_part;
 
-          ListNode *rf_field_list = (ListNode *)rf_node->field_list;
-          while (rf_field_list) {
-            if (rf_field_list->element) {
-              fprintf(code_gen->output_file, "%s %s;\n",
-                      resolve_type_identifier(rf_type->type),
-                      resolve_identifier(rf_field_list->element));
-            }
-            rf_field_list = (ListNode *)rf_field_list->next;
-          }
-        }
-
-        fixed_part = (ListNode *)fixed_part->next;
-      }
+    if (vp_node->tag_field) {
+      TagFieldNode *tag = (TagFieldNode *)vp_node->tag_field;
+      print_indent(code_gen);
+      fprintf(code_gen->output_file, "%s %s;\\n",
+              resolve_type_identifier(tag->tag_type),
+              ((IdentifierNode *)tag->field)->name);
     }
 
-    fields = (ListNode *)fields->next;
+    print_indent(code_gen);
+    fprintf(code_gen->output_file, "union {\\n");
+    code_gen->indent_level++;
+
+    VariantListNode *v_list_node = (VariantListNode *)vp_node->variant_list;
+    ListNode *variants = (ListNode *)v_list_node->variants;
+    int variant_index = 0;
+
+    while (variants) {
+      VariantRecordNode *v_rec_node = (VariantRecordNode *)variants->element;
+      if (v_rec_node->field_list) {
+        print_indent(code_gen);
+        fprintf(code_gen->output_file, "struct {\\n");
+        code_gen->indent_level++;
+
+        // PREENCHENDO O "..." USANDO A NOVA FUNÇÃO AUXILIAR
+        FieldListNode *fl_node = (FieldListNode *)v_rec_node->field_list;
+        FixedPartNode *fp_node = (FixedPartNode *)fl_node->fixed_part;
+        generate_field_list(code_gen, fp_node->fields, context);
+
+        code_gen->indent_level--;
+        print_indent(code_gen);
+        fprintf(code_gen->output_file, "} variant_%d;\\n", variant_index);
+      }
+      variants = (ListNode *)variants->next;
+      variant_index++;
+    }
+
+    code_gen->indent_level--;
+    print_indent(code_gen);
+    fprintf(code_gen->output_file, "} variants;\\n");
   }
 
   code_gen->indent_level--;
-  fprintf(code_gen->output_file, "} %s;\n", type_name);
+  fprintf(code_gen->output_file, "} %s;\\n\\n", type_name_node->name);
 }
 
 void generate_array(CodeGenerator *code_gen, CompilerContext *context,
@@ -893,81 +915,30 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
     IdentifierNode *array_id = (IdentifierNode *)a_node->array;
     SymbolEntry *array_symbol = array_id->symbol;
 
-    if (!array_symbol) {
-      LOG_ERROR("The array symbol doenst exists");
-    }
-
     generate_expression(code_gen, context, a_node->array);
 
-    ListNode *subscript_expr_list = (ListNode *)a_node->subscript_list;
-    int dimension_index = 0;
-
-    while (subscript_expr_list) {
-      int lower_bound =
-          array_symbol->info.var_info.dimensions[dimension_index].lower;
-
+    ListNode *subscripts = (ListNode *)a_node->subscript_list;
+    int dim_idx = 0;
+    while (subscripts) {
+      int lower_bound = array_symbol->info.var_info.dimensions[dim_idx].lower;
       fprintf(code_gen->output_file, "[");
-
-      generate_expression(code_gen, context, subscript_expr_list->element);
-
-      if (lower_bound > 0) {
-        fprintf(code_gen->output_file, " - %d", lower_bound);
-      } else if (lower_bound < 0) {
-        fprintf(code_gen->output_file, " + %d", -lower_bound);
-      }
-
-      fprintf(code_gen->output_file, "]");
-
-      dimension_index++;
-      subscript_expr_list = (ListNode *)subscript_expr_list->next;
+      generate_expression(code_gen, context, subscripts->element);
+      fprintf(code_gen->output_file, " - %d]", lower_bound);
+      subscripts = (ListNode *)subscripts->next;
+      dim_idx++;
     }
     break;
   }
   case NODE_MEMBER_ACCESS: {
     MemberAccessNode *m_node = (MemberAccessNode *)node;
-    LOG_ERROR("\t[NODE_MEMBER_ACCESS]  %s - identifider: %s\n\n",
-              get_node_type_name(m_node->record->type),
-              resolve_identifier(m_node->field));
-    if (m_node->record->type == NODE_IDENTIFIER) {
 
-      IdentifierNode *record_id = (IdentifierNode *)m_node->record;
+    ASTNode *record_type_node = get_expression_type(m_node->record);
+    bool is_ref = false;
+    // TODO: Implementar a função que checa se o tipo é referência/ponteiro
+    // is_ref = is_reference_type(record_type_node);
 
-      SymbolEntry *record_symbol = record_id->symbol;
-
-      generate_expression(code_gen, context, m_node->record);
-
-      if (record_symbol != NULL && record_symbol->info.var_info.is_ref) {
-        fprintf(code_gen->output_file, "->");
-      } else {
-        fprintf(code_gen->output_file, ".");
-      }
-    } else if (m_node->record->type == NODE_MEMBER_ACCESS) {
-      MemberAccessNode *m = (MemberAccessNode *)m_node->record;
-      IdentifierNode *id = (IdentifierNode *)m->record;
-
-      generate_expression(code_gen, context, m_node->record);
-      SymbolEntry *record_symbol = id->symbol;
-
-      if (record_symbol != NULL && record_symbol->info.var_info.is_ref) {
-        fprintf(code_gen->output_file, "->");
-      } else {
-        fprintf(code_gen->output_file, ".");
-      }
-    } else if (m_node->record->type == NODE_ARRAY_ACCESS) {
-      ArrayAccessNode *arr = (ArrayAccessNode *)m_node->record;
-      IdentifierNode *id = (IdentifierNode *)arr->array;
-
-      SymbolEntry *record_symbol = id->symbol;
-      // LOG_ERROR("Tem symbol aqui será? %p, %s - %s\n", (void* )record_symbol,get_node_type_name(arr->array->type),resolve_identifier(m_node->field));
-
-      generate_expression(code_gen, context, m_node->record);
-
-      if (record_symbol != NULL && record_symbol->info.var_info.is_ref) {
-        fprintf(code_gen->output_file, "->");
-      } else {
-        fprintf(code_gen->output_file, ".");
-      }
-    }
+    generate_expression(code_gen, context, m_node->record);
+    fprintf(code_gen->output_file, is_ref ? "->" : ".");
     generate_expression(code_gen, context, m_node->field);
     break;
   }
@@ -982,5 +953,35 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
         "[DEBUG resolve expression] -> NODE NOT MAPPED - node type name %s\n",
         get_node_type_name(node->type));
     break;
+  }
+}
+
+ASTNode *get_expression_type(ASTNode *expression_node) {
+  if (expression_node && expression_node->result_type) {
+    return expression_node->result_type;
+  }
+  // TODO: Retornar um nó de erro seria o ideal
+  return NULL;
+}
+
+void generate_field_list(CodeGenerator *code_gen, ASTNode *list_node,
+                         CompilerContext *context) {
+  if (!list_node)
+    return;
+
+  ListNode *current_field_decl = (ListNode *)list_node;
+  while (current_field_decl) {
+    RecordFieldNode *field_decl =
+        (RecordFieldNode *)current_field_decl->element;
+    const char *c_type_str = resolve_type_identifier(field_decl->record_type);
+
+    ListNode *id_list = (ListNode *)field_decl->field_list;
+    while (id_list) {
+      print_indent(code_gen);
+      fprintf(code_gen->output_file, "%s %s;\\n", c_type_str,
+              ((IdentifierNode *)id_list->element)->name);
+      id_list = (ListNode *)id_list->next;
+    }
+    current_field_decl = (ListNode *)current_field_decl->next;
   }
 }

@@ -663,7 +663,8 @@ ASTNode *create_builtin_type_identifier(char *name, SourceLocation loc) {
   typeid->base.print = print_type_identifier_node;
   typeid->kind = SYMBOL_BUILTIN;
 
-  IdentifierNode *id = (IdentifierNode*)create_identifier_node(strdup(name), loc);
+  IdentifierNode *id =
+      (IdentifierNode *)create_identifier_node(strdup(name), loc);
   id->kind = SYMBOL_BUILTIN;
 
   typeid->id = id;
@@ -2290,55 +2291,62 @@ ConstantValue evaluate_constant(CompilerContext *context, ASTNode *const_node) {
   ConstantValue result = {
       .type = CONST_INTEGER, .is_valid = false, .value = {.int_val = 0}};
 
+  if (const_node->type == NODE_CONST_DECL) {
+    ConstDeclarationNode* const_decl = (ConstDeclarationNode*)const_node;
+    const_node = const_decl->const_expr;
+  }
+
   if (const_node->type != NODE_CONSTANT) {
     result.is_valid = false;
     return result;
   }
 
   ConstantNode *node = (ConstantNode *)const_node;
+  LiteralNode *literal = (LiteralNode *)node->value;
 
   switch (node->const_type) {
   case CONST_INTEGER:
     result.type = CONST_INTEGER;
-    result.value.int_val = ((LiteralNode *)node->value)->value.int_val;
+    result.value.int_val = literal->value.int_val;
     result.is_valid = true;
     break;
 
   case CONST_REAL:
     result.type = CONST_REAL;
-    result.value.real_val = ((LiteralNode *)node->value)->value.real_val;
+    result.value.real_val = literal->value.real_val;
     result.is_valid = true;
     break;
 
   case CONST_STRING:
     result.type = CONST_STRING;
-    result.value.str_val = ((LiteralNode *)node->value)->value.str_val;
+    result.value.str_val = literal->value.str_val;
     result.is_valid = true;
     break;
 
   case CONST_CHAR:
     result.type = CONST_CHAR;
-    result.value.char_val = ((LiteralNode *)node->value)->value.char_val;
+    result.value.char_val = literal->value.char_val;
     result.is_valid = true;
     break;
 
   case CONST_BOOLEAN:
     result.type = CONST_BOOLEAN;
-    result.value.bool_val = ((LiteralNode *)node->value)->value.bool_val;
+    result.value.bool_val = literal->value.bool_val;
     result.is_valid = true;
     break;
 
   case CONST_IDENTIFIER:
   case CONST_SIGNED_IDENTIFIER: {
     IdentifierNode *id = (IdentifierNode *)node->identifier;
-    SymbolEntry *entry = context_lookup(context, id->name);
+    // SymbolEntry *entry = context_lookup(context, id->name);
+    SymbolEntry *entry = id->symbol;
 
     if (!entry || entry->kind != SYMBOL_CONSTANT) {
       fprintf(stderr, "Constant of identifier: %s is not declared", id->name);
       exit(1);
     }
 
-    result = evaluate_constant(context, entry->info.const_info.value);
+    result = evaluate_constant(context, entry->info.const_info.definition);
 
     if (node->const_type == CONST_SIGNED_IDENTIFIER && node->sign &&
         strcmp(node->sign, "-") == 0) {
@@ -2755,7 +2763,7 @@ void free_node(ASTNode *node) {
   case NODE_LIST: {
     ListNode *l = (ListNode *)node;
     while (l) {
-      LOG_TRACE("Freeing ListNode %p — element=%p next=%p\n",(void *)l, (void *)l->element, (void *)l->next);
+      LOG_TRACE("Freeing ListNode %p — element=%p next=%p\n", (void *)l, (void *)l->element, (void *)l->next);
 
       if (l->element != NULL) {
         free_node(l->element);

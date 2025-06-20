@@ -291,6 +291,7 @@ field_list:
     fixed_part { $$ = create_field_list($1, NULL, create_location(@$)); }  
   | fixed_part SEMICOLON variant_part { $$ = create_field_list($1, $3, create_location(@$)); }
   | variant_part { $$ = create_field_list(NULL, $1, create_location(@$)); } 
+  | empty
 
 fixed_part:  
     record_field { $$ = create_fixed_part_node(NULL, $1, create_location(@$)); }

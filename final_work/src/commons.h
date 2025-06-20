@@ -8,8 +8,7 @@
 #include <stdbool.h>
 #include "parser/types.h"
 
-#define MAX_PARAMS 64
-
+typedef struct ht ht;
 typedef struct ASTNode ASTNode;
 typedef struct SourceLocation SourceLocation;
 typedef struct SymbolEntry SymbolEntry;
@@ -198,6 +197,7 @@ struct ASTNode {
   NodeType type;
   SourceLocation location;
   void (*print)(struct ASTNode *, int);
+  ASTNode* result_type;
   // Função para imprimir o nó (para debug)
   /*
   int data_type; // tipo dos dados (INTEGER, REAL, STRING, etc.)
@@ -236,10 +236,12 @@ struct SymbolEntry {
     struct {
       ASTNode *definition;
       size_t size;
+      ht* fields;
     } type_info;
 
     struct {
-      ASTNode *value;
+      ASTNode* definition;
+      ConstantValue value;
     } const_info;
   } info;
 
