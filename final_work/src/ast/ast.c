@@ -2065,7 +2065,7 @@ const char *binary_op_to_string(BinaryOperator op) {
   case BINOP_MINUS:
     return "-";
   case BINOP_OR:
-    return "or";
+    return "||";
   case BINOP_TIMES:
     return "*";
   case BINOP_DIVIDE:

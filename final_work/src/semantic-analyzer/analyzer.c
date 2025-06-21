@@ -5,11 +5,6 @@
 static void analyze_statement(ASTNode *statement, CompilerContext *context);
 static ASTNode *analyze_expression(ASTNode *expression,
                                    CompilerContext *context);
-static void analyze_type_definition(SymbolEntry *type_symbol,
-                                    CompilerContext *context);
-static void analyze_sub_routine_body(SymbolEntry *func_symbol,
-                                     CompilerContext *context);
-
 bool need_string_helpers = false;
 bool need_set_helpers = false;
 
@@ -120,8 +115,8 @@ static int check_type_compatibility(ASTNode *dest_type, ASTNode *src_type,
   SymbolEntry *resolved_dest = resolve_to_type_symbol(dest_type, context);
   SymbolEntry *resolved_src = resolve_to_type_symbol(src_type, context);
 
-  LOG_DEBUG("%s - %s", resolved_dest ? resolved_dest->name : NULL,
-            resolved_src ? resolved_src->name : NULL);
+  // LOG_DEBUG("%s - %s", resolved_dest ? resolved_dest->name : NULL,
+  //           resolved_src ? resolved_src->name : NULL);
 
   if (resolved_dest == resolved_src)
     return 1;
@@ -178,7 +173,7 @@ void analyze_constants(ASTNode *constant, CompilerContext *context) {
   id->symbol = s;
   context_insert(context, id->name, s);
   ConstantValue v = evaluate_constant(context, constant);
-  LOG_TRACE("[ANALYZE] %s is valid? %s", id->name, v.is_valid ? "sim" : "não");
+  s->info.const_info.value = v;
 }
 
 void analyze_types(ASTNode *types, CompilerContext *context) {
@@ -352,18 +347,6 @@ void analyze_functions(ASTNode *funcs, CompilerContext *context) {
 //   }
 //   case NODE_LABEL_DECL: {
 //     analyze_labels(statement, context);
-//     break;
-//   }
-//   case NODE_CONST_DECL: {
-//     analyze_constants(statement, context);
-//     break;
-//   }
-//   case NODE_TYPE_DECL: {
-//     analyze_types(statement, context);
-//     break;
-//   }
-//   case NODE_VAR_DECL: {
-//     analyze_variables(statement, context);
 //     break;
 //   }
 //   case NODE_PROC_DECL:
@@ -694,6 +677,15 @@ static ASTNode *analyze_expression(ASTNode *expression,
     expression->result_type = get_type_from_literal(expression, context);
     return expression->result_type;
   }
+  case NODE_FORMAL_PARAM_SECTION:
+    FormalParameterSectionNode *fp = (FormalParameterSectionNode *)expression;
+    if (fp->kind == PARAM_VAR || fp->kind == PARAM_VALUE) {
+      expression->result_type = fp->type;
+    } else {
+      expression->result_type = fp->return_type;
+    }
+
+    return expression->result_type;
   case NODE_ARRAY_ACCESS: {
     ArrayAccessNode *a_node = (ArrayAccessNode *)expression;
     ASTNode *array_base_type = analyze_expression(a_node->array, context);
@@ -739,8 +731,22 @@ static ASTNode *analyze_expression(ASTNode *expression,
     BinaryOperationNode *bin_op = (BinaryOperationNode *)expression;
     ASTNode *left_type = analyze_expression(bin_op->left, context);
     ASTNode *right_type = analyze_expression(bin_op->right, context);
-    // TODO: Lógica para determinar o tipo resultante e checar compatibilidade
-    expression->result_type = left_type; // Placeholder
+    LOG_DEBUG("Qual é o tipo de operação binária dessa condição? %s", 
+              binary_op_to_string(bin_op->op));
+    switch (bin_op->op) {
+    case BINOP_OR:
+    case BINOP_AND:
+    case BINOP_GT:
+    case BINOP_GTE:
+    case BINOP_LT:
+    case BINOP_LTE:
+    case BINOP_EQ:
+      expression->result_type =
+          create_builtin_type_identifier("boolean", bin_op->base.location);
+      break;
+    default:
+      break;
+    }
     return expression->result_type;
   }
   case NODE_FUNC_CALL:
@@ -774,7 +780,11 @@ static ASTNode *analyze_expression(ASTNode *expression,
 static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   if (!statement)
     return;
+
   switch (statement->type) {
+  case NODE_LITERAL:
+  case NODE_IDENTIFIER:
+    break;
   case NODE_ASSIGN_STMT: {
     AssignmentNode *ass = (AssignmentNode *)statement;
     ASTNode *target_type = analyze_expression(ass->target, context);
@@ -784,10 +794,21 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
     }
     break;
   }
+  case NODE_FOR_STMT: {
+    ForStmtNode *for_stmt = (ForStmtNode *)statement;
+    analyze_expression(for_stmt->start_expr, context);
+    analyze_expression(for_stmt->end_expr, context);
+    analyze_expression(for_stmt->variable, context);
+    analyze_statement(for_stmt->body, context);
+    break;
+  }
   case NODE_IF_STMT: {
     IfNode *if_stmt = (IfNode *)statement;
-    analyze_expression(if_stmt->condition, context);
-    // TODO: if(cond_type is not boolean) yyerror(...)
+    ASTNode *cond_type = analyze_expression(if_stmt->condition, context);
+    SymbolEntry *cond_type_sym = resolve_to_type_symbol(cond_type, context);
+
+    if (strcmp(cond_type_sym->name, "boolean") != 0)
+      yyerror("If condition must be an boolean expression");
 
     analyze_statement(if_stmt->then_stmt, context);
     analyze_statement(if_stmt->else_stmt, context);
@@ -798,6 +819,12 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
     scope_stack_push(context->scope_stack);
     if (block->variables)
       analyze_variables(block->variables, context);
+    if (block->types)
+      analyze_types(block->types, context);
+    if (block->constants)
+      analyze_constants(block->constants, context);
+    if (block->procs_funcs)
+      analyze_functions(block->procs_funcs, context);
     analyze_statement(block->statements, context);
     scope_stack_pop(context->scope_stack);
     break;
@@ -812,7 +839,11 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   }
   case NODE_WHILE_STMT: {
     WhileStmtNode *while_stmt = (WhileStmtNode *)statement;
-    analyze_expression(while_stmt->condition, context);
+    ASTNode *cond_type = analyze_expression(while_stmt->condition, context);
+    SymbolEntry *cond_type_sym = resolve_to_type_symbol(cond_type, context);
+
+    if (strcmp(cond_type_sym->name, "boolean") != 0)
+      yyerror("If condition must be an boolean expression");
     analyze_statement(while_stmt->body, context);
     break;
   }
@@ -820,7 +851,6 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
     FunctionCallNode *func = (FunctionCallNode *)statement;
     IdentifierNode *id = (IdentifierNode *)func->function;
 
-    LOG_DEBUG(" é builtin? %s", get_symbol_kind_name(id->kind));
     if (id->kind == SYMBOL_BUILTIN) {
       SymbolEntry *s = context_lookup(context, id->name);
 
@@ -846,13 +876,41 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   }
   case NODE_REPEAT_STMT: {
     RepeatUntilNode *repeat_stmt = (RepeatUntilNode *)statement;
-    analyze_expression(repeat_stmt->condition, context);
+    ASTNode *cond_type = analyze_expression(repeat_stmt->condition, context);
+    SymbolEntry *cond_type_sym = resolve_to_type_symbol(cond_type, context);
+
+    if (strcmp(cond_type_sym->name, "boolean") != 0)
+      yyerror("If condition must be an boolean expression");
+
     analyze_statement(repeat_stmt->body, context);
+
+    break;
+  }
+  case NODE_FUNC_DECL:
+  case NODE_PROC_DECL: {
+    analyze_functions(statement, context);
+    break;
+  }
+  case NODE_CONST_DECL: {
+    analyze_constants(statement, context);
+    break;
+  }
+  case NODE_TYPE_DECL: {
+    analyze_types(statement, context);
+    break;
+  }
+  case NODE_VAR_DECL: {
+    analyze_variables(statement, context);
+    break;
+  }
+  case NODE_PARAMETER: {
+    ParameterNode *param = (ParameterNode *)statement;
+    analyze_expression(param->params_list, context);
     break;
   }
   default:
-    fprintf(stderr, "O tipo %s não foi mapeado no analyze_statement", 
-            get_node_type_name(statement->type));
+    LOG_ERROR("O tipo %s não foi mapeado no analyze_statement", 
+              get_node_type_name(statement->type));
     break;
   }
 }
@@ -880,6 +938,8 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
               id->name, SYMBOL_FIELD, record_type_symbol->scope_level + 1,
               id->base.location);
           field_symbol->info.var_info.type = field_decl->record_type;
+          field_symbol->info.var_info.is_ref = false;
+          field_symbol->info.var_info.offset = 0;
           context_insert_field(context, record_type_symbol, field_symbol);
           id->symbol = field_symbol;
           ids = (ListNode *)ids->next;
@@ -905,14 +965,16 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
           tag_id->name, SYMBOL_FIELD, record_type_symbol->scope_level + 1,
           tag_id->base.location);
       tag_symbol->info.var_info.type = tag->tag_type;
+      tag_symbol->info.var_info.is_ref = false;
       context_insert_field(context, record_type_symbol, tag_symbol);
       tag_id->symbol = tag_symbol;
 
       VariantListNode *v_list_node = (VariantListNode *)vp->variant_list;
       ListNode *variants = (ListNode *)v_list_node->variants;
       int variant_index = 0;
-      //
+
       while (variants) {
+        tag_symbol->info.var_info.offset = variant_index;
         VariantRecordNode *v_rec_node = (VariantRecordNode *)variants->element;
         if (v_rec_node->field_list) {
           FieldListNode *fl_node = (FieldListNode *)v_rec_node->field_list;

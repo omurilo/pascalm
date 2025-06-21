@@ -85,9 +85,6 @@ void context_insert_field(CompilerContext *context,
   assert(record_type_symbol->kind == SYMBOL_TYPE);
   assert(field_symbol->kind == SYMBOL_FIELD);
 
-  fprintf(stderr, "context insert field from %p\n",
-          (void *)record_type_symbol->info.type_info.fields);
-
   if (record_type_symbol->info.type_info.fields == NULL) {
     record_type_symbol->info.type_info.fields = ht_create();
   }

@@ -558,10 +558,12 @@ void generate_if_statement(CodeGenerator *code_gen, CompilerContext *context,
   generate_statement(code_gen, context, if_stmt->then_stmt);
   code_gen->indent_level--;
   if (if_stmt->else_stmt != NULL) {
+    print_indent(code_gen);
     fprintf(code_gen->output_file, "} else {\n");
     code_gen->indent_level++;
     generate_statement(code_gen, context, if_stmt->else_stmt);
     code_gen->indent_level--;
+    print_indent(code_gen);
     fprintf(code_gen->output_file, "}\n");
   } else {
     if (code_gen->indent_level > 0) {
@@ -634,7 +636,7 @@ void generate_repeat_until_statement(CodeGenerator *code_gen,
   generate_statement(code_gen, context, repeat_stmt->body);
   code_gen->indent_level--;
   print_indent(code_gen);
-  fprintf(code_gen->output_file, "} while(");
+  fprintf(code_gen->output_file, "} while(!");
   generate_expression(code_gen, context, repeat_stmt->condition);
   fprintf(code_gen->output_file, ");\n");
 }
@@ -766,7 +768,7 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
         break;
       }
       default:
-        LOG_DEBUG("[DEBUG writeln] -> %s not mapped",
+        LOG_ERROR("[DEBUG writeln] -> %s not mapped",
                   get_node_type_name(params->element->type));
         break;
       }
@@ -1000,8 +1002,7 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
   case NODE_IDENTIFIER: {
     IdentifierNode *id = (IdentifierNode *)node;
     SymbolEntry *s = id->symbol;
-    LOG_DEBUG("%d - %s", s->info.var_info.is_ref,
-              s->info.var_info.is_ref ? "sim" : "não");
+    LOG_DEBUG("%d - %s", s->info.var_info.is_ref, s->name);
     fprintf(code_gen->output_file, s->info.var_info.is_ref ? "*%s" : "%s",
             id->name);
     break;
