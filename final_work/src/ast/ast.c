@@ -646,12 +646,12 @@ ASTNode *create_type_declaration_node(ASTNode *identifier, ASTNode *type,
   return (ASTNode *)list;
 }
 
-ASTNode *create_type_identifier(ASTNode *id, SourceLocation loc) {
+ASTNode *create_type_identifier(IdentifierNode *id, SourceLocation loc) {
   TypeIdentifierNode *typeid = calloc(1, sizeof(TypeIdentifierNode));
   typeid->base.type = NODE_TYPE_IDENTIFIER;
   typeid->base.location = loc;
   typeid->base.print = print_type_identifier_node;
-  typeid->id = (IdentifierNode *)id;
+  typeid->id = id;
   typeid->kind = SYMBOL_TYPE;
   typeid->is_base_type = false;
 

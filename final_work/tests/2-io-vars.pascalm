@@ -1,0 +1,11 @@
+program TestIO;
+var
+  a, b, soma : integer;
+begin
+  writeln('Digite um numero:');
+  readln(a);
+  writeln('Digite outro numero:');
+  readln(b);
+  soma := a + b;
+  writeln('A soma de ', a, ' e ', b, ' e: ', soma);
+end.

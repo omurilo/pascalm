@@ -3019,7 +3019,7 @@ yyreduce:
   case 164: /* typeid: identifier  */
 #line 580 "parser/parser.y"
                {
-      ASTNode *typeId = update_identifier_node_kind((yyvsp[0].node), SYMBOL_TYPE);
+      IdentifierNode *typeId = update_identifier_node_kind((yyvsp[0].node), SYMBOL_TYPE);
       (yyval.node) = create_type_identifier(typeId, create_location((yyloc)));
     }
 #line 3026 "parser/parser.tab.c"

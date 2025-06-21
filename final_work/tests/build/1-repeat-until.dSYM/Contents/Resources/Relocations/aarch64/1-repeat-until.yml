@@ -1,0 +1,7 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '../tests/build/1-repeat-until'
+relocations:
+  - { offset: 0x8B, size: 0x8, addend: 0x0, symName: _i, symObjAddr: 0x6A4, symBinAddr: 0x100008010, symSize: 0x0 }
+  - { offset: 0x9F, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x20, symBinAddr: 0x100003EE0, symSize: 0x5C }
+...

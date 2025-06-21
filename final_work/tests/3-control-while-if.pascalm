@@ -1,0 +1,16 @@
+program TestWhileIf;
+var
+  i : integer;
+begin
+  i := 1;
+  while i <= 5 do
+  begin
+    if (i mod 2) = 0 then
+      writeln(i, ' e par')
+    else
+      writeln(i, ' e impar');
+    i := i + 2;
+  end;
+  i := i div 2;
+  writeln('i div 2 é: ', i)
+end.

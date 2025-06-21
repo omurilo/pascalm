@@ -1,0 +1,26 @@
+program TestProcedures;
+var
+  a, b: integer;
+
+procedure troca(var x, y: integer);
+var
+  temp: integer;
+begin
+  temp := x;
+  x := y;
+  y := temp;
+end;
+
+procedure mostra(val1, val2: integer);
+begin
+  writeln('O valor de A e ', val1, ' e B e ', val2);
+end;
+
+begin
+  a := 10;
+  b := 20;
+  mostra(a, b);       { Passagem por valor }
+  troca(a, b);        { Passagem por referência }
+  writeln('Depois da troca...');
+  mostra(a, b);
+end.

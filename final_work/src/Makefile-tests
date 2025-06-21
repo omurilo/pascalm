@@ -1,0 +1,42 @@
+SRC_DIR = ../tests
+BUILD_DIR = ../tests/build
+
+PASCALM = ./pascalm
+CC = gcc
+
+ifeq ($(DEBUG), 1)
+    CFLAGS = -Wall -Wextra -g -fsanitize=address -fsanitize=undefined -DVERBOSE_MODE
+    BUILD_TYPE = Debug
+		BFLAGS = -d
+else
+		CFLAGS = -Wall -Wextra -g -O2
+    BUILD_TYPE = Release
+		BFLAGS = -d
+endif
+
+
+# Arquivos fonte Pascal
+PASCAL_FILES = $(wildcard $(SRC_DIR)/*.pascalm)
+
+# Arquivos gerados em C
+C_FILES = $(patsubst $(SRC_DIR)/%.pascalm,$(BUILD_DIR)/%.c,$(PASCAL_FILES))
+
+# Executáveis finais
+BINARIES = $(patsubst $(SRC_DIR)/%.pascalm,$(BUILD_DIR)/%,$(PASCAL_FILES))
+
+# Pipeline completa
+all: $(BINARIES)
+
+# Regra para transformar Pascal em C
+$(BUILD_DIR)/%.c: $(SRC_DIR)/%.pascalm
+	@mkdir -p $(BUILD_DIR)
+	$(PASCALM) -f $< -o $@
+
+# Regra para compilar C em binário
+$(BUILD_DIR)/%: $(BUILD_DIR)/%.c
+	$(CC) $(CFLAGS) $< -o $@
+
+# Limpeza
+clean:
+	rm -rf $(BUILD_DIR)
+

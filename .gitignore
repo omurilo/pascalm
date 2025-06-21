@@ -36,3 +36,10 @@ final_work/tests/3-control-while-if
 final_work/tests/1-repeat-until
 final_work/src/teste
 final_work/tests/4-for-repeat
+final_work/tests/build/2-io-vars
+final_work/tests/build/4-for-repeat
+final_work/tests/build/6-procs-params
+final_work/tests/build/3-control-while-if
+final_work/tests/build/1-repeat-until
+final_work/tests/build/7-function
+final_work/tests/build/5-array-record

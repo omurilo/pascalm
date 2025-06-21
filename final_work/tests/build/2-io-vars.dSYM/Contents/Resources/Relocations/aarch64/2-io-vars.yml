@@ -1,0 +1,9 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '../tests/build/2-io-vars'
+relocations:
+  - { offset: 0x8B, size: 0x8, addend: 0x0, symName: _a, symObjAddr: 0x858, symBinAddr: 0x100008030, symSize: 0x0 }
+  - { offset: 0xA1, size: 0x8, addend: 0x0, symName: _b, symObjAddr: 0x854, symBinAddr: 0x10000802C, symSize: 0x0 }
+  - { offset: 0xB7, size: 0x8, addend: 0x0, symName: _soma, symObjAddr: 0x850, symBinAddr: 0x100008028, symSize: 0x0 }
+  - { offset: 0xCB, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x60, symBinAddr: 0x100003DE0, symSize: 0xD4 }
+...

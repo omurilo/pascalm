@@ -1,0 +1,10 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '../tests/build/5-array-record'
+relocations:
+  - { offset: 0x109, size: 0x8, addend: 0x0, symName: _turma, symObjAddr: 0x1210, symBinAddr: 0x100008034, symSize: 0x0 }
+  - { offset: 0x11F, size: 0x8, addend: 0x0, symName: _i, symObjAddr: 0x120C, symBinAddr: 0x100008030, symSize: 0x0 }
+  - { offset: 0x133, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x240, symBinAddr: 0x100003C20, symSize: 0x1F0 }
+  - { offset: 0x151, size: 0x8, addend: 0x0, symName: _concat_string, symObjAddr: 0xE0, symBinAddr: 0x100003B00, symSize: 0x10C }
+  - { offset: 0x19E, size: 0x8, addend: 0x0, symName: _make_string, symObjAddr: 0x0, symBinAddr: 0x100003A20, symSize: 0xE0 }
+...

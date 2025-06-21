@@ -578,7 +578,7 @@ typeid:
   | REAL { $$ = create_builtin_type_identifier("real", create_location(@$)); }
   | STRING { $$ = create_builtin_type_identifier("string", create_location(@$)); }
   | identifier {
-      ASTNode *typeId = update_identifier_node_kind($1, SYMBOL_TYPE);
+      IdentifierNode *typeId = update_identifier_node_kind($1, SYMBOL_TYPE);
       $$ = create_type_identifier(typeId, create_location(@$));
     }
 

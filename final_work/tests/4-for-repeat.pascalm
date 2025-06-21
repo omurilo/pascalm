@@ -1,0 +1,15 @@
+program TestRepeatFor;
+var
+  i : integer;
+  c : char;
+begin
+  for i := 1 to 3 do
+  begin
+    writeln('Iteracao FOR numero: ', i);
+  end;
+
+  repeat
+    writeln('Digite S para sair.');
+    readln(c);
+  until (c = 'S') or (c = 's');
+end.

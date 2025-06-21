@@ -1,0 +1,22 @@
+program TestArrayRecord;
+type
+  TPessoa = record
+    nome: string;
+    idade: integer;
+  end;
+var
+  turma: array[1..3] of TPessoa;
+  i: integer;
+begin
+  turma[1].nome := 'Joao';
+  turma[1].idade := 20;
+  turma[2].nome := 'Maria';
+  turma[2].idade := 22;
+  turma[3] := turma[1];
+  turma[3].nome := 'Copia de Joao';
+
+  for i := 1 to 3 do
+  begin
+    writeln('Aluno: ', turma[i].nome, ', Idade: ', turma[i].idade);
+  end;
+end.

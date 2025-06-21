@@ -675,7 +675,7 @@ ASTNode *create_enumerated_type_node(ASTNode *identiiers_list, SourceLocation lo
 ASTNode *create_subscript_list_node(ASTNode *expr, SourceLocation loc);
 ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
                                SourceLocation loc);
-ASTNode *create_type_identifier(ASTNode *identifier, SourceLocation loc);
+ASTNode *create_type_identifier(IdentifierNode *identifier, SourceLocation loc);
 ASTNode *create_builtin_type_identifier(char *type, SourceLocation loc);
 ASTNode *create_builtin_identifier(char *i, SourceLocation loc);
 ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc);

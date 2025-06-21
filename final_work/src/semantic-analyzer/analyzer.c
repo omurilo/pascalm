@@ -235,12 +235,47 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
               id->name, SYMBOL_VARIABLE, context->scope_stack->scope_level,
               vars->base.location);
 
+          ASTNode *def = resolve_to_actual_type_def(variable->type_node, context);
+
           if (id->kind == SYMBOL_BUILTIN && strcmp(id->name, "string") == 0) {
             need_string_helpers = true;
           }
 
+          if (def->type == NODE_ARRAY_TYPE) {
+            ArrayTypeNode *array = (ArrayTypeNode *)def;
+            IndexList *index_list = (IndexList *)array->index_list;
+            LOG_ERROR("!!!!!! Achei um array type aqui no analyze variables! [%s](%d)", get_node_type_name(array->index_list->type), index_list->count);
+            for (int i = 0; i < index_list->count; i++) {
+              ASTNode *element = index_list->indexes[i];
+              if (element->type == NODE_SUBRANGE_TYPE) {
+                SubrangeTypeNode *sr_node = (SubrangeTypeNode *)element;
+                ConstantValue lower =
+                    evaluate_constant(context, sr_node->lower);
+                ConstantValue upper =
+                    evaluate_constant(context, sr_node->upper);
+            LOG_ERROR("!!!!!! vamo fazer nosso node sub range dimensions agora [lower=%d, upper=%d]", lower.value.int_val, upper.value.int_val);
+                DimensionBounds dim = {
+                    .lower = lower.value.int_val,
+                    .upper = upper.value.int_val,
+                };
+                s->info.var_info.dimensions = calloc(1+offset, sizeof(DimensionBounds));
+                s->info.var_info.dimensions[offset].lower = dim.lower;
+                s->info.var_info.dimensions[offset].upper = dim.upper;
+                s->info.var_info.num_dimensions = offset + 1;
+              } else if (element->type == NODE_ENUMERATED_TYPE) {
+                // TODO:
+              } else if (element->type == NODE_TYPE_IDENTIFIER) {
+                // TODO:
+              } else {
+                LOG_ERROR("era pra quebrar? %s",
+                          get_node_type_name(element->type));
+                exit(1);
+              }
+            }
+          }
+
           s->info.var_info.offset = offset + index;
-          s->info.var_info.type = variable->type_node;
+          s->info.var_info.type = def;
           s->info.var_info.is_ref = false;
           id->symbol = s;
           context_insert(context, id->name, s);
@@ -677,7 +712,7 @@ static ASTNode *analyze_expression(ASTNode *expression,
     expression->result_type = get_type_from_literal(expression, context);
     return expression->result_type;
   }
-  case NODE_FORMAL_PARAM_SECTION:
+  case NODE_FORMAL_PARAM_SECTION: {
     FormalParameterSectionNode *fp = (FormalParameterSectionNode *)expression;
     if (fp->kind == PARAM_VAR || fp->kind == PARAM_VALUE) {
       expression->result_type = fp->type;
@@ -686,16 +721,24 @@ static ASTNode *analyze_expression(ASTNode *expression,
     }
 
     return expression->result_type;
+  }
   case NODE_ARRAY_ACCESS: {
     ArrayAccessNode *a_node = (ArrayAccessNode *)expression;
+    IdentifierNode *array_id = (IdentifierNode *)a_node->array;
+    SymbolEntry *array_symbol = context_lookup(context, array_id->name);
+    array_id->symbol = array_symbol;
+
+    LOG_ERROR("na analyze o meliante é [%s]", array_id->name);
+
     ASTNode *array_base_type = analyze_expression(a_node->array, context);
     analyze_statement(a_node->subscript_list, context);
 
     ASTNode *array_def = resolve_to_actual_type_def(array_base_type, context);
     if (array_def && array_def->type == NODE_ARRAY_TYPE) {
       ASTNode *element_type = ((ArrayTypeNode *)array_def)->type;
+
       expression->result_type = element_type;
-      return element_type;
+      return expression->result_type;
     }
     yyerror("Variable is not an array and cannot be indexed.");
     exit(1);
@@ -751,8 +794,7 @@ static ASTNode *analyze_expression(ASTNode *expression,
   }
   case NODE_FUNC_CALL:
     break;
-  case NODE_LIST: { // Usado para listas de expressões (ex: subscripts de 
-                    // rray)
+  case NODE_LIST: {
     ListNode *list = (ListNode *)expression;
     while (list) {
       if (list->element)
@@ -768,6 +810,11 @@ static ASTNode *analyze_expression(ASTNode *expression,
       need_string_helpers = true;
     }
     break;
+  }
+  case NODE_ARRAY_TYPE: {
+    ArrayTypeNode *array = (ArrayTypeNode *)expression;
+    IndexList *index_list = (IndexList *)array->index_list;
+    SymbolEntry *array_type_symbol = resolve_to_type_symbol(array->type, context);
   }
   default:
     LOG_ERROR("Compiler error: Unhandled node type '%s' in analyze_expression.",

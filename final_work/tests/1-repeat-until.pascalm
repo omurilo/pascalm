@@ -1,0 +1,12 @@
+program repeatUntil;
+
+var
+  i: integer;
+
+begin
+  i := 0;
+  repeat 
+    writeln('O i tem valor', i);
+    i := i + 1;
+  until (i < 10);
+end.

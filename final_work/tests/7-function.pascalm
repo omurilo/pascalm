@@ -1,0 +1,18 @@
+program TestFunction;
+var
+  x: integer;
+  resultado: integer;
+
+function fatorial(n: integer): integer;
+begin
+  if n = 0 then
+    fatorial := 1
+  else
+    fatorial := n * fatorial(n - 1);
+end;
+
+begin
+  x := 5;
+  resultado := fatorial(x);
+  writeln('O fatorial de ', x, ' e ', resultado);
+end.
