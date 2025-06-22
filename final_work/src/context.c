@@ -1,11 +1,13 @@
 #include "context.h"
 #include <stdlib.h>
 #include <assert.h>
+#include "logger.h"
+#include "memory.h"
 
 ScopeStack *scope_stack_create() {
-  ScopeStack *stack = malloc(sizeof(ScopeStack));
+  ScopeStack *stack = xalloc(1, sizeof(ScopeStack));
   stack->capacity = 8;
-  stack->tables = malloc(stack->capacity * sizeof(ht *));
+  stack->tables = xalloc(stack->capacity, sizeof(ht *));
   stack->scope_level = -1;
   return stack;
 }
@@ -42,8 +44,10 @@ ht *scope_stack_peek(ScopeStack *stack) {
 }
 
 CompilerContext *context_create() {
-  CompilerContext *context = malloc(sizeof(CompilerContext));
+  CompilerContext *context = xalloc(1, sizeof(CompilerContext));
   context->scope_stack = scope_stack_create();
+  context->current_function = NULL;
+  context->has_errors = false;
   scope_stack_push(context->scope_stack);
   return context;
 }
@@ -60,10 +64,9 @@ void context_insert(CompilerContext *context, const char *key,
   ht *current_scope_table = scope_stack_peek(context->scope_stack);
   if (current_scope_table) {
     if (ht_get(current_scope_table, key) != NULL) {
-      char err[255];
-      sprintf(err, "Error: Symbol (%s) already declared in this scope (%d)",
-              key, context->scope_stack->scope_level);
-      yyerror(err);
+      yyerrorf(entry->location,
+               "Error: Symbol (%s) already declared in this scope (%d)", key,
+               context->scope_stack->scope_level);
     }
     ht_set(current_scope_table, key, entry);
   }
@@ -92,11 +95,10 @@ void context_insert_field(CompilerContext *context,
   ht *fields_table = record_type_symbol->info.type_info.fields;
 
   if (ht_get(fields_table, field_symbol->name) != NULL) {
-    char err[255];
-    sprintf(err, "Error: Field '%s' already declared in record '%s'",
-            field_symbol->name, record_type_symbol->name);
-    yyerror(err);
-    exit(1);
+    yyerrorf(record_type_symbol->location,
+             "Error: Field '%s' already declared in record '%s'",
+             field_symbol->name, record_type_symbol->name);
+    context->has_errors = true;
   }
 
   ht_set(fields_table, field_symbol->name, field_symbol);

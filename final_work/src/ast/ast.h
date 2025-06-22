@@ -546,15 +546,6 @@ struct OperationNode {
   int precedence;
 };
 
-typedef enum {
-    LITERAL_INTEGER,
-    LITERAL_REAL,
-    LITERAL_BOOLEAN,
-    LITERAL_STRING,
-    LITERAL_CHAR,
-    LITERAL_NIL
-} LiteralType;
-
 struct LiteralNode {
     ASTNode base;
     LiteralType literal_type;    // Type of literal

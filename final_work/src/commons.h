@@ -132,6 +132,7 @@ typedef enum SymbolKind {
   SYMBOL_FUNCTION,  // Função
   SYMBOL_PROCEDURE, // Procedimento
   SYMBOL_TYPE,      // Tipo definido pelo usuário
+  SYMBOL_TYPE_ALIAS, // 
 
   // Tipos específicos de variáveis
   SYMBOL_FIELD,      // Campo de um record
@@ -207,6 +208,15 @@ struct ASTNode {
   */
 };
 
+typedef enum {
+    LITERAL_INTEGER,
+    LITERAL_REAL,
+    LITERAL_BOOLEAN,
+    LITERAL_STRING,
+    LITERAL_CHAR,
+    LITERAL_NIL
+} LiteralType;
+
 typedef struct {
   int lower;
   int upper;
@@ -216,6 +226,7 @@ struct SymbolEntry {
   char *name;
   SymbolKind kind;
   const char *key;
+  LiteralType tag;
 
   union {
     struct {
@@ -237,11 +248,12 @@ struct SymbolEntry {
       ASTNode *definition;
       size_t size;
       ht* fields;
+      SymbolEntry *aliased_type;
     } type_info;
 
     struct {
       ASTNode* definition;
-      ConstantValue value;
+      ASTNode* value;
     } const_info;
   } info;
 

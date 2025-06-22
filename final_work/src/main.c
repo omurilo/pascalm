@@ -1,21 +1,16 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <strings.h>
 #include "ast/ast.h"
 #include "parser/types.h"
 #include "parser/parser.tab.h"
 #include "code-generation/code.h"
 #include "semantic-analyzer/analyzer.h"
 #include "context.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <strings.h>
 #include "logger.h"
+#include "memory.h"
 
 extern struct ASTNode *root;
-
-void yyerror(const char *msg) {
-  LOG_ERROR("%s:%d.%d-%d.%d: error: %s\n",
-            yylloc.file_name ? yylloc.file_name : "input", yylloc.first_line,
-            yylloc.first_column, yylloc.last_line, yylloc.last_column, msg);
-}
 
 int main(int argc, char **argv) {
   char *filename = NULL;
@@ -98,6 +93,10 @@ int main(int argc, char **argv) {
       root->print(root, 0);
     if (semantic) {
       analyze_semantics(root, context);
+      if (context->has_errors) {
+        yyerror("Compilation failed due to semantic errors.\n");
+        exit(1);
+      }
     }
     if (generate_code) {
       LOG_TRACE("Iniciando etapada de geração de código...");
@@ -105,6 +104,7 @@ int main(int argc, char **argv) {
       generate_program(code_gen, context, root);
       fclose(code_gen->output_file);
     }
+    fprintf(stderr, "Allocation count times %ld!\n", allocation_count);
     free((void *)yylloc.file_name);
     free_node(root);
     root = NULL;

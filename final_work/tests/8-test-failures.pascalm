@@ -9,12 +9,19 @@ begin
   num := num + 1;
 end;
 
+function RetornaString(var num: integer): string;
+begin
+  RetornaString := num + 1;
+end;
+
 begin
   i := 'texto';      { ERRO: Atribuição de tipo incompatível }
   s := i;            { ERRO: Atribuição de tipo incompatível }
   b := i + 1;        { ERRO: Operação inválida para os tipos }
 
   Teste(5);          { ERRO: Passando literal para um parâmetro VAR }
+  
+  s := RetornaString(&s);
   
   writeln(variavel_nao_declarada); { ERRO: Variável não existe }
 end.

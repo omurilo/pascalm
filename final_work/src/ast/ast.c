@@ -2,6 +2,7 @@
 #include <string.h>
 #include <assert.h>
 #include "../logger.h"
+#include "../memory.h"
 
 SourceLocation create_location(YYLTYPE loc) {
   SourceLocation result;
@@ -553,7 +554,7 @@ void print_function_call(ASTNode *node, int indent) {
 
 ASTNode *create_program_node(char *name, ASTNode *heading, ASTNode *block,
                              SourceLocation loc) {
-  ProgramNode *node = calloc(1, sizeof(ProgramNode));
+  ProgramNode *node = xalloc(1, sizeof(ProgramNode));
   node->base.type = NODE_PROGRAM;
   node->base.location = loc;
   node->base.print = print_program_node;
@@ -568,7 +569,7 @@ ASTNode *create_program_node(char *name, ASTNode *heading, ASTNode *block,
 ASTNode *create_block_node(ASTNode *labels, ASTNode *types, ASTNode *constants,
                            ASTNode *variables, ASTNode *procs_funcs,
                            ASTNode *statements, SourceLocation loc) {
-  BlockNode *node = calloc(1, sizeof(BlockNode));
+  BlockNode *node = xalloc(1, sizeof(BlockNode));
   node->base.type = NODE_BLOCK;
   node->base.location = loc;
   node->base.print = print_block;
@@ -582,7 +583,7 @@ ASTNode *create_block_node(ASTNode *labels, ASTNode *types, ASTNode *constants,
 }
 
 ASTNode *create_heading_node(ASTNode *list, SourceLocation loc) {
-  HeadingNode *node = calloc(1, sizeof(HeadingNode));
+  HeadingNode *node = xalloc(1, sizeof(HeadingNode));
   node->base.type = NODE_HEADING;
   node->base.location = loc;
   node->base.print = print_heading;
@@ -591,13 +592,13 @@ ASTNode *create_heading_node(ASTNode *list, SourceLocation loc) {
 }
 
 ASTNode *create_label_declaration_node(ASTNode *value, SourceLocation loc) {
-  LabelDeclarationNode *node = calloc(1, sizeof(LabelDeclarationNode));
+  LabelDeclarationNode *node = xalloc(1, sizeof(LabelDeclarationNode));
   node->base.type = NODE_LABEL_DECL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value = value;
 
-  ListNode *list = calloc(1, sizeof(ListNode));
+  ListNode *list = xalloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_values;
@@ -610,14 +611,14 @@ ASTNode *create_label_declaration_node(ASTNode *value, SourceLocation loc) {
 ASTNode *create_constant_declaration_node(ASTNode *identifier,
                                           ASTNode *constant,
                                           SourceLocation loc) {
-  ConstDeclarationNode *node = calloc(1, sizeof(ConstDeclarationNode));
+  ConstDeclarationNode *node = xalloc(1, sizeof(ConstDeclarationNode));
   node->base.type = NODE_CONST_DECL;
   node->base.location = loc;
   node->base.print = print_todo;
   node->identifier = identifier;
   node->const_expr = constant;
 
-  ListNode *list = calloc(1, sizeof(ListNode));
+  ListNode *list = xalloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_identifiers;
@@ -629,14 +630,14 @@ ASTNode *create_constant_declaration_node(ASTNode *identifier,
 
 ASTNode *create_type_declaration_node(ASTNode *identifier, ASTNode *type,
                                       SourceLocation loc) {
-  TypeDeclarationNode *node = calloc(1, sizeof(TypeDeclarationNode));
+  TypeDeclarationNode *node = xalloc(1, sizeof(TypeDeclarationNode));
   node->base.type = NODE_TYPE_DECL;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
   node->identifier = identifier;
   node->type_expr = type;
 
-  ListNode *list = calloc(1, sizeof(ListNode));
+  ListNode *list = xalloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_identifiers;
@@ -647,7 +648,7 @@ ASTNode *create_type_declaration_node(ASTNode *identifier, ASTNode *type,
 }
 
 ASTNode *create_type_identifier(IdentifierNode *id, SourceLocation loc) {
-  TypeIdentifierNode *typeid = calloc(1, sizeof(TypeIdentifierNode));
+  TypeIdentifierNode *typeid = xalloc(1, sizeof(TypeIdentifierNode));
   typeid->base.type = NODE_TYPE_IDENTIFIER;
   typeid->base.location = loc;
   typeid->base.print = print_type_identifier_node;
@@ -659,7 +660,7 @@ ASTNode *create_type_identifier(IdentifierNode *id, SourceLocation loc) {
 }
 
 ASTNode *create_builtin_type_identifier(char *name, SourceLocation loc) {
-  TypeIdentifierNode *typeid = calloc(1, sizeof(TypeIdentifierNode));
+  TypeIdentifierNode *typeid = xalloc(1, sizeof(TypeIdentifierNode));
   typeid->base.type = NODE_TYPE_IDENTIFIER;
   typeid->base.location = loc;
   typeid->base.print = print_type_identifier_node;
@@ -676,7 +677,7 @@ ASTNode *create_builtin_type_identifier(char *name, SourceLocation loc) {
 }
 
 ASTNode *create_builtin_identifier(char *name, SourceLocation loc) {
-  IdentifierNode *built = calloc(1, sizeof(IdentifierNode));
+  IdentifierNode *built = xalloc(1, sizeof(IdentifierNode));
   built->base.type = NODE_IDENTIFIER;
   built->base.location = loc;
   built->base.print = print_identifier_node;
@@ -687,7 +688,7 @@ ASTNode *create_builtin_identifier(char *name, SourceLocation loc) {
 }
 
 ASTNode *create_identifier_list_node(ASTNode *element, SourceLocation loc) {
-  ListNode *node = calloc(1, sizeof(ListNode));
+  ListNode *node = xalloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -698,7 +699,7 @@ ASTNode *create_identifier_list_node(ASTNode *element, SourceLocation loc) {
 
 ASTNode *create_case_stmt_node(ASTNode *expr, ASTNode *case_list,
                                ASTNode *else_part, SourceLocation loc) {
-  CaseNode *node = calloc(1, sizeof(CaseNode));
+  CaseNode *node = xalloc(1, sizeof(CaseNode));
   node->base.type = NODE_CASE_STMT;
   node->base.location = loc;
   node->base.print = print_case_stmt_node;
@@ -715,7 +716,7 @@ ASTNode *create_case_stmt_with_else_node(ASTNode *expression,
 }
 
 ASTNode *create_case_list_node(ASTNode *element, SourceLocation loc) {
-  ListNode *list = calloc(1, sizeof(ListNode));
+  ListNode *list = xalloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_identifiers;
@@ -726,14 +727,14 @@ ASTNode *create_case_list_node(ASTNode *element, SourceLocation loc) {
 
 ASTNode *create_case_item_node(ASTNode *value_list, ASTNode *stmt,
                                SourceLocation loc) {
-  CaseItemNode *node = calloc(1, sizeof(CaseItemNode));
+  CaseItemNode *node = xalloc(1, sizeof(CaseItemNode));
   node->base.type = NODE_CASE_ITEM;
   node->base.location = loc;
   node->base.print = print_todo;
   node->value_list = value_list;
   node->statement = stmt;
 
-  ListNode *list = calloc(1, sizeof(ListNode));
+  ListNode *list = xalloc(1, sizeof(ListNode));
   list->base.type = NODE_LIST;
   list->base.location = loc;
   list->base.print = print_list_identifiers;
@@ -743,7 +744,7 @@ ASTNode *create_case_item_node(ASTNode *value_list, ASTNode *stmt,
 }
 
 ASTNode *create_case_else_node(ASTNode *stmt, SourceLocation loc) {
-  CaseElseNode *node = calloc(1, sizeof(CaseElseNode));
+  CaseElseNode *node = xalloc(1, sizeof(CaseElseNode));
   node->base.type = NODE_CASE_ELSE;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -752,7 +753,7 @@ ASTNode *create_case_else_node(ASTNode *stmt, SourceLocation loc) {
 };
 
 ASTNode *create_case_label_list(ASTNode *case_label, SourceLocation loc) {
-  ListNode *new_list = calloc(1, sizeof(ListNode));
+  ListNode *new_list = xalloc(1, sizeof(ListNode));
   new_list->base.type = NODE_LIST;
   new_list->base.location = loc;
   new_list->base.print = print_list_identifiers;
@@ -764,7 +765,7 @@ ASTNode *create_case_label_list(ASTNode *case_label, SourceLocation loc) {
 ASTNode *create_constant_range_node(ASTNode *constant1, ASTNode *constant2,
                                     SourceLocation loc) {
   // TODO: In a semantic analysis, the type of lower and upper must be equal
-  SubrangeTypeNode *node = calloc(1, sizeof(SubrangeTypeNode));
+  SubrangeTypeNode *node = xalloc(1, sizeof(SubrangeTypeNode));
   node->base.type = NODE_SUBRANGE_TYPE;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -776,7 +777,7 @@ ASTNode *create_constant_range_node(ASTNode *constant1, ASTNode *constant2,
 
 ASTNode *create_array_access_node(ASTNode *array, ASTNode *subscripts,
                                   SourceLocation loc) {
-  ArrayAccessNode *node = calloc(1, sizeof(ArrayAccessNode));
+  ArrayAccessNode *node = xalloc(1, sizeof(ArrayAccessNode));
   node->base.type = NODE_ARRAY_ACCESS;
   node->base.location = loc;
   node->base.print = print_array_access_node;
@@ -788,7 +789,7 @@ ASTNode *create_array_access_node(ASTNode *array, ASTNode *subscripts,
 ASTNode *create_record_access_node(ASTNode *record, ASTNode *field,
                                    SourceLocation loc) {
   // TODO: verificar se existe antes de acessar
-  MemberAccessNode *node = calloc(1, sizeof(MemberAccessNode));
+  MemberAccessNode *node = xalloc(1, sizeof(MemberAccessNode));
   node->base.type = NODE_MEMBER_ACCESS;
   node->base.location = loc;
   node->base.print = print_member_access_node;
@@ -799,7 +800,7 @@ ASTNode *create_record_access_node(ASTNode *record, ASTNode *field,
 }
 
 ASTNode *create_pointer_deref_node(ASTNode *pointer, SourceLocation loc) {
-  PointerDerefNode *node = calloc(1, sizeof(PointerDerefNode));
+  PointerDerefNode *node = xalloc(1, sizeof(PointerDerefNode));
   node->base.type = NODE_POINTER_DEREF;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -808,7 +809,7 @@ ASTNode *create_pointer_deref_node(ASTNode *pointer, SourceLocation loc) {
 }
 
 ASTNode *create_subscript_list_node(ASTNode *expr, SourceLocation loc) {
-  ListNode *node = calloc(1, sizeof(ListNode));
+  ListNode *node = xalloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -819,7 +820,7 @@ ASTNode *create_subscript_list_node(ASTNode *expr, SourceLocation loc) {
 
 ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
                                           SourceLocation loc) {
-  VarDeclarationNode *decl = calloc(1, sizeof(VarDeclarationNode));
+  VarDeclarationNode *decl = xalloc(1, sizeof(VarDeclarationNode));
   decl->base.type = NODE_VAR_DECL;
   decl->base.location = loc;
   decl->base.print = print_variable_declaration;
@@ -827,7 +828,7 @@ ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
   decl->type_node = type;
   decl->scope_level = 0;
 
-  ListNode *new_list = calloc(1, sizeof(ListNode));
+  ListNode *new_list = xalloc(1, sizeof(ListNode));
   new_list->base.type = NODE_LIST;
   new_list->base.location = loc;
   new_list->base.print = print_variable_declaration;
@@ -837,7 +838,7 @@ ASTNode *create_variable_declaration_node(ASTNode *list, ASTNode *type,
 };
 
 ASTNode *create_variable_identifier_list_node(ASTNode *id, SourceLocation loc) {
-  ListNode *list = calloc(1, sizeof(ListNode));
+  ListNode *list = xalloc(1, sizeof(ListNode));
 
   list->base.type = NODE_LIST;
   list->base.location = loc;
@@ -849,7 +850,7 @@ ASTNode *create_variable_identifier_list_node(ASTNode *id, SourceLocation loc) {
 
 ASTNode *create_proc_and_func_declarations_node(ASTNode *proc_and_func,
                                                 SourceLocation loc) {
-  ListNode *node = calloc(1, sizeof(ListNode));
+  ListNode *node = xalloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -861,7 +862,7 @@ ASTNode *create_proc_and_func_declarations_node(ASTNode *proc_and_func,
 ASTNode *create_proc_declaration_node(ASTNode *identifier, ASTNode *parameters,
                                       ASTNode *block_or_forward,
                                       SourceLocation loc) {
-  FuncDeclarationNode *proc = calloc(1, sizeof(FuncDeclarationNode));
+  FuncDeclarationNode *proc = xalloc(1, sizeof(FuncDeclarationNode));
   proc->base.type = NODE_PROC_DECL;
   proc->base.location = loc;
   proc->base.print = print_todo;
@@ -876,7 +877,7 @@ ASTNode *create_proc_declaration_node(ASTNode *identifier, ASTNode *parameters,
 ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
                                       ASTNode *type, ASTNode *block_or_forward,
                                       SourceLocation loc) {
-  FuncDeclarationNode *func = calloc(1, sizeof(FuncDeclarationNode));
+  FuncDeclarationNode *func = xalloc(1, sizeof(FuncDeclarationNode));
   func->base.type = NODE_FUNC_DECL;
   func->base.location = loc;
   func->base.print = print_todo;
@@ -889,7 +890,7 @@ ASTNode *create_func_declaration_node(ASTNode *identifier, ASTNode *parameters,
 };
 
 ASTNode *create_forward_declaration_node(SourceLocation loc) {
-  ASTNode *node = calloc(1, sizeof(ASTNode));
+  ASTNode *node = xalloc(1, sizeof(ASTNode));
   node->type = NODE_FORWARD_DECL;
   node->location = loc;
   node->print = print_todo;
@@ -897,7 +898,7 @@ ASTNode *create_forward_declaration_node(SourceLocation loc) {
 }
 
 ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc) {
-  ListNode *new_list = calloc(1, sizeof(ListNode));
+  ListNode *new_list = xalloc(1, sizeof(ListNode));
   new_list->base.type = NODE_LIST;
   new_list->base.location = loc;
   new_list->base.print = print_stmt_list;
@@ -908,7 +909,7 @@ ASTNode *create_stmt_list_node(ASTNode *stmt, SourceLocation loc) {
 
 ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
                                 SourceLocation loc) {
-  ArrayTypeNode *node = calloc(1, sizeof(ArrayTypeNode));
+  ArrayTypeNode *node = xalloc(1, sizeof(ArrayTypeNode));
   node->base.type = NODE_ARRAY_TYPE;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -920,7 +921,7 @@ ASTNode *create_array_type_node(ASTNode *list, ASTNode *type,
 
 ASTNode *create_assign_node(ASTNode *variable, ASTNode *expression,
                             SourceLocation loc) {
-  AssignmentNode *node = calloc(1, sizeof(AssignmentNode));
+  AssignmentNode *node = xalloc(1, sizeof(AssignmentNode));
   node->base.type = NODE_ASSIGN_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -932,7 +933,7 @@ ASTNode *create_assign_node(ASTNode *variable, ASTNode *expression,
 
 ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
                                      SourceLocation loc) {
-  VariantPartNode *part = calloc(1, sizeof(VariantPartNode));
+  VariantPartNode *part = xalloc(1, sizeof(VariantPartNode));
   part->base.type = NODE_VARIANT_PART;
   part->base.location = loc;
   part->base.print = print_todo;
@@ -943,7 +944,7 @@ ASTNode *create_case_of_variant_node(ASTNode *tag_field, ASTNode *variant_list,
 };
 
 ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {
-  ConstantNode *node = calloc(1, sizeof(ConstantNode));
+  ConstantNode *node = xalloc(1, sizeof(ConstantNode));
   node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
@@ -955,7 +956,7 @@ ASTNode *create_constant_identifier(ASTNode *identifier, SourceLocation loc) {
 };
 
 ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {
-  ConstantNode *node = calloc(1, sizeof(ConstantNode));
+  ConstantNode *node = xalloc(1, sizeof(ConstantNode));
   node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
@@ -989,7 +990,7 @@ ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {
 };
 
 ASTNode *create_integer_literal(int integer, SourceLocation loc) {
-  LiteralNode *node = calloc(1, sizeof(LiteralNode));
+  LiteralNode *node = xalloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -999,7 +1000,7 @@ ASTNode *create_integer_literal(int integer, SourceLocation loc) {
 };
 
 ASTNode *create_real_literal(double real, SourceLocation loc) {
-  LiteralNode *node = calloc(1, sizeof(LiteralNode));
+  LiteralNode *node = xalloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1009,7 +1010,7 @@ ASTNode *create_real_literal(double real, SourceLocation loc) {
 };
 
 ASTNode *create_string_literal(char *string, SourceLocation loc) {
-  LiteralNode *node = calloc(1, sizeof(LiteralNode));
+  LiteralNode *node = xalloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1019,7 +1020,7 @@ ASTNode *create_string_literal(char *string, SourceLocation loc) {
 };
 
 ASTNode *create_char_literal(char character, SourceLocation loc) {
-  LiteralNode *node = calloc(1, sizeof(LiteralNode));
+  LiteralNode *node = xalloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1029,7 +1030,7 @@ ASTNode *create_char_literal(char character, SourceLocation loc) {
 };
 
 ASTNode *create_boolean_literal(bool boolean, SourceLocation loc) {
-  LiteralNode *node = calloc(1, sizeof(LiteralNode));
+  LiteralNode *node = xalloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1039,7 +1040,7 @@ ASTNode *create_boolean_literal(bool boolean, SourceLocation loc) {
 };
 
 ASTNode *create_nil_literal(SourceLocation loc) {
-  LiteralNode *node = calloc(1, sizeof(LiteralNode));
+  LiteralNode *node = xalloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1050,7 +1051,7 @@ ASTNode *create_nil_literal(SourceLocation loc) {
 ASTNode *create_constant_signed_identifier(ASTNode *identifier,
                                            const char *sign,
                                            SourceLocation loc) {
-  ConstantNode *node = calloc(1, sizeof(ConstantNode));
+  ConstantNode *node = xalloc(1, sizeof(ConstantNode));
   node->base.type = NODE_CONSTANT;
   node->base.location = loc;
   node->base.print = print_constant_identifier_node;
@@ -1068,7 +1069,7 @@ ASTNode *create_field_identifier_list_node(ASTNode *list, ASTNode *identifier,
     return list;
   }
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1090,7 +1091,7 @@ ASTNode *create_field_identifier_list_node(ASTNode *list, ASTNode *identifier,
 };
 
 ASTNode *create_file_of_type_node(ASTNode *type, SourceLocation loc) {
-  FileTypeNode *node = calloc(1, sizeof(FileTypeNode));
+  FileTypeNode *node = xalloc(1, sizeof(FileTypeNode));
   node->base.type = NODE_FILE_TYPE;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1106,7 +1107,7 @@ ASTNode *create_file_of_type_node(ASTNode *type, SourceLocation loc) {
 
 ASTNode *create_field_list(ASTNode *fixed, ASTNode *variant,
                            SourceLocation loc) {
-  FieldListNode *node = calloc(1, sizeof(FieldListNode));
+  FieldListNode *node = xalloc(1, sizeof(FieldListNode));
   node->base.type = NODE_FIELD_LIST;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1122,7 +1123,7 @@ ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
     return fixed;
   }
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1130,7 +1131,7 @@ ASTNode *create_fixed_part_node(ASTNode *fixed, ASTNode *field,
   new_node->next = NULL;
 
   if (fixed == NULL) {
-    FixedPartNode *node = calloc(1, sizeof(FixedPartNode));
+    FixedPartNode *node = xalloc(1, sizeof(FixedPartNode));
 
     node->base.type = NODE_FIXED_PART;
     node->base.location = loc;
@@ -1165,7 +1166,7 @@ ASTNode *create_for_stmt_node(ASTNode *variable, ASTNode *for_stmt,
 
 ASTNode *create_for_list_node(ASTNode *start, ASTNode *end, bool is_downto,
                               SourceLocation loc) {
-  ForStmtNode *node = calloc(1, sizeof(ForStmtNode));
+  ForStmtNode *node = xalloc(1, sizeof(ForStmtNode));
   node->base.type = NODE_FOR_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1181,7 +1182,7 @@ ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
     return list;
   }
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1203,7 +1204,7 @@ ASTNode *create_formal_parameters_list_node(ASTNode *list, ASTNode *param,
 
 ASTNode *create_function_call_node(ASTNode *func, ASTNode *params,
                                    SourceLocation loc) {
-  FunctionCallNode *node = calloc(1, sizeof(FunctionCallNode));
+  FunctionCallNode *node = xalloc(1, sizeof(FunctionCallNode));
   node->base.type = NODE_FUNC_CALL;
   node->base.location = loc;
   node->base.print = print_function_call;
@@ -1214,7 +1215,7 @@ ASTNode *create_function_call_node(ASTNode *func, ASTNode *params,
 };
 
 ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc) {
-  GotoNode *node = calloc(1, sizeof(GotoNode));
+  GotoNode *node = xalloc(1, sizeof(GotoNode));
   node->base.type = NODE_GOTO_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1224,7 +1225,7 @@ ASTNode *create_goto_label_node(ASTNode *label, SourceLocation loc) {
 
 ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt,
                              ASTNode *else_stmt, SourceLocation loc) {
-  IfNode *node = calloc(1, sizeof(IfNode));
+  IfNode *node = xalloc(1, sizeof(IfNode));
   node->base.type = NODE_IF_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1235,11 +1236,11 @@ ASTNode *create_if_stmt_node(ASTNode *condition, ASTNode *then_stmt,
 };
 
 ASTNode *create_index_list_start(ASTNode *first_index, SourceLocation loc) {
-  IndexList *new_list = calloc(1, sizeof(IndexList));
+  IndexList *new_list = xalloc(1, sizeof(IndexList));
   new_list->base.type = NODE_INDEX_LIST;
   new_list->base.location = loc;
   new_list->base.print = print_todo;
-  new_list->indexes = calloc(1, sizeof(ASTNode **));
+  new_list->indexes = xalloc(1, sizeof(ASTNode **));
   new_list->indexes[0] = first_index;
   new_list->count = 1;
   new_list->capacity = 1;
@@ -1248,7 +1249,7 @@ ASTNode *create_index_list_start(ASTNode *first_index, SourceLocation loc) {
 
 ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
                                 SourceLocation loc) {
-  LabeledStmtNode *node = calloc(1, sizeof(LabeledStmtNode));
+  LabeledStmtNode *node = xalloc(1, sizeof(LabeledStmtNode));
   node->base.type = NODE_LABELED_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1259,7 +1260,7 @@ ASTNode *create_label_stmt_node(ASTNode *label, ASTNode *stmt,
 
 ASTNode *create_enumerated_type_node(ASTNode *identifiers_list,
                                      SourceLocation loc) {
-  EnumeratedTypeNode *node = calloc(1, sizeof(EnumeratedTypeNode));
+  EnumeratedTypeNode *node = xalloc(1, sizeof(EnumeratedTypeNode));
   node->base.type = NODE_ENUMERATED_TYPE;
   node->base.location = loc;
   node->base.print = print_types;
@@ -1268,7 +1269,7 @@ ASTNode *create_enumerated_type_node(ASTNode *identifiers_list,
 };
 
 ASTNode *create_packed_type(ASTNode *type, SourceLocation loc) {
-  StructuredTypeNode *node = calloc(1, sizeof(StructuredTypeNode));
+  StructuredTypeNode *node = xalloc(1, sizeof(StructuredTypeNode));
   node->base.type = NODE_STRUCTURED_TYPE;
   node->base.location = loc;
   node->base.print = print_types;
@@ -1283,7 +1284,7 @@ ASTNode *create_parameter_identifier_list_node(ASTNode *list, ASTNode *element,
     return list;
   }
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1308,7 +1309,7 @@ create_formal_parameter_section_node(ParameterKind kind, ASTNode *identifiers,
                                      ASTNode *type, ASTNode *parameters,
                                      ASTNode *return_type, SourceLocation loc) {
   FormalParameterSectionNode *node =
-      calloc(1, sizeof(FormalParameterSectionNode));
+      xalloc(1, sizeof(FormalParameterSectionNode));
   node->base.type = NODE_FORMAL_PARAM_SECTION;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1322,7 +1323,7 @@ create_formal_parameter_section_node(ParameterKind kind, ASTNode *identifiers,
 };
 
 ASTNode *create_parameters_node(ASTNode *parameters_list, SourceLocation loc) {
-  ParameterNode *node = calloc(1, sizeof(ParameterNode));
+  ParameterNode *node = xalloc(1, sizeof(ParameterNode));
   node->base.type = NODE_PARAMETER;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1332,7 +1333,7 @@ ASTNode *create_parameters_node(ASTNode *parameters_list, SourceLocation loc) {
 };
 
 ASTNode *create_pointer_type_node(ASTNode *type, SourceLocation loc) {
-  PointerTypeNode *node = calloc(1, sizeof(PointerTypeNode));
+  PointerTypeNode *node = xalloc(1, sizeof(PointerTypeNode));
   node->base.type = NODE_POINTER_TYPE;
   node->base.location = loc;
   node->base.print = print_types;
@@ -1342,7 +1343,7 @@ ASTNode *create_pointer_type_node(ASTNode *type, SourceLocation loc) {
 
 ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params,
                                     SourceLocation loc) {
-  FunctionCallNode *node = calloc(1, sizeof(FunctionCallNode));
+  FunctionCallNode *node = xalloc(1, sizeof(FunctionCallNode));
   node->base.type = NODE_PROC_CALL;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1354,7 +1355,7 @@ ASTNode *create_procedure_call_node(ASTNode *proc, ASTNode *params,
 
 ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,
                                   SourceLocation loc) {
-  RecordFieldNode *record = calloc(1, sizeof(RecordFieldNode));
+  RecordFieldNode *record = xalloc(1, sizeof(RecordFieldNode));
   record->base.type = NODE_RECORD_FIELD;
   record->base.location = loc;
   record->base.print = print_todo;
@@ -1365,7 +1366,7 @@ ASTNode *create_record_field_node(ASTNode *field_list, ASTNode *type,
 };
 
 ASTNode *create_record_type_node(ASTNode *field_list, SourceLocation loc) {
-  RecordTypeNode *node = calloc(1, sizeof(RecordTypeNode));
+  RecordTypeNode *node = xalloc(1, sizeof(RecordTypeNode));
   node->base.type = NODE_RECORD_TYPE;
   node->base.location = loc;
   node->base.print = print_types;
@@ -1375,7 +1376,7 @@ ASTNode *create_record_type_node(ASTNode *field_list, SourceLocation loc) {
 
 ASTNode *create_repeat_until_stmt_list_node(ASTNode *body, ASTNode *condition,
                                             SourceLocation loc) {
-  RepeatUntilNode *node = calloc(1, sizeof(RepeatUntilNode));
+  RepeatUntilNode *node = xalloc(1, sizeof(RepeatUntilNode));
   node->base.type = NODE_REPEAT_STMT;
   node->base.location = loc;
   node->base.print = body->print;
@@ -1385,7 +1386,7 @@ ASTNode *create_repeat_until_stmt_list_node(ASTNode *body, ASTNode *condition,
 };
 
 ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc) {
-  SetTypeNode *node = calloc(1, sizeof(SetTypeNode));
+  SetTypeNode *node = xalloc(1, sizeof(SetTypeNode));
   node->base.type = NODE_SET_TYPE;
   node->base.location = loc;
   node->base.print = print_types;
@@ -1394,7 +1395,7 @@ ASTNode *create_set_of_type_node(ASTNode *type, SourceLocation loc) {
 };
 
 ASTNode *create_simple_type_node(ASTNode *type, SourceLocation loc) {
-  SimpleTypeNode *node = calloc(1, sizeof(SimpleTypeNode));
+  SimpleTypeNode *node = xalloc(1, sizeof(SimpleTypeNode));
   node->base.type = NODE_SIMPLE_TYPE;
   node->base.location = loc;
   node->base.print = print_types;
@@ -1404,7 +1405,7 @@ ASTNode *create_simple_type_node(ASTNode *type, SourceLocation loc) {
 };
 
 ASTNode *create_structure_type_node(ASTNode *type, SourceLocation loc) {
-  StructuredTypeNode *node = calloc(1, sizeof(StructuredTypeNode));
+  StructuredTypeNode *node = xalloc(1, sizeof(StructuredTypeNode));
   node->base.type = NODE_STRUCTURED_TYPE;
   node->base.location = loc;
   node->base.print = print_types;
@@ -1416,7 +1417,7 @@ ASTNode *create_structure_type_node(ASTNode *type, SourceLocation loc) {
 
 ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
                                SourceLocation loc) {
-  TagFieldNode *tag = calloc(1, sizeof(TagFieldNode));
+  TagFieldNode *tag = xalloc(1, sizeof(TagFieldNode));
   tag->base.type = NODE_TAG_FIELD;
   tag->base.location = loc;
   tag->base.print = print_todo;
@@ -1428,7 +1429,7 @@ ASTNode *create_tag_field_node(ASTNode *identifier, ASTNode *type,
 
 ASTNode *create_variant_node(ASTNode *label_list, ASTNode *field_list,
                              SourceLocation loc) {
-  VariantRecordNode *node = calloc(1, sizeof(VariantRecordNode));
+  VariantRecordNode *node = xalloc(1, sizeof(VariantRecordNode));
   node->base.type = NODE_VARIANT_RECORD;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1440,7 +1441,7 @@ ASTNode *create_variant_node(ASTNode *label_list, ASTNode *field_list,
 
 ASTNode *create_while_stmt_node(ASTNode *condition, ASTNode *body,
                                 SourceLocation loc) {
-  WhileStmtNode *node = calloc(1, sizeof(WhileStmtNode));
+  WhileStmtNode *node = xalloc(1, sizeof(WhileStmtNode));
   node->base.type = NODE_WHILE_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1451,7 +1452,7 @@ ASTNode *create_while_stmt_node(ASTNode *condition, ASTNode *body,
 
 ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body,
                                       SourceLocation loc) {
-  WithNode *node = calloc(1, sizeof(WithNode));
+  WithNode *node = xalloc(1, sizeof(WithNode));
   node->base.type = NODE_WITH_STMT;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1461,7 +1462,7 @@ ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body,
 }
 
 ASTNode *create_identifier_node(char *name, SourceLocation loc) {
-  IdentifierNode *node = calloc(1, sizeof(IdentifierNode));
+  IdentifierNode *node = xalloc(1, sizeof(IdentifierNode));
 
   node->base.type = NODE_IDENTIFIER;
   node->base.location = loc;
@@ -1473,7 +1474,7 @@ ASTNode *create_identifier_node(char *name, SourceLocation loc) {
 };
 
 ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc) {
-  LiteralNode *node = calloc(1, sizeof(LiteralNode));
+  LiteralNode *node = xalloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1483,7 +1484,7 @@ ASTNode *create_unsigned_integer_node(int integer, SourceLocation loc) {
 };
 
 ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
-  LiteralNode *node = calloc(1, sizeof(LiteralNode));
+  LiteralNode *node = xalloc(1, sizeof(LiteralNode));
   node->base.type = NODE_LITERAL;
   node->base.location = loc;
   node->base.print = print_literal_value;
@@ -1494,7 +1495,7 @@ ASTNode *create_unsigned_real_node(double real, SourceLocation loc) {
 
 ASTNode *create_record_variable_list_node(ASTNode *record_var,
                                           SourceLocation loc) {
-  ListNode *node = calloc(1, sizeof(ListNode));
+  ListNode *node = xalloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -1554,7 +1555,7 @@ ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1573,7 +1574,7 @@ ASTNode *append_record_variable_list(ASTNode *list, ASTNode *record_var,
 };
 
 ASTNode *create_expression_list(ASTNode *element, SourceLocation loc) {
-  ListNode *node = calloc(1, sizeof(ListNode));
+  ListNode *node = xalloc(1, sizeof(ListNode));
   node->base.type = NODE_LIST;
   node->base.location = loc;
   node->base.print = print_list_identifiers;
@@ -1591,7 +1592,7 @@ ASTNode *append_expression_list(ASTNode *list, ASTNode *element,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1617,7 +1618,7 @@ ASTNode *append_identifier_list_node(ASTNode *list, ASTNode *element,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1729,7 +1730,7 @@ ASTNode *append_case_list_node(ASTNode *list, ASTNode *expr,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1748,7 +1749,7 @@ ASTNode *append_case_list_node(ASTNode *list, ASTNode *expr,
 };
 
 ASTNode *create_set_literal(SourceLocation loc) {
-  SetLiteral *node = calloc(1, sizeof(SetLiteral));
+  SetLiteral *node = xalloc(1, sizeof(SetLiteral));
   node->base.type = NODE_SET_CONSTRUCTOR;
   node->base.location = loc;
   node->base.print = print_todo;
@@ -1760,11 +1761,11 @@ ASTNode *create_set_literal(SourceLocation loc) {
 };
 
 ASTNode *create_set_literal_with_element(ASTNode *element, SourceLocation loc) {
-  SetLiteral *node = calloc(1, sizeof(SetLiteral));
+  SetLiteral *node = xalloc(1, sizeof(SetLiteral));
   node->base.type = NODE_SET_CONSTRUCTOR;
   node->base.location = loc;
   node->base.print = print_todo;
-  node->elements = calloc(1, sizeof(SetElement *));
+  node->elements = xalloc(1, sizeof(SetElement *));
   node->elements[0] = (SetElement *)element;
   node->capacity = 1;
   node->count = 1;
@@ -1787,7 +1788,7 @@ ASTNode *add_element_to_set_literal(ASTNode *set_literal, ASTNode *element,
 };
 
 ASTNode *create_set_element(ASTNode *expr, SourceLocation loc) {
-  SetElement *element = calloc(1, sizeof(SetElement));
+  SetElement *element = xalloc(1, sizeof(SetElement));
   element->base.type = NODE_SET_ELEMENT;
   element->base.location = loc;
   element->base.print = print_todo;
@@ -1799,7 +1800,7 @@ ASTNode *create_set_element(ASTNode *expr, SourceLocation loc) {
 
 ASTNode *create_set_range_element(ASTNode *const1, ASTNode *const2,
                                   SourceLocation loc) {
-  SetElement *element = calloc(1, sizeof(SetElement));
+  SetElement *element = xalloc(1, sizeof(SetElement));
   element->base.type = NODE_SET_ELEMENT;
   element->base.location = loc;
   element->base.print = print_todo;
@@ -1860,7 +1861,7 @@ ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
     return list;
   }
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1868,7 +1869,7 @@ ASTNode *append_variant_list(ASTNode *list, ASTNode *element,
   new_node->next = NULL;
 
   if (list == NULL) {
-    VariantListNode *vlist = calloc(1, sizeof(VariantListNode));
+    VariantListNode *vlist = xalloc(1, sizeof(VariantListNode));
 
     vlist->base.type = NODE_VARIANT_LIST;
     vlist->base.location = loc;
@@ -1921,7 +1922,7 @@ ASTNode *append_proc_and_func_declarations(ASTNode *list,
 
   ListNode *head = (ListNode *)list;
 
-  ListNode *new_node = calloc(1, sizeof(ListNode));
+  ListNode *new_node = xalloc(1, sizeof(ListNode));
   new_node->base.type = NODE_LIST;
   new_node->base.location = loc;
   new_node->base.print = print_list_identifiers;
@@ -1990,7 +1991,7 @@ ASTNode *append_index_to_list(ASTNode *list, ASTNode *new_index,
 
 ASTNode *create_binary_expression(ASTNode *left, BinaryOperator op,
                                   ASTNode *right, SourceLocation loc) {
-  BinaryOperationNode *node = calloc(1, sizeof(BinaryOperationNode));
+  BinaryOperationNode *node = xalloc(1, sizeof(BinaryOperationNode));
   node->base.type = NODE_BINARY_EXPR;
   node->base.location = loc;
   node->base.print = print_binary_operation;
@@ -2003,7 +2004,7 @@ ASTNode *create_binary_expression(ASTNode *left, BinaryOperator op,
 
 ASTNode *create_unary_expression(UnaryOperator unary_op, ASTNode *operand,
                                  SourceLocation loc) {
-  UnaryOperationNode *node = calloc(1, sizeof(UnaryOperationNode));
+  UnaryOperationNode *node = xalloc(1, sizeof(UnaryOperationNode));
   node->base.type = NODE_UNARY_EXPR;
   node->base.location = loc;
   node->base.print = print_unary_operation;
@@ -2340,8 +2341,7 @@ ConstantValue evaluate_constant(CompilerContext *context, ASTNode *const_node) {
   case CONST_IDENTIFIER:
   case CONST_SIGNED_IDENTIFIER: {
     IdentifierNode *id = (IdentifierNode *)node->identifier;
-    // SymbolEntry *entry = context_lookup(context, id->name);
-    SymbolEntry *entry = id->symbol;
+    SymbolEntry *entry = context_lookup(context, id->name);
 
     if (!entry || entry->kind != SYMBOL_CONSTANT) {
       fprintf(stderr, "Constant of identifier: %s is not declared", id->name);

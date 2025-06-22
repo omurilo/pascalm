@@ -76,9 +76,28 @@ IdentifierNode *resolve_type_identifier(ASTNode *node) {
     return resolve_type_identifier(st_type->type);
   }
 
-  LOG_DEBUG("%s é o tipo do tipo que quer saber o c type;", 
-            get_node_type_name(node->type));
+  if (node->type == NODE_RECORD_TYPE) {
+    LOG_ERROR("The node record type is not mapped to resolve identifier");
+  }
+
   return (IdentifierNode *)create_builtin_identifier("void", node->location);
+}
+
+bool is_reference_type(ASTNode *node) {
+  LOG_DEBUG("Qual o tipo aqui? %s", get_node_type_name(node->type));
+  switch (node->type) {
+  case NODE_TYPE_IDENTIFIER: {
+    IdentifierNode *id = resolve_type_identifier(node);
+    return id->symbol->info.var_info.is_ref;
+  }
+  case NODE_SIMPLE_TYPE: {
+    IdentifierNode *id = resolve_type_identifier(node);
+    return id->symbol->info.var_info.is_ref;
+  }
+  default:
+    break;
+  }
+  return false;
 }
 
 void generate_program(CodeGenerator *code_gen, CompilerContext *context,
@@ -106,6 +125,17 @@ void generate_block(CodeGenerator *code_gen, CompilerContext *context,
                     ASTNode *node, bool main, bool set_helpers,
                     bool string_helpers) {
   BlockNode *block = (BlockNode *)node;
+
+  ListNode *constants = (ListNode *)block->constants;
+  while (constants) {
+    if (constants->element) {
+      generate_constant(code_gen, context, constants->element);
+    }
+
+    constants = (ListNode *)constants->next;
+    if (!constants)
+      fprintf(code_gen->output_file, "\n");
+  }
 
   ListNode *types = (ListNode *)block->types;
   while (types) {
@@ -159,6 +189,38 @@ void generate_block(CodeGenerator *code_gen, CompilerContext *context,
   }
 }
 
+void generate_constant(CodeGenerator *code_gen, CompilerContext *context,
+                       ASTNode *node) {
+  ConstDeclarationNode *const_node = (ConstDeclarationNode *)node;
+  IdentifierNode *id = (IdentifierNode *)const_node->identifier;
+  LiteralNode *literal = (LiteralNode *)id->symbol->info.const_info.value;
+
+  switch (literal->literal_type) {
+  case LITERAL_INTEGER:
+    fprintf(code_gen->output_file, "int %s = %d;\n", id->name,
+            literal->value.int_val);
+    break;
+  case LITERAL_REAL:
+    fprintf(code_gen->output_file, "double %s = %.2f;\n", id->name,
+            literal->value.real_val);
+    break;
+  case LITERAL_STRING:
+    fprintf(code_gen->output_file, "string %s = make_string('%s');\n", id->name,
+            literal->value.str_val);
+    break;
+  case LITERAL_CHAR:
+    fprintf(code_gen->output_file, "char %s = %c;\n", id->name,
+            literal->value.char_val);
+    break;
+  case LITERAL_BOOLEAN:
+    fprintf(code_gen->output_file, "bool %s = %s;\n", id->name,
+            literal->value.bool_val ? "true" : "false");
+    break;
+  default:
+    break;
+  }
+}
+
 void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
                    ASTNode *node) {
   VarDeclarationNode *v_node = (VarDeclarationNode *)node;
@@ -195,7 +257,6 @@ void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
       }
       break;
     } else if (st_node->type->type == NODE_SET_TYPE) {
-      LOG_ERROR("[DEBUG variables] -> NODE_SET_TYPE");
       if (code_gen->indent_level > 0) {
         print_indent(code_gen);
       }
@@ -253,12 +314,25 @@ void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
               fprintf(code_gen->output_file, " = 0ULL");
             } else if (sym_t_node->type->type == NODE_RECORD_TYPE) {
               fprintf(code_gen->output_file, " = {0}");
+            } else {
+              LOG_ERROR("o tipo é structured mas o interno n sei qual é: %s"
+                        "",
+                        get_node_type_name(sym_t_node->type->type));
             }
           } else if (s->info.type_info.definition->type == NODE_SIMPLE_TYPE) {
-            LOG_ERROR("NODE_SIMPLE_TYPE\n");
+            IdentifierNode *id_node =
+                resolve_type_identifier(s->info.type_info.definition);
+            if (strcmp(id_node->name, "int") == 0) {
+              fprintf(code_gen->output_file, " = 0");
+            } else if (strcmp(id_node->name, "bool") == 0) {
+              fprintf(code_gen->output_file, " = false");
+            }
           } else {
             LOG_ERROR("NODE_POINTER_TYPE\n");
           }
+        } else {
+          LOG_ERROR("o kind não é symbol_type e n sei qual é: %s", 
+                    get_symbol_kind_name(c_type->kind));
         }
         fprintf(code_gen->output_file, ";\n");
       }
@@ -559,16 +633,16 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
     } else if (a->target->type == NODE_ARRAY_ACCESS) {
       ArrayAccessNode *a_node = (ArrayAccessNode *)a->target;
       target_id = (IdentifierNode *)a_node->array;
-      target_id->symbol = context_lookup(context, target_id->name);
+      // target_id->symbol = context_lookup(context, target_id->name);
     }
   } else if (a->target->type == NODE_ARRAY_ACCESS) {
     ArrayAccessNode *a_node = (ArrayAccessNode *)a->target;
     target_id = (IdentifierNode *)a_node->array;
-    target_id->symbol = context_lookup(context, target_id->name);
+    // target_id->symbol = context_lookup(context, target_id->name);
   }
 
   bool is_struct_assignment = false;
-  if (target_id && target_id->symbol != NULL && field_id) {
+  if ((target_id != NULL || target_id->symbol != NULL) && field_id) {
     IdentifierNode *identifier_node =
         resolve_type_identifier(target_id->symbol->info.var_info.type);
     SymbolEntry *field_symb = context_lookup_field(
@@ -657,6 +731,7 @@ void generate_for_statement(CodeGenerator *code_gen, CompilerContext *context,
                       for_stmt->start_expr); // Gera o valor inicial
 
   if (for_stmt->is_downto) {
+    fprintf(code_gen->output_file, "; %s >= ", id->name); // Condição com <=
     generate_expression(code_gen, context, for_stmt->end_expr);
     fprintf(code_gen->output_file, "; %s--)", id->name); // Decremento
   } else {
@@ -734,10 +809,12 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
           strcat(format_string, literal->value.str_val);
           break;
         } else if (literal->literal_type == LITERAL_CHAR) {
-          char str[1];
+          char str[3];
           sprintf(str, "%c", literal->value.char_val);
           strcat(format_string, str);
           break;
+        } else if (literal->literal_type == LITERAL_NIL) {
+          yyerrorf(literal->base.location, "Credo teve um nil ali!");
         }
         break;
       }
@@ -750,16 +827,36 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
 
         break;
       }
-      case NODE_BINARY_EXPR:
-        generate_expression(code_gen, context, params->element);
+      case NODE_BINARY_EXPR: {
+        IdentifierNode *id =
+            resolve_type_identifier(params->element->result_type);
+        if (strcmp(id->name, "int") == 0) {
+          strcat(format_string, "%d");
+        } else if (strcmp(id->name, "double") == 0) {
+          strcat(format_string, "%.2f");
+        } else if (strcmp(id->name, "string") == 0) {
+          strcat(format_string, "%s");
+        }
+
         break;
+      }
+      case NODE_UNARY_EXPR: {
+        IdentifierNode *id =
+            resolve_type_identifier(params->element->result_type);
+        if (strcmp(id->name, "int") == 0) {
+          strcat(format_string, "%d");
+        } else if (strcmp(id->name, "double") == 0) {
+          strcat(format_string, "%.2f");
+        } else if (strcmp(id->name, "bool") == 0) {
+          strcat(format_string, "%d");
+        }
+
+        break;
+      }
       case NODE_IDENTIFIER: {
         IdentifierNode *id = (IdentifierNode *)params->element;
         if (id->kind == SYMBOL_VARIABLE) {
           SymbolEntry *id_sym = id->symbol;
-          LOG_ERROR(
-              "Beleza, é aqui, mas náo ta mapeado, precisa mapear será? %s", 
-              get_node_type_name(id_sym->info.var_info.type->type));
 
           if (id_sym->info.var_info.type->type == NODE_TYPE_IDENTIFIER) {
             TypeIdentifierNode *s_t_id =
@@ -779,6 +876,8 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
               } else if (strcmp(type_name, "string") == 0) {
                 strcat(format_string, "%s");
                 break;
+              } else if (strcmp(type_name, "double") == 0) {
+                strcat(format_string, "%.2f");
               }
             }
           } else if (id_sym->info.var_info.type->type == NODE_SIMPLE_TYPE) {
@@ -835,8 +934,6 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
     }
 
     params = (ListNode *)params->next;
-    if (params)
-      fprintf(code_gen->output_file, " ");
   }
 
   fprintf(code_gen->output_file, line ? "printf(\"%s\\n\"" : "printf(\"%s\"",
@@ -872,9 +969,6 @@ void generate_read(CodeGenerator *code_gen, CompilerContext *context,
         IdentifierNode *id = (IdentifierNode *)params->element;
         if (id->kind == SYMBOL_VARIABLE) {
           SymbolEntry *id_sym = id->symbol;
-          LOG_ERROR(
-              "Beleza, é aqui, mas náo ta mapeado, precisa mapear será? %s", 
-              get_node_type_name(id_sym->info.var_info.type->type));
 
           if (id_sym->info.var_info.type->type == NODE_TYPE_IDENTIFIER) {
             TypeIdentifierNode *s_t_id =
@@ -934,7 +1028,6 @@ void generate_read(CodeGenerator *code_gen, CompilerContext *context,
 
     params = (ListNode *)params->next;
   }
-  LOG_DEBUG("formatted string %s", format_string);
 
   fprintf(code_gen->output_file, "scanf(\"%s\", ", format_string);
 
@@ -966,10 +1059,15 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
   IdentifierNode *id = (IdentifierNode *)f_call->function;
   SymbolEntry *s = context_lookup(context, id->name);
 
+  bool is_function_call = (s && s->kind == SYMBOL_FUNCTION) ||
+                          (code_gen->current_function &&
+                           code_gen->current_function->kind == SYMBOL_FUNCTION);
+
   if (code_gen->indent_level > 0) {
     print_indent(code_gen);
   }
-  if (s->kind == SYMBOL_BUILTIN) {
+
+  if (s && s->kind == SYMBOL_BUILTIN) {
     if (strcmp(id->name, "write") == 0) {
       generate_write(code_gen, context, node, false);
       return;
@@ -1033,7 +1131,8 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
       fprintf(code_gen->output_file, ", ");
   }
 
-  fprintf(code_gen->output_file, code_gen->current_function ? ")" : ");\n");
+  fprintf(code_gen->output_file,
+          code_gen->current_function && is_function_call ? ")" : ");\n");
 }
 
 void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
@@ -1091,10 +1190,15 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
   case NODE_IDENTIFIER: {
     IdentifierNode *id = (IdentifierNode *)node;
     SymbolEntry *s = id->symbol;
+    bool is_ref = false;
+
+    if (s && (s->kind == SYMBOL_VARIABLE || s->kind == SYMBOL_PARAMETER ||
+              s->kind == SYMBOL_FIELD)) {
+      is_ref = s->info.var_info.is_ref;
+    }
 
     if (s) {
-      fprintf(code_gen->output_file, s->info.var_info.is_ref ? "*%s" : "%s",
-              id->name);
+      fprintf(code_gen->output_file, is_ref ? "*%s" : "%s", id->name);
     } else {
       fprintf(code_gen->output_file, "%s", id->name);
     }
@@ -1236,8 +1340,7 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
 
     ASTNode *record_type_node = get_expression_type(m_node->record);
     bool is_ref = false;
-    // TODO: Implementar a função que checa se o tipo é referência/ponteiro
-    // is_ref = is_reference_type(record_type_node);
+    is_ref = is_reference_type(record_type_node);
 
     generate_expression(code_gen, context, m_node->record);
     fprintf(code_gen->output_file, is_ref ? "->" : ".");

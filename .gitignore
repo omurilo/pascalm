@@ -1,5 +1,5 @@
 **/*.yy.c
-
+**/*.dSYM
 temp
 .DS_Store
 test

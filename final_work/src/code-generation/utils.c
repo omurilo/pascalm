@@ -6,6 +6,9 @@ void generate_string_definition(CodeGenerator *code_gen) {
   fprintf(code_gen->output_file, "    unsigned char length;\n");
   fprintf(code_gen->output_file, "    char data[255];\n");
   fprintf(code_gen->output_file, "} string;\n\n");
+  fprintf(code_gen->output_file, "string make_string(const char* c_str);\n");
+  fprintf(code_gen->output_file,
+          "string concat_string(string s1, string s2);\n\n");
 }
 
 void generate_strings_helper_functions(CodeGenerator *code_gen) {

@@ -1,7 +1,0 @@
----
-triple:          'arm64-apple-darwin'
-binary-path:     '../tests/build/3-control-while-if'
-relocations:
-  - { offset: 0x8B, size: 0x8, addend: 0x0, symName: _i, symObjAddr: 0x8A0, symBinAddr: 0x100008018, symSize: 0x0 }
-  - { offset: 0x9F, size: 0x8, addend: 0x0, symName: _main, symObjAddr: 0x40, symBinAddr: 0x100003E40, symSize: 0xBC }
-...

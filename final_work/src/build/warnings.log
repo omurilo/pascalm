@@ -1,0 +1,51 @@
+parser/parser.y: warning: 1 nonterminal useless in grammar [-Wother]
+parser/parser.y: warning: 1 rule useless in grammar [-Wother]
+parser/parser.y:642.1-15: warning: nonterminal useless in grammar: boolean_literal [-Wother]
+  642 | boolean_literal:
+      | ^~~~~~~~~~~~~~~
+parser/parser.y: warning: 2 reduce/reduce conflicts [-Wconflicts-rr]
+parser/parser.y: warning: reduce/reduce conflict on tokens END, R_PAREN [-Wcounterexamples]
+  Example: empty •
+  First reduce derivation
+    field_list
+    ↳ 51: empty •
+  Second reduce derivation
+    field_list
+    ↳ 48: fixed_part
+          ↳ 52: record_field
+                ↳ 54: empty •
+semantic-analyzer/analyzer.c:38:56: warning: unused parameter 'context' [-Wunused-parameter]
+   38 |                                       CompilerContext *context) {
+      |                                                        ^
+semantic-analyzer/analyzer.c:246:54: warning: unused parameter 'context' [-Wunused-parameter]
+  246 | void analyze_labels(ASTNode *label, CompilerContext *context) {
+      |                                                      ^
+semantic-analyzer/analyzer.c:987:18: warning: unused variable 'record_symbol' [-Wunused-variable]
+  987 |     SymbolEntry *record_symbol =
+      |                  ^~~~~~~~~~~~~
+semantic-analyzer/analyzer.c:1148:16: warning: unused variable 'index_list' [-Wunused-variable]
+ 1148 |     IndexList *index_list = (IndexList *)array->index_list;
+      |                ^~~~~~~~~~
+semantic-analyzer/analyzer.c:1149:18: warning: unused variable 'array_type_symbol' [-Wunused-variable]
+ 1149 |     SymbolEntry *array_type_symbol =
+      |                  ^~~~~~~~~~~~~~~~~
+semantic-analyzer/analyzer.c:1372:27: warning: unused variable 'tag_tid' [-Wunused-variable]
+ 1372 |       TypeIdentifierNode *tag_tid = (TypeIdentifierNode *)tag->tag_type;
+      |                           ^~~~~~~
+6 warnings generated.
+code-generation/code.c:756:22: warning: unused variable 'array_symbol' [-Wunused-variable]
+  756 |         SymbolEntry *array_symbol = array_id->symbol;
+      |                      ^~~~~~~~~~~~
+code-generation/code.c:747:11: warning: 'sprintf' will always overflow; destination buffer has size 1, but format string expands to at least 2 [-Wformat-overflow]
+  747 |           sprintf(str, "%c", literal->value.char_val);
+      |           ^
+/nix/store/ca250dchzidqi7a97zf3ldn1abcry2qy-apple-sdk-11.3/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/secure/_stdio.h:47:3: note: expanded from macro 'sprintf'
+   47 |   __builtin___sprintf_chk (str, 0, __darwin_obsz(str), __VA_ARGS__)
+      |   ^
+code-generation/code.c:1239:14: warning: unused variable 'record_type_node' [-Wunused-variable]
+ 1239 |     ASTNode *record_type_node = get_expression_type(m_node->record);
+      |              ^~~~~~~~~~~~~~~~
+code-generation/code.c:1272:43: warning: unused parameter 'context' [-Wunused-parameter]
+ 1272 |                          CompilerContext *context) {
+      |                                           ^
+4 warnings generated.

@@ -16,7 +16,7 @@ struct ht {
 };
 
 ht *ht_create(void) {
-  ht *table = (ht *)malloc(sizeof(ht));
+  ht *table = xalloc(1, sizeof(ht));
   if (table == NULL) {
     return NULL;
   }
@@ -167,7 +167,7 @@ bool ht_next(hti *it) {
 
 SymbolEntry *create_symbol_entry(char *name, SymbolKind kind, int scope_level,
                                  SourceLocation loc) {
-  SymbolEntry *symb = (SymbolEntry *)malloc(sizeof(SymbolEntry));
+  SymbolEntry *symb = xalloc(1, sizeof(SymbolEntry));
   symb->name = name;
   symb->kind = kind;
   symb->scope_level = scope_level <= 0 ? 0 : scope_level;

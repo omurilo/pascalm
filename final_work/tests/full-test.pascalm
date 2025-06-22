@@ -64,6 +64,11 @@ begin
     AplicarOperacao := op(x, y);
 end;
 
+function Chr(n: integer): char;
+begin
+  Chr := n;
+end;
+
 begin
   { Inicializa }
   soma := 0;
@@ -98,6 +103,7 @@ begin
   end;
 
   writeln;
+  ExecutarOperacao;
   write('Imprimindo lista de alunos:');
   writeln;
   

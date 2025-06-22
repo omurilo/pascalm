@@ -4,9 +4,11 @@ type
     nome: string;
     idade: integer;
   end;
+  MyInt = integer;
 var
   turma: array[1..3] of TPessoa;
   i: integer;
+  j: MyInt;
 begin
   turma[1].nome := 'Joao';
   turma[1].idade := 20;
@@ -14,6 +16,9 @@ begin
   turma[2].idade := 22;
   turma[3] := turma[1];
   turma[3].nome := 'Copia de Joao';
+
+  j := 1;
+  j := i * j;
 
   for i := 1 to 3 do
   begin

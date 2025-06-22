@@ -230,6 +230,12 @@ constant:
   | string_literal {
       $$ = create_constant_literal($1, create_location(@$));
     }
+  | char_literal {
+      $$ = create_constant_literal($1, create_location(@$));
+    }
+  | boolean_literal {
+      $$ = create_constant_literal($1, create_location(@$));
+    }
   | constid { $$ = create_constant_identifier($1, create_location(@$)); }
   | PLUS constid { $$ = create_constant_signed_identifier($2, "+", create_location(@$)); }
   | MINUS constid { $$ = create_constant_signed_identifier($2, "-", create_location(@$)); }
@@ -388,7 +394,7 @@ statement:
   | WHILE expression DO statement { $$ = create_while_stmt_node($2, $4, create_location(@$)); }
   | REPEAT statement_list UNTIL expression { $$ = create_repeat_until_stmt_list_node($2, $4, create_location(@$)); }
   | FOR varid ASSIGN for_list DO statement { $$ = create_for_stmt_node($2, $4, $6, create_location(@$)); }
-  | procid { $$ = $1; }
+  | procid { $$ = create_procedure_call_node($1, NULL, create_location(@$)); }
   | procid L_PAREN optional_expression_list R_PAREN { $$ = create_procedure_call_node($1, $3, create_location(@$)); } 
   | GOTO label { $$ = create_goto_label_node($2, create_location(@$)); }
   | WITH record_variable_list DO statement { $$ = create_with_record_list_node($2, $4, create_location(@$)); }
@@ -578,8 +584,8 @@ typeid:
   | REAL { $$ = create_builtin_type_identifier("real", create_location(@$)); }
   | STRING { $$ = create_builtin_type_identifier("string", create_location(@$)); }
   | identifier {
-      IdentifierNode *typeId = update_identifier_node_kind($1, SYMBOL_TYPE);
-      $$ = create_type_identifier(typeId, create_location(@$));
+      ASTNode *typeId = update_identifier_node_kind($1, SYMBOL_TYPE);
+      $$ = create_type_identifier((IdentifierNode*)typeId, create_location(@$));
     }
 
 funcid: 
