@@ -121,6 +121,7 @@ STRING \'(\\.|[^\\'])*\'
 "writeln"       { return WRITELN; }
 "read"          { return READ; }
 "readln"        { return READLN; }
+"Chr"           { return CHR; }
 "nil"           { return NIL; }
 "with"          { return WITH; }
 "forward"       { return FORWARD; }

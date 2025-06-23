@@ -76,16 +76,35 @@ IdentifierNode *resolve_type_identifier(ASTNode *node) {
     return resolve_type_identifier(st_type->type);
   }
 
+  if (node->type == NODE_MEMBER_ACCESS) {
+    MemberAccessNode *m_node = (MemberAccessNode *)node;
+    return resolve_type_identifier(m_node->record);
+  }
+
+  if (node->type == NODE_ARRAY_ACCESS) {
+    ArrayAccessNode *a_node = (ArrayAccessNode *)node;
+    return resolve_type_identifier(a_node->array);
+  }
+
   if (node->type == NODE_RECORD_TYPE) {
-    LOG_ERROR("The node record type is not mapped to resolve identifier");
+    yyerrorf(node->location,
+             "The node record type is not mapped to resolve identifier");
+  }
+
+  if (node->type == NODE_ARRAY_TYPE) {
+    yyerrorf(node->location,
+             "The node record type is not mapped to resolve identifier");
   }
 
   return (IdentifierNode *)create_builtin_identifier("void", node->location);
 }
 
 bool is_reference_type(ASTNode *node) {
-  LOG_DEBUG("Qual o tipo aqui? %s", get_node_type_name(node->type));
   switch (node->type) {
+  case NODE_IDENTIFIER: {
+    IdentifierNode *id = resolve_identifier(node);
+    return id->symbol->info.var_info.is_ref;
+  }
   case NODE_TYPE_IDENTIFIER: {
     IdentifierNode *id = resolve_type_identifier(node);
     return id->symbol->info.var_info.is_ref;
@@ -94,7 +113,14 @@ bool is_reference_type(ASTNode *node) {
     IdentifierNode *id = resolve_type_identifier(node);
     return id->symbol->info.var_info.is_ref;
   }
+  case NODE_ARRAY_ACCESS: {
+    ArrayAccessNode *arr = (ArrayAccessNode *)node;
+    IdentifierNode *id = resolve_identifier(arr->array);
+    return id->symbol->info.var_info.is_ref;
+  }
   default:
+    yyerrorf(node->location, "%s não foi mapeado em is_reference_type", 
+             get_node_type_name(node->type));
     break;
   }
   return false;
@@ -473,7 +499,7 @@ void generate_type(CodeGenerator *code_gen, CompilerContext *context,
   }
   case NODE_POINTER_TYPE:
   default:
-    LOG_ERROR("[DEBUG - generate type] %s node type\n",
+    LOG_ERROR("[generate type] %s node type\n",
               get_node_type_name(type_node->type_expr->type));
     break;
   }
@@ -596,7 +622,7 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
   }
 
   int temp_indent_level = code_gen->indent_level;
-  IdentifierNode *target_id = NULL;
+  IdentifierNode *target_id = resolve_identifier(a->target);
   IdentifierNode *field_id = NULL;
   if (a->target->type == NODE_IDENTIFIER) {
     target_id = (IdentifierNode *)a->target;
@@ -611,8 +637,6 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
       return;
     }
   } else if (a->target->type == NODE_MEMBER_ACCESS) {
-    // Para p.name, o alvo final é 'name', mas o tipo vem de 'p'
-    // A lógica de tipo aqui pode ficar complexa, vamos simplificar por agora
     MemberAccessNode *m_node = (MemberAccessNode *)a->target;
     field_id = (IdentifierNode *)m_node->field;
     if (m_node->record->type == NODE_IDENTIFIER) {
@@ -622,27 +646,23 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
       target_id = (IdentifierNode *)a_node->array;
     } else if (m_node->record->type == NODE_MEMBER_ACCESS) {
       MemberAccessNode *m_node = (MemberAccessNode *)a->target;
-      field_id = (IdentifierNode *)m_node->field;
+      field_id = resolve_type_identifier(m_node->field);
 
       if (m_node->record->type == NODE_IDENTIFIER) {
-        target_id = (IdentifierNode *)m_node->record;
+        target_id = resolve_type_identifier(m_node->record);
       } else if (m_node->record->type == NODE_ARRAY_ACCESS) {
-        ArrayAccessNode *a_node = (ArrayAccessNode *)m_node->record;
-        target_id = (IdentifierNode *)a_node->array;
+        target_id = resolve_type_identifier(m_node->record);
       }
     } else if (a->target->type == NODE_ARRAY_ACCESS) {
-      ArrayAccessNode *a_node = (ArrayAccessNode *)a->target;
-      target_id = (IdentifierNode *)a_node->array;
-      // target_id->symbol = context_lookup(context, target_id->name);
+      target_id = resolve_type_identifier(a->target);
     }
   } else if (a->target->type == NODE_ARRAY_ACCESS) {
-    ArrayAccessNode *a_node = (ArrayAccessNode *)a->target;
-    target_id = (IdentifierNode *)a_node->array;
-    // target_id->symbol = context_lookup(context, target_id->name);
+    target_id = resolve_type_identifier(a->target);
   }
 
   bool is_struct_assignment = false;
-  if ((target_id != NULL || target_id->symbol != NULL) && field_id) {
+  if ((target_id != NULL && target_id->symbol != NULL) && field_id != NULL) {
+    SymbolEntry *s = target_id->symbol;
     IdentifierNode *identifier_node =
         resolve_type_identifier(target_id->symbol->info.var_info.type);
     SymbolEntry *field_symb = context_lookup_field(
@@ -655,8 +675,13 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
 
   if (is_struct_assignment) {
     fprintf(code_gen->output_file, "memcpy(&");
+    code_gen->indent_level = 0;
     generate_expression(code_gen, context, a->target);
-    fprintf(code_gen->output_file, ", &");
+    if (a->expression->type != NODE_BINARY_EXPR) {
+      fprintf(code_gen->output_file, ", &");
+    } else {
+      fprintf(code_gen->output_file, ", ");
+    }
     generate_expression(code_gen, context, a->expression);
     fprintf(code_gen->output_file, ", sizeof(");
     generate_expression(code_gen, context, a->target);
@@ -947,6 +972,12 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
       if (first)
         fprintf(code_gen->output_file, ", ");
       generate_expression(code_gen, context, curr->element);
+      if (curr->element->result_type != NULL) {
+        IdentifierNode* result_id = resolve_type_identifier(curr->element->result_type);
+        if (strcmp(result_id->name, "string") == 0){
+          fprintf(code_gen->output_file, ".data");
+        }
+      }
     }
     curr = (ListNode *)curr->next;
     first = false;
@@ -1059,15 +1090,19 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
   IdentifierNode *id = (IdentifierNode *)f_call->function;
   SymbolEntry *s = context_lookup(context, id->name);
 
-  bool is_function_call = (s && s->kind == SYMBOL_FUNCTION) ||
-                          (code_gen->current_function &&
-                           code_gen->current_function->kind == SYMBOL_FUNCTION);
+  bool is_function_call =
+      (s &&
+       (s->kind == SYMBOL_FUNCTION || s->kind == SYMBOL_BUILTIN_FUNCTION)) ||
+      (code_gen->current_function &&
+       (code_gen->current_function->kind == SYMBOL_FUNCTION ||
+        code_gen->current_function->kind == SYMBOL_BUILTIN_FUNCTION ||
+        code_gen->current_function->kind == SYMBOL_BUILTIN));
 
   if (code_gen->indent_level > 0) {
     print_indent(code_gen);
   }
 
-  if (s && s->kind == SYMBOL_BUILTIN) {
+  if (s && (s->kind == SYMBOL_BUILTIN || s->kind == SYMBOL_BUILTIN_FUNCTION)) {
     if (strcmp(id->name, "write") == 0) {
       generate_write(code_gen, context, node, false);
       return;
@@ -1080,6 +1115,8 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
     } else if (strcmp(id->name, "readln") == 0) {
       generate_read(code_gen, context, node, true);
       return;
+    } else if (strcmp(id->name, "Chr") == 0) {
+      fprintf(code_gen->output_file, "(char)(");
     }
   } else {
     fprintf(code_gen->output_file, "%s(", id->name);
@@ -1119,8 +1156,9 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
         LiteralNode *l = (LiteralNode *)params->element;
         fprintf(code_gen->output_file, "make_string(\"%s\")", l->value.str_val);
       } else {
-        if (var_params[index] == 1)
+        if (var_params[index] == 1) {
           fprintf(code_gen->output_file, "&");
+        }
         generate_expression(code_gen, context, params->element);
       }
     }
@@ -1131,8 +1169,7 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
       fprintf(code_gen->output_file, ", ");
   }
 
-  fprintf(code_gen->output_file,
-          code_gen->current_function && is_function_call ? ")" : ");\n");
+  fprintf(code_gen->output_file, is_function_call ? ")" : ");\n");
 }
 
 void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
@@ -1304,7 +1341,7 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
   }
   case NODE_ARRAY_ACCESS: {
     ArrayAccessNode *a_node = (ArrayAccessNode *)node;
-    IdentifierNode *array_id = resolve_type_identifier(a_node->array);
+    IdentifierNode *array_id = resolve_type_identifier(a_node);
     SymbolEntry *array_symbol = array_id->symbol;
 
     generate_expression(code_gen, context, a_node->array);
@@ -1338,11 +1375,16 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
   case NODE_MEMBER_ACCESS: {
     MemberAccessNode *m_node = (MemberAccessNode *)node;
 
-    ASTNode *record_type_node = get_expression_type(m_node->record);
     bool is_ref = false;
-    is_ref = is_reference_type(record_type_node);
+    is_ref = is_reference_type(m_node->record);
 
-    generate_expression(code_gen, context, m_node->record);
+    if (m_node->record->type != NODE_IDENTIFIER) {
+      generate_expression(code_gen, context, m_node->record);
+    } else {
+      IdentifierNode *id = resolve_identifier(m_node->record);
+      fprintf(code_gen->output_file, "%s", id->name);
+    }
+
     fprintf(code_gen->output_file, is_ref ? "->" : ".");
     generate_expression(code_gen, context, m_node->field);
     break;
@@ -1365,7 +1407,6 @@ ASTNode *get_expression_type(ASTNode *expression_node) {
   if (expression_node && expression_node->result_type) {
     return expression_node->result_type;
   }
-  // TODO: Retornar um nó de erro seria o ideal
   return NULL;
 }
 

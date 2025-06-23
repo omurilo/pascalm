@@ -450,7 +450,8 @@ void print_type_identifier_node(ASTNode *node, int indent) {
 
 void print_identifier_node(ASTNode *node, int indent) {
   if (node->type != NODE_IDENTIFIER) {
-    fprintf(stderr, "WARN: Tentou imprimir NODE_IDENTIFIER, mas o tipo é %s!\n",
+    fprintf(stderr,
+            "WARN: Tentou imprimir NODE_IDENTIFIER, mas o tipo é %s!\n",
             get_node_type_name(node->type));
   }
 
@@ -982,8 +983,7 @@ ASTNode *create_constant_literal(ASTNode *literalValue, SourceLocation loc) {
     node->const_type = CONST_BOOLEAN;
     break;
   default:
-    free(node);
-    return NULL;
+    break;
   }
 
   return (ASTNode *)node;
@@ -996,6 +996,7 @@ ASTNode *create_integer_literal(int integer, SourceLocation loc) {
   node->base.print = print_literal_value;
   node->literal_type = LITERAL_INTEGER;
   node->value.int_val = integer;
+
   return (ASTNode *)node;
 };
 
@@ -2291,11 +2292,10 @@ const char *get_param_kind_name(ParameterKind kind) {
 }
 
 ConstantValue evaluate_constant(CompilerContext *context, ASTNode *const_node) {
-  ConstantValue result = {
-      .type = CONST_INTEGER, .is_valid = false, .value = {.int_val = 0}};
+  ConstantValue result = {};
 
   if (const_node->type == NODE_CONST_DECL) {
-    ConstDeclarationNode* const_decl = (ConstDeclarationNode*)const_node;
+    ConstDeclarationNode *const_decl = (ConstDeclarationNode *)const_node;
     const_node = const_decl->const_expr;
   }
 
@@ -2762,7 +2762,8 @@ void free_node(ASTNode *node) {
   case NODE_LIST: {
     ListNode *l = (ListNode *)node;
     while (l) {
-      LOG_TRACE("Freeing ListNode %p — element=%p next=%p\n", (void *)l, (void *)l->element, (void *)l->next);
+      LOG_TRACE("Freeing ListNode %p — element=%p next=%p\n", (void *)l, (
+                oid *)l->element, (void *)l->next);
 
       if (l->element != NULL) {
         free_node(l->element);
@@ -2781,7 +2782,8 @@ void free_node(ASTNode *node) {
     break;
   }
   default:
-    LOG_ERROR("[FATAL] Tipo desconhecido ou não tratado no free_node: %d\n", node->type);
+    LOG_ERROR("[FATAL] Tipo desconhecido ou não tratado no free_node: %d\n", 
+              node->type);
     abort();
   }
 };

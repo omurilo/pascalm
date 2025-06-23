@@ -3,8 +3,8 @@
 # Configuração
 # ===========================
 CC       ?= gcc
-FILE     ?= ../tests/complex-test.pascalm
-TEST_DIR ?= ../tests
+FILE     ?= tests/complex-test.pascalm
+TEST_DIR ?= tests
 OUT_DIR  ?= build/gen
 BUILD_DIR?= build
 

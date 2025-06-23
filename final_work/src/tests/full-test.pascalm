@@ -64,11 +64,6 @@ begin
     AplicarOperacao := op(x, y);
 end;
 
-function Chr(n: integer): char;
-begin
-  Chr := n;
-end;
-
 begin
   { Inicializa }
   soma := 0;

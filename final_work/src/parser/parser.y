@@ -33,7 +33,7 @@ ASTNode *root = NULL;
 %token PROGRAM VAR CONST TYPE LABEL PROCEDURE FUNCTION BEGIN_TOK END IF THEN ELSE NIL WITH FORWARD PACKED
 %token WHILE DO FOR TO DOWNTO REPEAT UNTIL CASE OF GOTO
 %token INTEGER REAL BOOLEAN CHAR ARRAY RECORD SET FILE_TOK STRING
-%token READ WRITE READLN WRITELN
+%token READ WRITE READLN WRITELN CHR
 
 /* Symbols */
 %token GT GTE LT LTE NEQ EQ
@@ -249,7 +249,7 @@ type:
     }
   | CARET typeid {
       $$ = create_pointer_type_node($2, create_location(@$));
-    }  // pointer type
+    }
 
 simple_type:  
     L_PAREN  identifier_list R_PAREN { $$ = create_enumerated_type_node($2, create_location(@$)); }
@@ -592,6 +592,8 @@ funcid:
   identifier  { 
     $$ = update_identifier_node_kind($1, SYMBOL_FUNCTION);
   }
+  | CHR { $$ = create_builtin_identifier("Chr", create_location(@$)); }
+
 
 procid:  
   identifier { 

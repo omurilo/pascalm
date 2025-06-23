@@ -153,7 +153,8 @@ typedef enum SymbolKind {
 
   // Tipos especiais
   SYMBOL_FORWARD_DECL, // Declaração forward de função/procedimento
-  SYMBOL_BUILTIN       // Funções/procedimentos/tipos built-in
+  SYMBOL_BUILTIN,       // Funções/procedimentos/tipos built-in
+  SYMBOL_BUILTIN_FUNCTION
 } SymbolKind;
 
 typedef enum BinaryOperator {

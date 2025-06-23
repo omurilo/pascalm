@@ -8,6 +8,7 @@ static ASTNode *analyze_expression(ASTNode *expression,
 static void analyze_record_fields(SymbolEntry *record_type_symbol,
                                   CompilerContext *context);
 static void analyze_call_parameters(ASTNode *params, CompilerContext *context);
+static void analyze_functions(ASTNode *function, CompilerContext *context);
 
 bool need_string_helpers = false;
 bool need_set_helpers = false;
@@ -31,6 +32,41 @@ static void insert_builtin_types(CompilerContext *context,
     tid->symbol = s;
 
     context_insert(context, id->name, s);
+  }
+}
+
+static void insert_builtin_funcs_and_procs(CompilerContext *context,
+                                           SourceLocation location) {
+  struct builtin_funcs {
+    char *name;
+    char *type;
+    char *param;
+  } builtin_funcs[1] = {{.name = "Chr", .type = "char", .param = "integer"}};
+
+  for (int i = 0; i < 1; i++) {
+    ASTNode *result =
+        create_builtin_identifier(builtin_funcs[i].name, location);
+    IdentifierNode *id = (IdentifierNode *)result;
+    SymbolEntry *tid_symbol = context_lookup(context, "char");
+    SymbolEntry *param_tid_symbol = context_lookup(context, "integer");
+
+    id->kind = SYMBOL_BUILTIN_FUNCTION;
+
+    ASTNode *param_id = create_identifier_node("num", location);
+    ASTNode *params_id_list =
+        create_parameter_identifier_list_node(NULL, param_id, location);
+    ASTNode *params_section_list = create_formal_parameter_section_node(
+        PARAM_VALUE, params_id_list,
+        param_tid_symbol->info.type_info.definition, NULL, NULL, location);
+    ASTNode *params_list =
+        create_formal_parameters_list_node(NULL, params_section_list, location);
+    ASTNode *param = create_parameters_node(params_list, location);
+    ASTNode *block_or_forward = create_forward_declaration_node(location);
+    ASTNode *function = create_func_declaration_node(
+        result, param, tid_symbol->info.type_info.definition, block_or_forward,
+        location);
+
+    analyze_functions(function, context);
   }
 }
 
@@ -187,12 +223,13 @@ static bool check_signature_compatibility(ASTNode *expected_param_list,
                                           SymbolEntry *provided_func_symbol,
                                           CompilerContext *context) {
   ListNode *expected_sections =
-      expected_param_list ? ((ParameterNode *)expected_param_list)->params_list
-                          : NULL;
+      expected_param_list
+          ? (ListNode *)((ParameterNode *)expected_param_list)->params_list
+          : NULL;
   ASTNode *provided_params_node = provided_func_symbol->info.func_info.params;
   ListNode *provided_sections =
       provided_params_node
-          ? ((ParameterNode *)provided_params_node)->params_list
+          ? (ListNode *)((ParameterNode *)provided_params_node)->params_list
           : NULL;
 
   while (expected_sections && provided_sections) {
@@ -237,7 +274,8 @@ static void analyze_call_parameters(ASTNode *call_args_list,
 
   SymbolEntry *func_symbol = context->current_function;
 
-  if (func_symbol->kind == SYMBOL_BUILTIN) {
+  if (func_symbol->kind == SYMBOL_BUILTIN ||
+      func_symbol->kind == SYMBOL_BUILTIN_FUNCTION) {
     ListNode *call_args = (ListNode *)call_args_list;
     while (call_args) {
       if (call_args->element) {
@@ -381,7 +419,7 @@ void analyze_constants(ASTNode *constant, CompilerContext *context) {
     return;
 
   if (constant->type != NODE_LIST) {
-    ListNode *new_list = calloc(1, sizeof(ListNode *));
+    ListNode *new_list = calloc(1, sizeof(ListNode));
     new_list->base.type = NODE_LIST;
     new_list->base.location = constant->location;
     new_list->element = constant;
@@ -399,8 +437,9 @@ void analyze_constants(ASTNode *constant, CompilerContext *context) {
                                            const_node->base.location);
       s->info.const_info.definition = const_node->const_expr;
       id->symbol = s;
-      context_insert(context, id->name, s);
-      ConstantValue v = evaluate_constant(context, constant);
+
+      ConstantValue v = evaluate_constant(context, const_node->const_expr);
+
       switch (v.type) {
       case CONST_INTEGER:
         s->info.const_info.value =
@@ -425,6 +464,8 @@ void analyze_constants(ASTNode *constant, CompilerContext *context) {
       default:
         break;
       }
+
+      context_insert(context, id->name, s);
     }
 
     curr = (ListNode *)curr->next;
@@ -436,7 +477,7 @@ void analyze_types(ASTNode *types, CompilerContext *context) {
     return;
 
   if (types->type != NODE_LIST) {
-    ListNode *new_list = calloc(1, sizeof(ListNode *));
+    ListNode *new_list = calloc(1, sizeof(ListNode));
     new_list->base.type = NODE_LIST;
     new_list->base.location = types->location;
     new_list->element = types;
@@ -491,7 +532,7 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
     return;
 
   if (variables->type != NODE_LIST) {
-    ListNode *new_list = calloc(1, sizeof(ListNode *));
+    ListNode *new_list = calloc(1, sizeof(ListNode));
     new_list->base.type = NODE_LIST;
     new_list->base.location = variables->location;
     new_list->element = variables;
@@ -616,8 +657,6 @@ static int analyze_parameter_section(FormalParameterSectionNode *param,
 
     s_p->info.func_info.return_type = param->return_type;
     s_p->info.func_info.params = (ASTNode *)param->parameters;
-    // s_p->is_param = true; // Adiciona um flag para saber que este símbolo é u
-    //
 
     context_insert(context, func_param_id->name, s_p);
     return 1;
@@ -626,12 +665,12 @@ static int analyze_parameter_section(FormalParameterSectionNode *param,
   return 0;
 }
 
-void analyze_functions(ASTNode *funcs, CompilerContext *context) {
+static void analyze_functions(ASTNode *funcs, CompilerContext *context) {
   if (funcs == NULL)
     return;
 
   if (funcs->type != NODE_LIST) {
-    ListNode *new_list = calloc(1, sizeof(ListNode *));
+    ListNode *new_list = calloc(1, sizeof(ListNode));
     new_list->base.type = NODE_LIST;
     new_list->base.location = funcs->location;
     new_list->element = funcs;
@@ -1082,11 +1121,17 @@ static ASTNode *analyze_expression(ASTNode *expression,
 
       expression->result_type = element_type;
       return expression->result_type;
+    } else if (array_def && array_def->type == NODE_SIMPLE_TYPE) {
+      ASTNode *element_type = ((SimpleTypeNode *)array_def)->type;
+
+      expression->result_type = element_type;
+      return expression->result_type;
     }
     return NULL;
   }
   case NODE_MEMBER_ACCESS: {
     MemberAccessNode *m_node = (MemberAccessNode *)expression;
+
     ASTNode *record_base_type = analyze_expression(m_node->record, context);
     ASTNode *record_def = resolve_to_actual_type_def(record_base_type, context);
     SymbolEntry *record_symbol =
@@ -1250,7 +1295,8 @@ static ASTNode *analyze_expression(ASTNode *expression,
     IdentifierNode *id = (IdentifierNode *)f->function;
     SymbolEntry *id_symbol = context_lookup(context, id->name);
 
-    if (!id_symbol || id_symbol->kind != SYMBOL_FUNCTION) {
+    if (!id_symbol || (id_symbol->kind != SYMBOL_FUNCTION &&
+                       id_symbol->kind != SYMBOL_BUILTIN_FUNCTION)) {
       yyerrorf(id->base.location, "Identifier '%s' is not a function.",
                id->name);
       expression->result_type = NULL;
@@ -1725,6 +1771,7 @@ void analyze_semantics(ASTNode *root_node, CompilerContext *context) {
     analyze_variables(block->variables, context);
   }
 
+  insert_builtin_funcs_and_procs(context, program->base.location);
   if (block->procs_funcs) {
     analyze_functions(block->procs_funcs, context);
   }
