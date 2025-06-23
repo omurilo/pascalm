@@ -1,0 +1,7 @@
+.DS_Store
+old/**
+presentation/**
+.venv
+grammar/**
+readme.md
+diagram.pdf

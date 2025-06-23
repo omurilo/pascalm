@@ -103,7 +103,6 @@ begin
   end;
 
   writeln;
-  ExecutarOperacao;
   write('Imprimindo lista de alunos:');
   writeln;
   
