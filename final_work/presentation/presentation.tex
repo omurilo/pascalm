@@ -1,0 +1,255 @@
+\documentclass[
+	11pt,
+	aspectratio=169,
+]{beamer}
+
+\graphicspath{{Images/}{./}{../grammar/diagram}}
+
+\usepackage{booktabs}
+\usepackage[brazil]{babel}   
+\usepackage[utf8]{inputenc}
+
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tcolorbox}
+\tcbuselibrary{listings, skins}
+
+\usepackage[autostyle]{csquotes}
+\usepackage[style=authortitle-icomp,backend=biber]{biblatex}
+\addbibresource{presentation.bib}
+
+\usepackage[]{hyperref}
+\hypersetup{colorlinks=true}
+
+\usetheme{Berkeley}
+\usecolortheme{crane}
+\usefonttheme{default} 
+\usepackage{palatino} 
+\usepackage[default]{opensans} 
+\useinnertheme{circles}
+
+\setbeamertemplate{navigation symbols}{}
+
+
+\title[Linguagens e Compiladores (CAES101)]{Pascal como você nunca viu?}
+\subtitle{Um projeto de implementação de um subconjunto da linguagem Pascal com geração de código para C moderno.}
+\author[Murilo Alves]{Murilo Henrique Alves} 
+\institute[UTFPR]{Universidade Tecnológica Federal do Paraná} 
+\date[\today]{\today}
+
+\definecolor{DraculaBackground}{HTML}{282A36}
+\definecolor{DraculaCurrentLine}{HTML}{44475A}
+\definecolor{DraculaForeground}{HTML}{F8F8F2}
+\definecolor{DraculaComment}{HTML}{6272A4}
+\definecolor{DraculaCyan}{HTML}{8BE9FD}
+\definecolor{DraculaGreen}{HTML}{50FA7B}
+\definecolor{DraculaOrange}{HTML}{FFB86C}
+\definecolor{DraculaPink}{HTML}{FF79C6}
+\definecolor{DraculaPurple}{HTML}{BD93F9}
+\definecolor{DraculaRed}{HTML}{FF5555}
+\definecolor{DraculaYellow}{HTML}{F1FA8C}
+\definecolor{DarkComment}{HTML}{768390}
+
+\lstdefinestyle{DraculaText}{
+    language=Pascal,
+    basicstyle=\ttfamily\small\color{DraculaForeground},
+    keywordstyle=\color{DraculaPink},
+    morekeywords={VAR,FUNCTION,PROCEDURE,CASE,OF,SET,record,array,type},
+    commentstyle=\itshape\color{DraculaComment},
+    stringstyle=\color{DraculaYellow},
+    identifierstyle=\color{DraculaCyan},
+    breaklines=true,
+    showstringspaces=false,
+}
+
+\newtcblisting{caixaCodigoDracula}[1]{
+    listing only, % A caixa só terá o código
+    listing options={style=DraculaText}, % Usa o estilo de texto que definimos acima
+    % Aparência da caixa (tcolorbox)
+    colback=DraculaBackground,      % Cor de fundo
+    colframe=DraculaPurple,         % Cor da borda
+    coltext=DraculaForeground,      % Cor do texto do título
+    fonttitle=\bfseries,            % Título em negrito
+    boxrule=1pt,                    % Espessura da borda
+    % Efeito "enhanced" para um visual mais bonito
+    enhanced,
+    attach boxed title to top left={xshift=5mm, yshift=-2mm},
+    title=#1, % O título da caixa será o argumento do ambiente
+}
+
+\begin{document}
+
+\begin{frame}
+	\titlepage
+\end{frame}
+
+\begin{frame}{Outline}
+  \tableofcontents
+\end{frame}
+
+\section{O projeto}
+\begin{frame}
+  \frametitle{O que é o Projeto? (Visão Geral)}
+	
+  Este trabalho consiste na construção de um compilador da linguagem Pascal para código C,
+  resolvi fazer isso porque o pascal ISO 7185 \footcite{iso7185} é de 1983 e os compiladores modernos de C (gcc/clang)
+  podem adicionar anos luz de evolução pra essa linguagem.
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{O que foi usado?}
+
+  Para obter êxito nesse projeto as ferramentas \textbf{Flex} \footcite{flex} foi usada para análise léxica e geração dos tokens da linguagem,
+  já o \textbf{Bison} \footcite{bison} foi usado para análise sintática de acordo com a BNF (Backus-Naur Form) da linguagem \footcite{bnf}.
+
+  Ferramentas como \textbf{Make} e os compiladores modernos \textbf{GCC} e \textbf{Clang} também foram utilizados.
+\end{frame}
+
+\section{Arquitetura e fases}
+
+\begin{frame}
+	\frametitle{As particularidades da construção}
+
+  O compilador foi desenhado de forma modular, seguindo fases bem clássicas da compilação,
+  o que facilita muito a manutenção e a extensibilidade:
+
+  \begin{itemize}
+    \item \textbf{Análise léxica}: o scanner, implementado com Flex, lê o código fonte \textbf{Pascal(m)} do \textbf{stdin} ou de um arquivo de input
+      fornecido para o compilador com a tag \textbf{-f} e o converte em um fluxo de tokens (palavra-chaves, identificadores, operadores, literais, etc.)
+    \item \textbf{Análise sintática}: o parser, implementado com Bison, e linkado com as saídas do flex, lê os tokens e valida se a estrutura do programa está de acordo com a BNF da linguagem. Nessa fase uma árvore sintática abstrata \textbf{AST} foi construída para apoiar as próximas etapas.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \begin{itemize}
+    \item \textbf{Análise semântica}: esta é se uma das fases, se não a mais, mais críticas do projeto. O analisador percorre a AST para verificar a ordem semântica do código, suas particularidades são:
+      \begin{itemize}
+        \item \textbf{Tabela de símbolos com escopos}:  utiliza uma tabela de símbolos implementada com hash tables, que gerencia escopos para variáveis globais, locais e parâmetros de funções.
+        \item \textbf{Validação de tipos}: verifica a compatbilidade dos tipos em atribuições e expressões.
+      \end{itemize}
+    \item \textbf{Geração de código}: apos a validação semântica, a AST é percorrida por uma última vez para traduzir as estruturas do Pascal(m) em código C equivalente.
+  \end{itemize}
+\end{frame}
+
+\section{O compilador}
+\begin{frame}
+  \frametitle{O que o compilador suporta?}
+  O compilador implementa um subconjunto significativo de Pascal, e adiciona algumas coisas à mais, o foco é garantir a expressividade da linguagem.
+
+  \begin{itemize}
+    \item \textbf{Tipos de dados abrangentes}:
+      \begin{itemize}
+        \item Suporte à tipos primitivos: \texttt{`integer`}, \texttt{`real`}, \texttt{`char`}, \texttt{`boolean`} e \texttt{`string`}
+        \item Suporte à tipos estruturados, incluindo \texttt{`ARRAY`}, \texttt{`SET`} e \texttt{`RECORD`}, com suporte incluse à \textbf{parte variante dos registros}, uma característica poderosa do Pascal.
+      \end{itemize}
+    \item \textbf{Estruturas de controle completas}:
+      \begin{itemize}
+        \item Condicionais \texttt{`IF / THEN / ELSE`} e de múltipla escola \texttt{`CASE`}.
+        \item Laços de repetição \texttt{`FOR`}, \texttt{`WHILE`} e \texttt{`REPEAT UNTIL`}.
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+  \begin{itemize}
+    \item \textbf{Sub-rotinas avançadas}:
+      \begin{itemize}
+        \item Implementação completa de \texttt{`FUNCTION`} e \texttt{`PROCEDURE`}.
+        \item Suporte a \textbf{passagem de parâmetros por valor} e \textbf{por referência (VAR)}, traduzida de forma segura
+          para o C usando ponteiros (\texttt{`\&`} na chamada, \texttt{`*`} na declaração).
+      \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\section{A BNF}
+\begin{frame}
+  \frametitle{Inovações e particularidades refletidas na gramática (BNF)}
+  
+  A robustez deste compilador começa na definição de sua gramática formal, a qual foi definida para suportar construções poderosas
+  do Pascal. Os exemplos de regras da BNF abaixo, demonstram algumas das funcionalidades-chave.
+
+  \begin{itemize}
+    \item \textbf{Passagem de parâmetros por referência (VAR)}
+      A capacidade de modificar variáveis externamente de forma segura é definida diretamente na seção de parâmetros formais. A gramática permite explicitamente o uso da palavra-chave VAR.
+  \end{itemize}
+\end{frame}
+
+  \begin{frame}[fragile]
+      \textbf{BNF Snippet}:
+        \begin{caixaCodigoDracula}{Passagem de Parâmetros por Referência (VAR)}
+formal_parameter_section ::= identifier_list ':' type_identifier
+                           | 'VAR' identifier_list ':' type_identifier
+                           | 'FUNCTION' identifier_list parameters ':' type_identifier
+                           | 'PROCEDURE' identifier_list parameters
+      \end{caixaCodigoDracula}
+  \end{frame}
+
+  \begin{frame}[fragile]
+    \begin{itemize}
+      \item \textbf{Records com Parte Variante (Estruturas de Dados Flexíveis)}
+        Uma das funcionalidades mais avançadas do Pascal é o \texttt{`record`} com partes variantes,
+        que permite que uma mesma variável armazene diferentes estruturas de dados de forma eficiente.
+    \end{itemize}
+
+        \textbf{BNF Snippet}:
+        \begin{caixaCodigoDracula}{Records com Parte Variante}
+field_list ::= fixed_part [ ';' variant_part ] | variant_part
+
+variant_part ::= 'CASE' tag_field 'OF' variant_list
+        \end{caixaCodigoDracula}
+
+     \end{frame}
+
+     \begin{frame}
+        \begin{exampleblock}{Destaque}
+        Esta estrutura gramatical permite a criação de \texttt{`records`}
+        que se comportam de maneira similar a uma \textbf{union} em C, mas com a segurança adicional de um campo tag,
+        tornando o código mais robusto e com melhor aproveitamento de memória.
+    \end{exampleblock}
+     \end{frame}
+
+  \begin{frame}[fragile]
+    \begin{itemize}
+      \item \textbf{Construção de Conjuntos (SET)}
+        A sintaxe para a criação de conjuntos \texttt{`sets`} em Pascal é declarativa e de alto nível.
+        A gramática define uma forma clara de construir conjuntos, que o compilador traduz para operações bitwise eficientes em C.
+    \end{itemize}
+
+        \textbf{BNF Snippet}:
+        \begin{caixaCodigoDracula}{Construção de Conjuntos (SET)}
+primary_expression ::= '[' element_list ']' | ...
+
+element_list ::= element { ',' element }
+
+element ::= expression [ '..' expression ]
+        \end{caixaCodigoDracula}
+
+          \end{frame}
+
+          \begin{frame}
+            \begin{exampleblock}{Destaque}
+          A sintaxe \texttt{[ elemento, outro\_elemento, faixa\_inicio .. faixa\_fim ]} é uma inovação do Pascal que simplifica a manipulação de coleções.
+        Este compilador implementa essa abstração, gerando código C performático para representar e operar sobre esses conjuntos.
+    \end{exampleblock}
+          \end{frame}
+
+\begin{frame}[allowframebreaks]
+	\frametitle{Referências}
+	
+	\begin{thebibliography}{99}
+		\footnotesize
+		
+    	\printbibliography
+    
+	\end{thebibliography}
+\end{frame}
+
+\begin{frame}[plain]
+	{\Huge The End}
+  \begin{center}
+  \includegraphics[width=0.3\textwidth]{dev.png}
+  \end{center}
+\end{frame}
+
+\end{document}

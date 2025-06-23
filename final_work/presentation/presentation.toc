@@ -1,0 +1,5 @@
+\babel@toc {brazil}{}\relax 
+\beamer@sectionintoc {1}{O projeto}{3}{0}{1}
+\beamer@sectionintoc {2}{Arquitetura e fases}{5}{0}{2}
+\beamer@sectionintoc {3}{O compilador}{7}{0}{3}
+\beamer@sectionintoc {4}{A BNF}{9}{0}{4}

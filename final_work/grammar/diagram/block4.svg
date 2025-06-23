@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="365" height="69">
+   <defs>
+      <style type="text/css">
+    @namespace "http://www.w3.org/2000/svg";
+    .line                 {fill: none; stroke: #332200; stroke-width: 1;}
+    .bold-line            {stroke: #140E00; shape-rendering: crispEdges; stroke-width: 2;}
+    .thin-line            {stroke: #1F1400; shape-rendering: crispEdges}
+    .filled               {fill: #332200; stroke: none;}
+    text.terminal         {font-family: Verdana, Sans-serif;
+                            font-size: 12px;
+                            fill: #140E00;
+                            font-weight: bold;
+                          }
+    text.nonterminal      {font-family: Verdana, Sans-serif;
+                            font-size: 12px;
+                            fill: #1A1100;
+                            font-weight: normal;
+                          }
+    text.regexp           {font-family: Verdana, Sans-serif;
+                            font-size: 12px;
+                            fill: #1F1400;
+                            font-weight: normal;
+                          }
+    rect, circle, polygon {fill: #332200; stroke: #332200;}
+    rect.terminal         {fill: #FFC34D; stroke: #332200; stroke-width: 1;}
+    rect.nonterminal      {fill: #FFDF9E; stroke: #332200; stroke-width: 1;}
+    rect.text             {fill: none; stroke: none;}
+    polygon.regexp        {fill: #FFECC7; stroke: #332200; stroke-width: 1;}
+  </style>
+   </defs>
+   <polygon points="9 33 1 29 1 37"/>
+   <polygon points="17 33 9 29 9 37"/>
+   <a xmlns:xlink="http://www.w3.org/1999/xlink"
+      xlink:href="#proc_or_func"
+      xlink:title="proc_or_func">
+      <rect x="71" y="19" width="102" height="32"/>
+      <rect x="69" y="17" width="102" height="32" class="nonterminal"/>
+      <text class="nonterminal" x="79" y="37">proc_or_func</text>
+   </a>
+   <rect x="193" y="19" width="24" height="32" rx="10"/>
+   <rect x="191"
+         y="17"
+         width="24"
+         height="32"
+         class="terminal"
+         rx="10"/>
+   <text class="terminal" x="201" y="37">;</text>
+   <a xmlns:xlink="http://www.w3.org/1999/xlink"
+      xlink:href="#block5"
+      xlink:title="block5">
+      <rect x="277" y="19" width="60" height="32"/>
+      <rect x="275" y="17" width="60" height="32" class="nonterminal"/>
+      <text class="nonterminal" x="285" y="37">block5</text>
+   </a>
+   <path class="line"
+         d="m17 33 h2 m40 0 h10 m102 0 h10 m0 0 h10 m24 0 h10 m-186 0 l20 0 m-1 0 q-9 0 -9 -10 l0 -12 q0 -10 10 -10 m166 32 l20 0 m-20 0 q10 0 10 -10 l0 -12 q0 -10 -10 -10 m-166 0 h10 m0 0 h156 m-206 32 h20 m206 0 h20 m-246 0 q10 0 10 10 m226 0 q0 -10 10 -10 m-236 10 v14 m226 0 v-14 m-226 14 q0 10 10 10 m206 0 q10 0 10 -10 m-216 10 h10 m0 0 h196 m20 -34 h10 m60 0 h10 m3 0 h-3"/>
+   <polygon points="355 33 363 29 363 37"/>
+   <polygon points="355 33 347 29 347 37"/>
+</svg>

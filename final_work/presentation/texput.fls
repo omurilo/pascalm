@@ -1,0 +1,4 @@
+PWD /Users/flash/projects/caes101-languages-and-compilers/final_work/presentation
+INPUT /nix/store/kz4bx8ni0g6y06rfj451hm5h4na90724-texlive-combined-full-2024.20241027/share/texmf-var/web2c/texmf.cnf
+INPUT /nix/store/kz4bx8ni0g6y06rfj451hm5h4na90724-texlive-combined-full-2024.20241027/share/texmf-var/web2c/pdftex/latex.fmt
+OUTPUT texput.log
