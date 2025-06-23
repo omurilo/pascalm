@@ -1,1 +1,4 @@
 *.dSYM
+../old
+../presentation
+../grammar

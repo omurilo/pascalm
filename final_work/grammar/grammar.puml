@@ -1,0 +1,183 @@
+@startebnf
+title Pascal(m) Uma gramática Pascal porém moderna
+
+program = "program", identifier, [ program_heading ], ";", block, "." ;
+
+program_heading = "(", identifier_list, ")" ;
+
+identifier_list = identifier, { ",", identifier } ;
+
+block = [ label_declaration, ";" ], 
+        [ constant_declaration, ";" ], 
+        [ type_declaration, ";" ], 
+        [ variable_declaration, ";" ], 
+        [ proc_and_func_declaration, ";" ],
+        "begin", statement_list, "end" ;
+
+label_declaration = "label", unsigned_integer, { ",", unsigned_integer } ;
+
+constant_declaration = "const", identifier, "=", constant, { ";", identifier, "=", constant } ;
+
+type_declaration = "type", identifier, "=", type, { ";", identifier, "=", type } ;
+
+variable_declaration = "var", variableid_list, ":", type, { ";", variableid_list, ":", type } ;
+
+variableid_list = identifier, { ",", identifier } ;
+
+constant = integer_literal 
+         | real_literal 
+         | string_literal 
+         | constid 
+         | "+", constid 
+         | "-", constid ;
+
+type = simple_type 
+     | structured_type 
+     | "^", typeid ;
+
+simple_type = "(", identifier_list, ")" 
+            | constant, "..", constant 
+            | typeid ;
+
+structured_type = "array", "[", index_list, "]", "of", type 
+                | "record", field_list, "end" 
+                | "set", "of", simple_type 
+                | "file", "of", type 
+                | "packed", structured_type ;
+
+index_list = simple_type, { ",", simple_type } ;
+
+field_list = [ fixed_part ], [ ";", variant_part ] 
+           | variant_part ;
+
+fixed_part = record_field, { ";", record_field } ;
+
+record_field = [ fieldid_list, ":", type ] ;
+
+fieldid_list = identifier, { ",", identifier } ;
+
+variant_part = "case", tag_field, "of", variant_list ;
+
+tag_field = typeid | identifier, ":", typeid ;
+
+variant_list = variant, { ";", variant } ;
+
+variant = [ case_label_list, ":", "(", field_list, ")" ] ;
+
+case_label_list = constant, { ",", constant } ;
+
+proc_and_func_declaration = proc_or_func, { ";", proc_or_func } ;
+
+proc_or_func = "procedure", identifier, parameters, ";", block_or_forward 
+              | "function", identifier, parameters, ":", typeid, ";", block_or_forward ;
+
+block_or_forward = block | "forward" ;
+
+parameters = "(", [ formal_parameter_list ], ")" ;
+
+formal_parameter_list = formal_parameter_section, { ";", formal_parameter_section } ;
+
+formal_parameter_section = parameterid_list, ":", typeid 
+                          | "var", parameterid_list, ":", typeid 
+                          | "procedure", identifier, parameters 
+                          | "function", identifier, parameters, ":", typeid ;
+
+parameterid_list = identifier, { ",", identifier } ;
+
+statement = matched_statement | unmatched_statement ;
+
+matched_statement = "if", expression, "then", matched_statement, "else", matched_statement 
+                   | other_statement ;
+
+unmatched_statement = "if", expression, "then", statement 
+                     | "if", expression, "then", matched_statement, "else", unmatched_statement ;
+
+other_statement = [ 
+    variable, ":=", expression 
+    | "begin", statement_list, "end" 
+    | "case", expression, "of", case_list, "end" 
+    | "case", expression, "of", case_list, case_else, "end" 
+    | "while", expression, "do", statement 
+    | "repeat", statement_list, "until", expression 
+    | "for", varid, ":=", for_list, "do", statement 
+    | procid 
+    | procid, "(", expression_list, ")" 
+    | "goto", label 
+    | "with", record_variable_list, "do", statement 
+    | label, ":", statement 
+] ;
+
+expression = relational_expression ;
+
+relational_expression = additive_expression 
+                       | additive_expression, relational_op, additive_expression ;
+
+additive_expression = multiplicative_expression 
+                     | additive_expression, add_op, multiplicative_expression ;
+
+multiplicative_expression = unary_expression 
+                           | multiplicative_expression, mul_op, unary_expression ;
+
+unary_expression = primary_expression 
+                  | unary_op, unary_expression ;
+
+primary_expression = variable 
+                    | unsigned_integer 
+                    | unsigned_real 
+                    | string_literal 
+                    | "nil" 
+                    | funcid, "(", [ expression_list ], ")" 
+                    | "[", [ element_list ], "]" 
+                    | "(", expression, ")" ;
+
+expression_list = expression, { ",", expression } ;
+
+element_list = element, { ",", element } ;
+
+element = expression | expression, "...", expression ;
+
+relational_op = "<" | "<=" | "=" | "<>" | ">=" | ">" ;
+
+add_op = "+" | "-" | "or" ;
+
+mul_op = "*" | "/" | "div" | "mod" | "and" | "in" ;
+
+unary_op = "+" | "-" | "not" ;
+
+statement_list = statement, { ";", statement } ;
+
+case_list = case_element, { case_element } ;
+
+case_element = case_label_list, ":", statement, ";" ;
+
+case_else = "else", statement, ";" ;
+
+for_list = expression, "to", expression 
+         | expression, "downto", expression ;
+
+subscript_list = expression, { ",", expression } ;
+
+record_variable_list = variable, { ",", variable } ;
+
+variable = identifier 
+         | variable, "[", subscript_list, "]" 
+         | variable, ".", fieldid 
+         | variable, "^" ;
+
+identifier = IDENTIFIER ;
+funcid = identifier ;
+procid = identifier | "write" | "writeln" | "read" | "readln" ;
+varid = identifier ;
+fieldid = identifier ;
+constid = identifier ;
+typeid = "char" | "boolean" | "integer" | "real" | "string" | identifier ;
+
+unsigned_integer = INTEGER_LITERAL ;
+unsigned_real = REAL_LITERAL ;
+integer_literal = INTEGER_LITERAL ;
+real_literal = REAL_LITERAL ;
+string_literal = STRING_LITERAL ;
+char_literal = CHAR_LITERAL ;
+boolean_literal = BOOLEAN_LITERAL ;
+
+@endebnf
