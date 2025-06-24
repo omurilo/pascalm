@@ -1,0 +1,18 @@
+program TesteWithSimples;
+type
+  TPonto = record
+    x, y: integer;
+  end;
+var
+  p: TPonto;
+begin
+  p.x := 100;
+  p.y := 200;
+
+  with p do
+  begin
+    { Dentro deste bloco, 'x' deve ser resolvido como 'p.x' }
+    { e 'y' como 'p.y' pelo analisador semântico. }
+    writeln(x, y); { Deve imprimir 100 e 200 }
+  end;
+end.

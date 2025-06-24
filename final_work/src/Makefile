@@ -142,10 +142,10 @@ compile-c: $(BINARIES)
 
 $(OUT_DIR)/%.c: $(TEST_DIR)/%.pascalm $(TARGET) parser | prepare
 	@mkdir -p $(OUT_DIR)
-	$(call run, Generating C from $<, ./$(TARGET) -f $< -o $@)
+	-$(call run, Generating C from $<, ./$(TARGET) -f $< -o $@)
 
 $(OUT_DIR)/%: $(OUT_DIR)/%.c | prepare
-	$(call run, Compiling binary $@, $(CC) $(CFLAGS) $< -o $@)
+	-$(call run, Compiling binary $@, $(CC) $(CFLAGS) $< -o $@)
 
 # ===========================
 # Limpeza

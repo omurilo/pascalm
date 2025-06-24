@@ -1,0 +1,15 @@
+program TesteFuncaoComoParametro;
+
+function Soma(a, b: integer): integer;
+begin
+  Soma := a + b;
+end;
+
+function Operacao(x, y: integer; func: function(n1, n2: integer): integer): integer;
+begin
+  Operacao := func(x, y);
+end;
+
+begin
+  writeln(Operacao(10, 20, Soma)); { Deve imprimir 30 }
+end.

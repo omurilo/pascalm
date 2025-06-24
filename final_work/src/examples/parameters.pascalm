@@ -1,0 +1,22 @@
+program TesteParametros;
+var
+  x: integer;
+
+procedure PorValor(val: integer);
+begin
+  val := 20; { Altera apenas a cópia local }
+end;
+
+procedure PorReferencia(var ref: integer);
+begin
+  ref := 30; { Altera a variável original }
+end;
+
+begin
+  x := 10;
+  PorValor(x);
+  writeln(x); { Deve imprimir 10 }
+
+  PorReferencia(x);
+  writeln(x); { Deve imprimir 30 }
+end.

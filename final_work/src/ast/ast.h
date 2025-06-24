@@ -266,6 +266,7 @@ struct IdentifierNode {
     SymbolKind kind;             // Inicialmente SYMBOL_UNKNOWN
     // int is_lvalue;               // Is this usable as an l-value?
     SymbolEntry *symbol;
+    ASTNode *with_node;
 };
 
 struct TypeIdentifierNode {
@@ -733,6 +734,7 @@ const char* unary_op_to_string(UnaryOperator op);
 const char* get_symbol_kind_name(SymbolKind symb);
 void check_params(ASTNode *id, ASTNode *params);
 const char* get_literal_type_name(LiteralType type);
+const char* cast_from_literal_type_name(LiteralType type);
 const char *get_param_kind_name(ParameterKind kind);
 // void print_binary_expr_node(ASTNode *node, int indent);
 // void print_heading(ASTNode *node, int indent);

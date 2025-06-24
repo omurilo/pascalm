@@ -79,7 +79,7 @@ ASTNode *root = NULL;
 %type <node> simple_type
 %type <node> structured_type unpacked_structured_type
 %type <node> index_list
-%type <node> field_list
+%type <node> field_list field_list_content optional_semicolon
 %type <node> fixed_part
 %type <node> record_field
 %type <node> fieldid_list
@@ -91,7 +91,7 @@ ASTNode *root = NULL;
 %type <node> case_label
 
 %type <node> statement_list
-%type <node> statement
+%type <node> statement optional_statement
 %type <node> variable
 %type <node> subscript_list
 %type <node> case_list
@@ -293,11 +293,28 @@ index_list:
       $$ = append_index_to_list($1, $3, create_location(@$));
     }
 
-field_list:  
-    fixed_part { $$ = create_field_list($1, NULL, create_location(@$)); }  
-  | fixed_part SEMICOLON variant_part { $$ = create_field_list($1, $3, create_location(@$)); }
-  | variant_part { $$ = create_field_list(NULL, $1, create_location(@$)); } 
-  | empty
+field_list:
+    empty {
+      $$ = create_field_list(NULL, NULL, create_location(@$));
+    }
+| field_list_content optional_semicolon {
+      $$ = $1;
+    }
+
+field_list_content:
+    fixed_part {
+      $$ = create_field_list($1, NULL, create_location(@$));
+    }
+| variant_part {
+      $$ = create_field_list(NULL, $1, create_location(@$));
+    }
+| fixed_part SEMICOLON variant_part {
+      $$ = create_field_list($1, $3, create_location(@$));
+    }
+
+optional_semicolon:
+    SEMICOLON
+| empty
 
 fixed_part:  
     record_field { $$ = create_fixed_part_node(NULL, $1, create_location(@$)); }
@@ -381,11 +398,14 @@ parameterid_list:
 
 statement_list:  
     statement { $$ = create_stmt_list_node($1, create_location(@$)); }
-  | statement_list SEMICOLON statement { $$ = append_stmt_list($1, $3, create_location(@$)); }  
+  | statement_list SEMICOLON optional_statement { $$ = append_stmt_list($1, $3, create_location(@$)); }  
+
+optional_statement:
+    statement { $$ = $1; }
+  | empty
 
 statement:  
-    empty  
-  | variable ASSIGN expression { $$ = create_assign_node($1, $3, create_location(@$)); }
+    variable ASSIGN expression { $$ = create_assign_node($1, $3, create_location(@$)); }
   | BEGIN_TOK statement_list END  { $$ = create_stmt_list_node($2, create_location(@$)); }
   | IF expression THEN statement %prec LOWER_THAN_ELSE { $$ = create_if_stmt_node($2, $4, NULL, create_location(@$)); }
   | IF expression THEN statement ELSE statement { $$ = create_if_stmt_node($2, $4, $6, create_location(@$)); }
@@ -652,5 +672,5 @@ boolean_literal:
       $$ = create_boolean_literal($1, create_location(@$));
     }
 
-empty: { $$ = NULL; }
+empty: %empty { $$ = NULL; }
 

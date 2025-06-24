@@ -1,0 +1,9 @@
+program TesteStrings;
+var
+  s1, s2, s3: string;
+begin
+  s1 := 'Ola';
+  s2 := ' ';
+  s3 := s1 + s2 + 'Mundo';
+  writeln(s3); { Deve imprimir Ola Mundo }
+end.

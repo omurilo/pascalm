@@ -103,6 +103,7 @@ bool is_reference_type(ASTNode *node) {
   switch (node->type) {
   case NODE_IDENTIFIER: {
     IdentifierNode *id = resolve_identifier(node);
+    LOG_DEBUG("o id deve estar nulo %s", id->symbol);
     return id->symbol->info.var_info.is_ref;
   }
   case NODE_TYPE_IDENTIFIER: {
@@ -127,17 +128,19 @@ bool is_reference_type(ASTNode *node) {
 }
 
 void generate_string_operand(CodeGenerator *code_gen, CompilerContext *context,
-                             ASTNode *operand_node) {
+                             ASTNode *operand_node, bool force) {
   IdentifierNode *id = resolve_type_identifier(operand_node->result_type);
 
   if (strcmp(id->name, "char") == 0) {
     fprintf(code_gen->output_file, "make_string_from_char(");
     generate_expression(code_gen, context, operand_node);
     fprintf(code_gen->output_file, ")");
-  } else {
+  } else if (force) { 
     fprintf(code_gen->output_file, "make_string(");
     generate_expression(code_gen, context, operand_node);
     fprintf(code_gen->output_file, ")");
+  } else {
+    generate_expression(code_gen, context, operand_node);
   }
 }
 
@@ -238,24 +241,24 @@ void generate_constant(CodeGenerator *code_gen, CompilerContext *context,
 
   switch (literal->literal_type) {
   case LITERAL_INTEGER:
-    fprintf(code_gen->output_file, "int %s = %d;\n", id->name,
+    fprintf(code_gen->output_file, "#define %s %d\n", id->name,
             literal->value.int_val);
     break;
   case LITERAL_REAL:
-    fprintf(code_gen->output_file, "double %s = %.2f;\n", id->name,
+    fprintf(code_gen->output_file, "#define %s %.2f\n", id->name,
             literal->value.real_val);
     break;
   case LITERAL_STRING:
-    fprintf(code_gen->output_file, "string %s = make_string('%s');\n", id->name,
+    fprintf(code_gen->output_file, "#define %s make_string('%s')\n", id->name,
             literal->value.str_val);
     break;
   case LITERAL_CHAR:
-    fprintf(code_gen->output_file, "char %s = %c;\n", id->name,
+    fprintf(code_gen->output_file, "#define %s '%c'\n", id->name,
             literal->value.char_val);
     break;
   case LITERAL_BOOLEAN:
-    fprintf(code_gen->output_file, "bool %s = %s;\n", id->name,
-            literal->value.bool_val ? "true" : "false");
+    fprintf(code_gen->output_file, "#define %s %d;\n", id->name,
+            literal->value.bool_val);
     break;
   default:
     break;
@@ -665,21 +668,15 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
     if (a->expression->type == NODE_BINARY_EXPR) {
       BinaryOperationNode *bin_op = (BinaryOperationNode *)a->expression;
       fprintf(code_gen->output_file, "concat_string(");
-      generate_string_operand(code_gen, context, bin_op->left);
+      generate_string_operand(code_gen, context, bin_op->left, true);
       fprintf(code_gen->output_file, ", ");
-      generate_string_operand(code_gen, context, bin_op->right);
+      generate_string_operand(code_gen, context, bin_op->right, true);
       fprintf(code_gen->output_file, ")");
     } else {
       fprintf(code_gen->output_file, "make_string(");
-      generate_string_operand(code_gen, context, a->expression);
+      generate_string_operand(code_gen, context, a->expression, false);
       fprintf(code_gen->output_file, ")");
     }
-    // else {
-    //   fprintf(code_gen->output_file,
-    //           "clone_string("); // Supondo uma função clone_string
-    //   generate_expression(code_gen, context, a->expression);
-    //   fprintf(code_gen->output_file, ")");
-    // }
   } else {
     generate_expression(code_gen, context, a->expression);
   }
@@ -1009,7 +1006,11 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
               } else if (strcmp(type_name, "string") == 0) {
                 strcat(format_string, "%s");
                 break;
+              } else if (strcmp(type_name, "double") == 0) {
+                strcat(format_string, "%.2f");
+                break;
               }
+
             }
           }
         } else {
@@ -1033,7 +1034,11 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
         } else if (strcmp(id->name, "string") == 0) {
           strcat(format_string, "%s");
           break;
+        } else if (strcmp(id->name, "double") == 0) {
+          strcat(format_string, "%.2f");
+          break;
         }
+
         break;
       }
       default:
@@ -1293,9 +1298,11 @@ void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
   case NODE_GOTO_STMT:
     fprintf(code_gen->output_file, "/* statement list */\n");
     break;
-  case NODE_WITH_STMT:
-    fprintf(code_gen->output_file, "/* statement list */\n");
+  case NODE_WITH_STMT: {
+    WithNode *with = (WithNode *)node;
+    generate_statement(code_gen, context, with->body);
     break;
+  }
   case NODE_LABELED_STMT:
     fprintf(code_gen->output_file, "/* statement list */\n");
     break;
@@ -1320,7 +1327,10 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
       is_ref = s->info.var_info.is_ref;
     }
 
-    if (s) {
+    if (id->with_node != NULL) {
+      generate_expression(code_gen, context, id->with_node);
+      fprintf(code_gen->output_file, ".%s", id->name);
+    } else if (s) {
       fprintf(code_gen->output_file, is_ref ? "*%s" : "%s", id->name);
     } else {
       fprintf(code_gen->output_file, "%s", id->name);

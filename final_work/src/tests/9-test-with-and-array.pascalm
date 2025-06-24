@@ -1,0 +1,21 @@
+program TesteWithArrayRecord;
+type
+  TInfo = record
+    id: integer;
+    valor: string;
+  end;
+var
+  lista: array[1..1] of TInfo;
+begin
+  lista[1].id := 99;
+  lista[1].valor := 'Teste';
+
+  { O analisador precisa entender que o contexto do WITH }
+  { é o registro 'lista[1]'. }
+  with lista[1] do
+  begin
+    { 'id' deve ser resolvido como 'lista[1].id' }
+    { 'valor' deve ser resolvido como 'lista[1].valor' }
+    writeln(id, valor); { Deve imprimir 99 e Teste }
+  end;
+end.

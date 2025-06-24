@@ -29,6 +29,15 @@ void scope_stack_push(ScopeStack *stack) {
   stack->tables[stack->scope_level] = ht_create();
 }
 
+void scope_stack_push_table(ScopeStack *stack, ht *table) {
+  stack->scope_level++;
+  if (stack->scope_level >= stack->capacity) {
+    stack->capacity *= 2;
+    stack->tables = realloc(stack->tables, stack->capacity * sizeof(ht *));
+  }
+  stack->tables[stack->scope_level] = table;
+}
+
 void scope_stack_pop(ScopeStack *stack) {
   if (stack->scope_level >= 0) {
     ht_destroy(stack->tables[stack->scope_level]);
@@ -43,11 +52,51 @@ ht *scope_stack_peek(ScopeStack *stack) {
   return NULL;
 }
 
+ASTNode **with_stack_create(CompilerContext *context) {
+  ASTNode *stack = xalloc(1, sizeof(ASTNode));
+  context->with_stack_capacity = 8;
+  context->with_stack =
+      xalloc(context->with_stack_capacity, sizeof(ASTNode *));
+  context->with_stack_top = 1;
+  return context->with_stack;
+}
+
+void with_stack_push(CompilerContext *context, ASTNode *entry) {
+  if (!context->with_stack)
+    with_stack_create(context);
+  if (context->with_stack_top >= context->with_stack_capacity) {
+    context->with_stack_capacity *= 2;
+    context->with_stack =
+        realloc(context->with_stack,
+                context->with_stack_capacity * sizeof(ASTNode *));
+  }
+  context->with_stack[context->with_stack_top] = entry;
+  context->with_stack_top++;
+}
+
+ASTNode *with_stack_pop(CompilerContext *context) {
+  if (context->with_stack_top > 0) {
+    // free(context->with_stack[context->with_stack_top]);
+    context->with_stack_top--;
+    return context->with_stack[context->with_stack_top];
+  }
+  return NULL;
+}
+
+ASTNode *with_stack_peek(CompilerContext *context) {
+  if (context->with_stack_top > 0) {
+    return context->with_stack[context->with_stack_top - 1];
+  }
+  return NULL;
+}
+
 CompilerContext *context_create() {
   CompilerContext *context = xalloc(1, sizeof(CompilerContext));
   context->scope_stack = scope_stack_create();
   context->current_function = NULL;
   context->has_errors = false;
+  context->with_stack = NULL;
+  context->with_stack_capacity = 0;
   scope_stack_push(context->scope_stack);
   return context;
 }
@@ -106,5 +155,7 @@ void context_insert_field(CompilerContext *context,
 
 SymbolEntry *context_lookup_field(ht *table, const char *key) {
   SymbolEntry *entry = ht_get(table, key);
-  return entry;
+  if (entry != NULL)
+    return entry;
+  return NULL;
 }

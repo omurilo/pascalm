@@ -111,6 +111,8 @@ static LiteralType get_literal_type_from_name(const char *name) {
     return LITERAL_STRING;
   }
 
+  fprintf(stderr, "[WARN] Trying to get literal type from %s\n", name);
+
   return LITERAL_NIL;
 }
 
@@ -119,21 +121,39 @@ static SymbolEntry *resolve_to_type_symbol(ASTNode *type_node,
   if (!type_node)
     return NULL;
 
-  if (type_node->type == NODE_TYPE_IDENTIFIER) {
-    IdentifierNode *id = ((TypeIdentifierNode *)type_node)->id;
-    if (!id->symbol) {
-      id->symbol = context_lookup(context, id->name);
-    }
-    SymbolEntry *s = id->symbol;
+  if (type_node->type == NODE_IDENTIFIER) {
+    IdentifierNode *id = (IdentifierNode *)type_node;
+    SymbolEntry *s = context_lookup(context, id->name);
+    id->symbol = s;
     return s;
   }
+
+  if (type_node->type == NODE_TYPE_IDENTIFIER) {
+    return resolve_to_type_symbol(
+        ((ASTNode *)((TypeIdentifierNode *)type_node)->id), context);
+  }
+
   if (type_node->type == NODE_STRUCTURED_TYPE) {
     return resolve_to_type_symbol(((StructuredTypeNode *)type_node)->type,
                                   context);
   }
+
   if (type_node->type == NODE_SIMPLE_TYPE) {
     return resolve_to_type_symbol(((SimpleTypeNode *)type_node)->type, context);
   }
+
+  if (type_node->type == NODE_ARRAY_ACCESS) {
+    return resolve_to_type_symbol(((ArrayAccessNode *)type_node)->array,
+                                  context);
+  }
+
+  if (type_node->type == NODE_ARRAY_TYPE) {
+    return resolve_to_type_symbol(((ArrayTypeNode *)type_node)->type, context);
+  }
+
+  yyerrorf(type_node->location, "The node of kind %s is not mapped here (%d)",
+           get_node_type_name(type_node->type), __LINE__);
+
   return NULL;
 }
 
@@ -156,6 +176,7 @@ static ASTNode *resolve_to_actual_type_def(ASTNode *type_node,
   if (type_node->type == NODE_STRUCTURED_TYPE) {
     return ((StructuredTypeNode *)type_node)->type;
   }
+
   if (type_node->type == NODE_SIMPLE_TYPE) {
     return resolve_to_actual_type_def(((SimpleTypeNode *)type_node)->type,
                                       context);
@@ -165,6 +186,9 @@ static ASTNode *resolve_to_actual_type_def(ASTNode *type_node,
 
 SymbolEntry *get_primitive_type(SymbolEntry *type_symbol) {
   if (type_symbol && type_symbol->kind == SYMBOL_TYPE_ALIAS) {
+    LOG_DEBUG("é um alias mesmo, ta nulo? %s", 
+              type_symbol->info.type_info.aliased_type);
+
     return type_symbol->info.type_info.aliased_type;
   }
   return type_symbol;
@@ -178,11 +202,37 @@ static int check_type_compatibility(ASTNode *dest_type, ASTNode *src_type,
   SymbolEntry *primitive_src = get_primitive_type(src_symbol);
 
   if (primitive_dest == NULL || primitive_src == NULL) {
-    LOG_DEBUG("Qual os tipos? [dest: %p(%p)] - [src: %p(%p))]",
+    LOG_DEBUG("Qual os tipos? [dest: %p(%p)] - [src: %p(%p)]",
               (void *)dest_symbol, (void *)dest_type, (void *)src_symbol,
               (void *)src_type);
 
     return false;
+  }
+
+  LiteralType dest_literal =
+      dest_symbol->tag != LITERAL_NIL
+          ? dest_symbol->tag
+          : get_literal_type_from_name(dest_symbol->name);
+  LiteralType src_literal = src_symbol->tag != LITERAL_NIL
+                                ? src_symbol->tag
+                                : get_literal_type_from_name(src_symbol->name);
+
+  if (dest_literal == LITERAL_CHAR && src_literal == LITERAL_INTEGER) {
+    // TODO: get value from integer to compare if is >= 0 and <= 255
+    return true;
+  }
+
+  if (dest_literal == LITERAL_STRING && src_literal == LITERAL_CHAR) {
+    // TODO: get value from integer to compare if is >= 0 and <= 255
+    return true;
+  }
+
+  if (dest_literal == LITERAL_INTEGER && src_literal == LITERAL_INTEGER) {
+    return true;
+  }
+
+  if (dest_literal == LITERAL_REAL && src_literal == LITERAL_INTEGER) {
+    return true;
   }
 
   if (primitive_dest == primitive_src) {
@@ -200,21 +250,9 @@ static int check_type_compatibility(ASTNode *dest_type, ASTNode *src_type,
     return true;
   }
 
-  LiteralType dest_literal = get_literal_type_from_name(dest_symbol->name);
-  LiteralType src_literal = get_literal_type_from_name(src_symbol->name);
-
-  if (dest_literal == LITERAL_CHAR && src_literal == LITERAL_INTEGER) {
-    // TODO: get value from integer to compare if is >= 0 and <= 255
-    return true;
-  }
-
-  if (dest_literal == LITERAL_STRING && src_literal == LITERAL_CHAR) {
-    // TODO: get value from integer to compare if is >= 0 and <= 255
-    return true;
-  }
-
-  LOG_DEBUG("Qual os tipos? [src: %s] [dest: %s]", src_symbol->name,
-            dest_symbol->name);
+  LOG_DEBUG("Qual os tipos? [src: %s[%s]] [dest: %s[%s]]", src_symbol->name,
+            cast_from_literal_type_name(src_symbol->tag), dest_symbol->name,
+            cast_from_literal_type_name(dest_symbol->tag));
 
   return false;
 }
@@ -459,7 +497,7 @@ void analyze_constants(ASTNode *constant, CompilerContext *context) {
     return;
 
   if (constant->type != NODE_LIST) {
-    ListNode *new_list = calloc(1, sizeof(ListNode));
+    ListNode *new_list = xalloc(1, sizeof(ListNode));
     new_list->base.type = NODE_LIST;
     new_list->base.location = constant->location;
     new_list->element = constant;
@@ -517,7 +555,7 @@ void analyze_types(ASTNode *types, CompilerContext *context) {
     return;
 
   if (types->type != NODE_LIST) {
-    ListNode *new_list = calloc(1, sizeof(ListNode));
+    ListNode *new_list = xalloc(1, sizeof(ListNode));
     new_list->base.type = NODE_LIST;
     new_list->base.location = types->location;
     new_list->element = types;
@@ -558,9 +596,16 @@ void analyze_types(ASTNode *types, CompilerContext *context) {
       id->symbol = s;
       tid->symbol = id->symbol;
 
+      LOG_DEBUG("Estamos colocando na tabela de símbolos: %s e o símbolo ki"
+                "nd: %s\n",
+                id->name, get_symbol_kind_name(s->kind));
+
       context_insert(context, id->name, s);
 
-      analyze_record_fields(s, context);
+      if (type_expr_def->type == NODE_RECORD_TYPE) {
+        analyze_record_fields(s, context);
+      }
+
     }
 
     curr = (ListNode *)curr->next;
@@ -572,7 +617,7 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
     return;
 
   if (variables->type != NODE_LIST) {
-    ListNode *new_list = calloc(1, sizeof(ListNode));
+    ListNode *new_list = xalloc(1, sizeof(ListNode));
     new_list->base.type = NODE_LIST;
     new_list->base.location = variables->location;
     new_list->element = variables;
@@ -595,6 +640,8 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
               id->name, SYMBOL_VARIABLE, context->scope_stack->scope_level,
               vars->base.location);
 
+          s->info.var_info.type = variable->type_node;
+
           ASTNode *def =
               resolve_to_actual_type_def(variable->type_node, context);
 
@@ -602,7 +649,7 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
             need_string_helpers = true;
           }
 
-          if (def->type == NODE_ARRAY_TYPE) {
+          if (def && def->type == NODE_ARRAY_TYPE) {
             ArrayTypeNode *array = (ArrayTypeNode *)def;
             IndexList *index_list = (IndexList *)array->index_list;
 
@@ -624,7 +671,6 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
                 };
                 s->info.var_info.dimensions[i].lower = dim.lower;
                 s->info.var_info.dimensions[i].upper = dim.upper;
-                s->info.var_info.num_dimensions = offset + 1;
               } else if (element->type == NODE_ENUMERATED_TYPE) {
                 EnumeratedTypeNode *enum_node = (EnumeratedTypeNode *)element;
                 int count = count_list_nodes(enum_node->identifiers_list);
@@ -661,7 +707,6 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
           }
 
           s->info.var_info.offset = offset + index;
-          s->info.var_info.type = def;
           s->info.var_info.is_ref = false;
           id->symbol = s;
           context_insert(context, id->name, s);
@@ -729,7 +774,7 @@ static void analyze_functions(ASTNode *funcs, CompilerContext *context) {
     return;
 
   if (funcs->type != NODE_LIST) {
-    ListNode *new_list = calloc(1, sizeof(ListNode));
+    ListNode *new_list = xalloc(1, sizeof(ListNode));
     new_list->base.type = NODE_LIST;
     new_list->base.location = funcs->location;
     new_list->element = funcs;
@@ -1130,6 +1175,25 @@ static ASTNode *analyze_expression(ASTNode *expression,
     }
 
     if (id->symbol == NULL) {
+      for (int i = context->with_stack_top - 1; i >= 0; i--) {
+        ASTNode *with_record_symbol = context->with_stack[i];
+        SymbolEntry *record_type_symbol =
+            resolve_to_type_symbol(with_record_symbol->result_type, context);
+
+        if (record_type_symbol && record_type_symbol->info.type_info.fields) {
+          SymbolEntry *field_symbol = context_lookup_field(
+              record_type_symbol->info.type_info.fields, id->name);
+
+          if (field_symbol) {
+            id->symbol = field_symbol;
+            id->with_node = with_record_symbol;
+            break;
+          }
+        }
+      }
+    }
+
+    if (id->symbol == NULL) {
       yyerrorf(id->base.location, "Undeclared identifier '%s'", id->name);
 
       context->has_errors = true;
@@ -1139,6 +1203,7 @@ static ASTNode *analyze_expression(ASTNode *expression,
     switch (id->symbol->kind) {
     case SYMBOL_VARIABLE:
     case SYMBOL_PARAMETER:
+    case SYMBOL_FIELD:
       expression->result_type = id->symbol->info.var_info.type;
       break;
     case SYMBOL_CONSTANT:
@@ -1190,33 +1255,38 @@ static ASTNode *analyze_expression(ASTNode *expression,
   }
   case NODE_MEMBER_ACCESS: {
     MemberAccessNode *m_node = (MemberAccessNode *)expression;
+    ASTNode *record_expr_type = analyze_expression(m_node->record, context);
 
-    ASTNode *record_base_type = analyze_expression(m_node->record, context);
-    ASTNode *record_def = resolve_to_actual_type_def(record_base_type, context);
-    SymbolEntry *record_symbol =
-        resolve_to_type_symbol(record_base_type, context);
-
-    if (!record_def || record_def->type != NODE_RECORD_TYPE) {
+    if (!record_expr_type) {
       yyerrorf(m_node->base.location,
-               "Attempt to access a field on a non-record type.");
-
+               "Could not determine the type of the record variable.");
       context->has_errors = true;
       break;
     }
 
     SymbolEntry *record_type_symbol =
-        resolve_to_type_symbol(record_base_type, context);
+        resolve_to_type_symbol(record_expr_type, context);
+
+    if (!record_type_symbol || !record_type_symbol->info.type_info.fields) {
+      yyerrorf(m_node->base.location,
+               "Attempt to access a field on a non-record type.");
+      context->has_errors = true;
+      break;
+    }
+
     IdentifierNode *field_id = (IdentifierNode *)m_node->field;
     SymbolEntry *field_symbol = context_lookup_field(
         record_type_symbol->info.type_info.fields, field_id->name);
 
     if (!field_symbol) {
-      yyerrorf(expression->location, "Field '%s' not found in record type.",
-               field_id->name);
-
+      yyerrorf(expression->location,
+               "Field '%s' not found in record type '%s'.", field_id->name,
+               record_type_symbol->name);
       context->has_errors = true;
       break;
     }
+
+    // analyze_expression(field_id, context)
 
     field_id->symbol = field_symbol;
     expression->result_type = field_symbol->info.var_info.type;
@@ -1282,15 +1352,22 @@ static ASTNode *analyze_expression(ASTNode *expression,
       SymbolEntry *l_symb = resolve_to_type_symbol(left_type, context);
       SymbolEntry *r_symb = resolve_to_type_symbol(right_type, context);
 
+      const char *r_name = r_symb->tag != LITERAL_NIL
+                               ? cast_from_literal_type_name(r_symb->tag)
+                               : r_symb->name;
+      const char *l_name = l_symb->tag != LITERAL_NIL
+                               ? cast_from_literal_type_name(l_symb->tag)
+                               : l_symb->name;
+
       if (l_symb && r_symb) {
-        bool l_is_real = strcmp(l_symb->name, "real") == 0;
-        bool r_is_real = strcmp(r_symb->name, "real") == 0;
-        bool l_is_int = strcmp(l_symb->name, "integer") == 0;
-        bool r_is_int = strcmp(r_symb->name, "integer") == 0;
-        bool l_is_char = strcmp(l_symb->name, "char") == 0;
-        bool r_is_char = strcmp(r_symb->name, "char") == 0;
-        bool l_is_string = strcmp(l_symb->name, "string") == 0;
-        bool r_is_string = strcmp(r_symb->name, "string") == 0;
+        bool l_is_real = strcmp(l_name, "real") == 0;
+        bool r_is_real = strcmp(r_name, "real") == 0;
+        bool l_is_int = strcmp(l_name, "integer") == 0;
+        bool r_is_int = strcmp(r_name, "integer") == 0;
+        bool l_is_char = strcmp(l_name, "char") == 0;
+        bool r_is_char = strcmp(r_name, "char") == 0;
+        bool l_is_string = strcmp(l_name, "string") == 0;
+        bool r_is_string = strcmp(r_name, "string") == 0;
 
         if (l_is_real || r_is_real) {
           expression->result_type =
@@ -1318,15 +1395,22 @@ static ASTNode *analyze_expression(ASTNode *expression,
       SymbolEntry *l_symb = resolve_to_type_symbol(left_type, context);
       SymbolEntry *r_symb = resolve_to_type_symbol(right_type, context);
 
-      if (l_symb && r_symb) { // Proteção contra NULL
-        bool l_is_real = strcmp(l_symb->name, "real") == 0;
-        bool r_is_real = strcmp(r_symb->name, "real") == 0;
-        bool l_is_int = strcmp(l_symb->name, "integer") == 0;
-        bool r_is_int = strcmp(r_symb->name, "integer") == 0;
-        bool l_is_char = strcmp(l_symb->name, "char") == 0;
-        bool r_is_char = strcmp(r_symb->name, "char") == 0;
-        bool l_is_string = strcmp(l_symb->name, "string") == 0;
-        bool r_is_string = strcmp(r_symb->name, "string") == 0;
+      const char *r_name = r_symb->tag != LITERAL_NIL
+                               ? cast_from_literal_type_name(r_symb->tag)
+                               : r_symb->name;
+      const char *l_name = l_symb->tag != LITERAL_NIL
+                               ? cast_from_literal_type_name(l_symb->tag)
+                               : l_symb->name;
+
+      if (l_symb && r_symb) {
+        bool l_is_real = strcmp(l_name, "real") == 0;
+        bool r_is_real = strcmp(r_name, "real") == 0;
+        bool l_is_int = strcmp(l_name, "integer") == 0;
+        bool r_is_int = strcmp(r_name, "integer") == 0;
+        bool l_is_char = strcmp(l_name, "char") == 0;
+        bool r_is_char = strcmp(r_name, "char") == 0;
+        bool l_is_string = strcmp(l_name, "string") == 0;
+        bool r_is_string = strcmp(r_name, "string") == 0;
 
         if (l_is_real || r_is_real) {
           expression->result_type =
@@ -1553,6 +1637,7 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
 
     ASTNode *target_type = analyze_expression(ass->target, context);
     ASTNode *expr_type = analyze_expression(ass->expression, context);
+    LOG_DEBUG("%s", get_node_type_name(ass->expression->type));
     if (!check_type_compatibility(target_type, expr_type, context)) {
       yyerrorf(ass->base.location, "Type mismatch in assignment.");
 
@@ -1686,9 +1771,43 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
     analyze_expression(param->params_list, context);
     break;
   }
+  case NODE_WITH_STMT: {
+    WithNode *with_node = (WithNode *)statement;
+
+    ListNode *current_rec_var_node = (ListNode *)with_node->record_list;
+    int pushed_records = 0;
+
+    while (current_rec_var_node) {
+      ASTNode *rec_var_expr = current_rec_var_node->element;
+      SymbolEntry *rec_symbol = resolve_to_type_symbol(rec_var_expr, context);
+
+      ASTNode *type_node = analyze_expression(rec_var_expr, context);
+      SymbolEntry *type_symbol = resolve_to_type_symbol(type_node, context);
+
+      if (type_symbol && type_symbol->info.type_info.fields) {
+        with_stack_push(context, rec_var_expr);
+        pushed_records++;
+      } else {
+        yyerrorf(rec_var_expr->location,
+                 "Variable in WITH statement is not a record type.");
+        context->has_errors = true;
+      }
+
+      current_rec_var_node = (ListNode *)current_rec_var_node->next;
+    }
+
+    analyze_statement(with_node->body, context);
+
+    for (int i = 0; i < pushed_records; i++) {
+      with_stack_pop(context);
+    }
+
+    break;
+  }
   default:
-    LOG_ERROR("O tipo %s não foi mapeado no analyze_statement",
-              get_node_type_name(statement->type));
+    yyerrorf(statement->location,
+             "O tipo %s não foi mapeado no analyze_statement",
+             get_node_type_name(statement->type));
     break;
   }
 }
@@ -1760,7 +1879,7 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
           FixedPartNode *fp_node = (FixedPartNode *)fl_node->fixed_part;
           ListNode *field_decls = (ListNode *)fp->fields;
 
-          if (fp_node->field_count > 0) {
+          if (fp_node && fp_node->field_count > 0) {
             while (field_decls) {
               RecordFieldNode *field_decl =
                   (RecordFieldNode *)field_decls->element;

@@ -281,6 +281,19 @@ void print_block(ASTNode *node, int indent) {
   }
 }
 
+void print_with_fields(ASTNode *node, int indent) {
+  if (node->type != NODE_WITH_STMT) {
+    fprintf(stderr, "WARN: Tentou imprimir NODE_WITH_STMT, mas o tipo é %s!\n",
+            get_node_type_name(node->type));
+  }
+
+  WithNode *with = (WithNode *)node;
+  fprintf(stderr, "%*sWith records ->\n", indent, "");
+  with->record_list->print(with->record_list, indent + 2);
+  fprintf(stderr, "%*s With Body ->\n", indent, "");
+  print_stmt_list(with->body, indent + 2);
+}
+
 void print_stmt_list(ASTNode *node, int indent) {
   ListNode *current = (ListNode *)node;
 
@@ -309,9 +322,13 @@ void print_stmt_list(ASTNode *node, int indent) {
         FunctionCallNode *proc = (FunctionCallNode *)current->element;
         if (proc->function->type == NODE_IDENTIFIER) {
           proc->function->print(proc->function, indent + 2);
+          if (proc->params) {
+            proc->params->print(proc->params, indent + 4);
+          }
           break;
         }
         proc->base.print((ASTNode *)proc, indent + 2);
+        proc->params->print(proc->params, indent + 4);
         break;
       }
       case NODE_IF_STMT: {
@@ -450,8 +467,7 @@ void print_type_identifier_node(ASTNode *node, int indent) {
 
 void print_identifier_node(ASTNode *node, int indent) {
   if (node->type != NODE_IDENTIFIER) {
-    fprintf(stderr,
-            "WARN: Tentou imprimir NODE_IDENTIFIER, mas o tipo é %s!\n",
+    fprintf(stderr, "WARN: Tentou imprimir NODE_IDENTIFIER, mas o tipo é %s!\n",
             get_node_type_name(node->type));
   }
 
@@ -1456,7 +1472,7 @@ ASTNode *create_with_record_list_node(ASTNode *record_list, ASTNode *body,
   WithNode *node = xalloc(1, sizeof(WithNode));
   node->base.type = NODE_WITH_STMT;
   node->base.location = loc;
-  node->base.print = print_todo;
+  node->base.print = print_with_fields;
   node->record_list = record_list;
   node->body = body;
   return (ASTNode *)node;
@@ -1470,6 +1486,8 @@ ASTNode *create_identifier_node(char *name, SourceLocation loc) {
   node->base.print = print_identifier_node;
   node->name = strdup(name);
   node->kind = SYMBOL_UNKNOWN;
+  node->with_node = NULL;
+  node->symbol = NULL;
 
   return (ASTNode *)node;
 };
@@ -2028,6 +2046,26 @@ ASTNode *get_statements_from_block(ASTNode *block) {
     return NULL;
   return ((BlockNode *)block)->statements;
 };
+
+const char *cast_from_literal_type_name(LiteralType type) {
+  switch (type) {
+  case LITERAL_INTEGER:
+    return "integer";
+  case LITERAL_REAL:
+    return "real";
+  case LITERAL_BOOLEAN:
+    return "boolean";
+  case LITERAL_STRING:
+    return "string";
+  case LITERAL_CHAR:
+    return "char";
+  case LITERAL_NIL:
+    return NULL;
+  default:
+    return "UNKNOWN_LITERAL";
+  }
+}
+
 
 const char *get_literal_type_name(LiteralType type) {
   switch (type) {
@@ -2763,7 +2801,7 @@ void free_node(ASTNode *node) {
     ListNode *l = (ListNode *)node;
     while (l) {
       LOG_TRACE("Freeing ListNode %p — element=%p next=%p\n", (void *)l, (
-                oid *)l->element, (void *)l->next);
+                 *)l->element, (void *)l->next);
 
       if (l->element != NULL) {
         free_node(l->element);
