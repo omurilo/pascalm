@@ -1,0 +1,20 @@
+program BinaryOperationCircuitBreakout;
+
+function foo(): boolean;
+begin
+  writeln('foo called');
+  foo := false;
+end;
+
+function bar(): boolean;
+begin
+  writeln('bar called');
+  bar := true;
+end;
+
+begin
+  if foo() and bar() then  { "bar called" deve ser impresso }
+    writeln('e esse não deve!')
+  else
+    writeln('mas esse deve!');
+end.

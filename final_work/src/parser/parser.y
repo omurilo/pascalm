@@ -71,7 +71,7 @@ ASTNode *root = NULL;
 %type <node> proc_or_func
 %type <node> block_or_forward
 %type <node> parameters
-%type <node> formal_parameter_list
+%type <node> formal_parameter_list optional_parameter_list
 %type <node> formal_parameter_section
 %type <node> parameterid_list
 
@@ -79,7 +79,7 @@ ASTNode *root = NULL;
 %type <node> simple_type
 %type <node> structured_type unpacked_structured_type
 %type <node> index_list
-%type <node> field_list field_list_content optional_semicolon
+%type <node> field_list
 %type <node> fixed_part
 %type <node> record_field
 %type <node> fieldid_list
@@ -293,28 +293,10 @@ index_list:
       $$ = append_index_to_list($1, $3, create_location(@$));
     }
 
-field_list:
-    empty {
-      $$ = create_field_list(NULL, NULL, create_location(@$));
-    }
-| field_list_content optional_semicolon {
-      $$ = $1;
-    }
-
-field_list_content:
-    fixed_part {
-      $$ = create_field_list($1, NULL, create_location(@$));
-    }
-| variant_part {
-      $$ = create_field_list(NULL, $1, create_location(@$));
-    }
-| fixed_part SEMICOLON variant_part {
-      $$ = create_field_list($1, $3, create_location(@$));
-    }
-
-optional_semicolon:
-    SEMICOLON
-| empty
+field_list:  
+    fixed_part { $$ = create_field_list($1, NULL, create_location(@$)); }  
+  | fixed_part SEMICOLON variant_part { $$ = create_field_list($1, $3, create_location(@$)); }
+  | variant_part { $$ = create_field_list(NULL, $1, create_location(@$)); } 
 
 fixed_part:  
     record_field { $$ = create_fixed_part_node(NULL, $1, create_location(@$)); }
@@ -366,7 +348,11 @@ block_or_forward:
   | FORWARD  { $$ = create_forward_declaration_node(create_location(@$)); }
 
 parameters:
-   L_PAREN formal_parameter_list R_PAREN { $$ = create_parameters_node($2, create_location(@$)); }
+   L_PAREN optional_parameter_list R_PAREN { $$ = create_parameters_node($2, create_location(@$)); }
+
+optional_parameter_list:
+    empty
+  | formal_parameter_list { $$ = $1; }
 
 formal_parameter_list:  
     formal_parameter_section { $$ = create_formal_parameters_list_node(NULL, $1, create_location(@$)); }
@@ -559,6 +545,7 @@ primary_expression:
   | unsigned_real { $$ = $1; }
   | string_literal { $$ = $1; }
   | char_literal { $$ = $1; }
+  | boolean_literal { $$ = $1; }
   | NIL {
       $$ = create_nil_literal(create_location(@$));
     }

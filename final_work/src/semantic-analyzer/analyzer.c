@@ -644,8 +644,9 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
 
           ASTNode *def =
               resolve_to_actual_type_def(variable->type_node, context);
+          SymbolEntry *def_symbol = resolve_to_type_symbol(def, context);
 
-          if (id->kind == SYMBOL_BUILTIN && strcmp(id->name, "string") == 0) {
+          if (def_symbol && def_symbol->kind == SYMBOL_BUILTIN && strcmp(def_symbol->name, "string") == 0) {
             need_string_helpers = true;
           }
 

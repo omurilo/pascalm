@@ -2,7 +2,7 @@
 #include "../logger.h"
 
 CodeGenerator *create_code_generator(char *output_file) {
-  CodeGenerator *code_gen = calloc(1, sizeof(CodeGenerator));
+  CodeGenerator *code_gen = xalloc(1, sizeof(CodeGenerator));
 
   code_gen->output_file = fopen(output_file, "w");
   code_gen->indent_level = 0;
@@ -135,7 +135,7 @@ void generate_string_operand(CodeGenerator *code_gen, CompilerContext *context,
     fprintf(code_gen->output_file, "make_string_from_char(");
     generate_expression(code_gen, context, operand_node);
     fprintf(code_gen->output_file, ")");
-  } else if (force) { 
+  } else if (force) {
     fprintf(code_gen->output_file, "make_string(");
     generate_expression(code_gen, context, operand_node);
     fprintf(code_gen->output_file, ")");
@@ -269,7 +269,7 @@ void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
                    ASTNode *node) {
   VarDeclarationNode *v_node = (VarDeclarationNode *)node;
 
-  ASTNode **identifiers = calloc(1, sizeof(ASTNode **));
+  ASTNode **identifiers = xalloc(1, sizeof(ASTNode **));
 
   ListNode *var_list = (ListNode *)v_node->var_list;
   int index = 0;
@@ -284,8 +284,8 @@ void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
     index++;
   }
 
-  TypeIdentifierNode *c_type = calloc(1, sizeof(TypeIdentifierNode));
-  IdentifierNode *c_type_id = calloc(1, sizeof(IdentifierNode));
+  TypeIdentifierNode *c_type = xalloc(1, sizeof(TypeIdentifierNode));
+  IdentifierNode *c_type_id = xalloc(1, sizeof(IdentifierNode));
 
   switch (v_node->type_node->type) {
   case NODE_STRUCTURED_TYPE: {
@@ -310,7 +310,7 @@ void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
       }
       break;
     } else if (st_node->type->type == NODE_ARRAY_TYPE) {
-      TypeDeclarationNode *t_node = calloc(1, sizeof(TypeDeclarationNode));
+      TypeDeclarationNode *t_node = xalloc(1, sizeof(TypeDeclarationNode));
       c_type->kind = SYMBOL_TYPE;
       for (int i = 0; i < index; i++) {
         c_type->id = (IdentifierNode *)identifiers[i];
@@ -592,7 +592,7 @@ void generate_array(CodeGenerator *code_gen, CompilerContext *context,
   StructuredTypeNode *s_node = (StructuredTypeNode *)t_node->type_expr;
   ArrayTypeNode *a_node = (ArrayTypeNode *)s_node->type;
 
-  const char *element_type = calloc(1, sizeof(char));
+  const char *element_type = xalloc(1, sizeof(char));
   if (a_node->type->type == NODE_SIMPLE_TYPE) {
     SimpleTypeNode *s = (SimpleTypeNode *)a_node->type;
     element_type = resolve_type_identifier(s->type)->name;
@@ -690,13 +690,49 @@ void generate_if_statement(CodeGenerator *code_gen, CompilerContext *context,
   if (code_gen->indent_level > 0) {
     print_indent(code_gen);
   }
+
   IfNode *if_stmt = (IfNode *)node;
-  fprintf(code_gen->output_file, "if(");
-  generate_expression(code_gen, context, if_stmt->condition);
-  fprintf(code_gen->output_file, ") {\n");
-  code_gen->indent_level++;
-  generate_statement(code_gen, context, if_stmt->then_stmt);
-  code_gen->indent_level--;
+
+  if (if_stmt->condition->type == NODE_BINARY_EXPR &&
+      (((BinaryOperationNode *)if_stmt->condition)->op == BINOP_AND ||
+       ((BinaryOperationNode *)if_stmt->condition)->op == BINOP_OR)) {
+    BinaryOperationNode *binop = (BinaryOperationNode *)if_stmt->condition;
+
+    char temp1[255] = "";
+    char temp2[255] = "";
+    sprintf(temp1, "temp%d", binop->base.location.first_line % 3);
+    sprintf(temp2, "temp%d", (binop->base.location.first_line + 1) % 3);
+
+    int temp_indent_level = code_gen->indent_level;
+
+    code_gen->indent_level = 0;
+    fprintf(code_gen->output_file, "bool %s = ", temp1);
+    generate_expression(code_gen, context, binop->left);
+    fprintf(code_gen->output_file, ";\n");
+
+    code_gen->indent_level = temp_indent_level;
+    print_indent(code_gen);
+    fprintf(code_gen->output_file, "bool %s = ", temp2);
+    code_gen->indent_level = 0;
+    generate_expression(code_gen, context, binop->right);
+    fprintf(code_gen->output_file, ";\n");
+
+    code_gen->indent_level = temp_indent_level;
+    print_indent(code_gen);
+    fprintf(code_gen->output_file, "if(%s %s %s) {\n", temp1,
+            binary_op_to_string(binop->op), temp2);
+    code_gen->indent_level = temp_indent_level+1;
+    generate_statement(code_gen, context, if_stmt->then_stmt);
+    code_gen->indent_level--;
+  } else {
+    fprintf(code_gen->output_file, "if(");
+    generate_expression(code_gen, context, if_stmt->condition);
+    fprintf(code_gen->output_file, ") {\n");
+    code_gen->indent_level++;
+    generate_statement(code_gen, context, if_stmt->then_stmt);
+    code_gen->indent_level--;
+  }
+
   if (if_stmt->else_stmt != NULL) {
     print_indent(code_gen);
     fprintf(code_gen->output_file, "} else {\n");
@@ -926,9 +962,9 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
         break;
       }
       case NODE_ARRAY_ACCESS: {
-        ArrayAccessNode *a_node = (ArrayAccessNode *)params->element;
-        IdentifierNode *array_id = (IdentifierNode *)a_node->array;
-        SymbolEntry *array_symbol = array_id->symbol;
+        // ArrayAccessNode *a_node = (ArrayAccessNode *)params->element;
+        // IdentifierNode *array_id = (IdentifierNode *)a_node->array;
+        // SymbolEntry *array_symbol = array_id->symbol;
 
         strcat(format_string, "%d");
 
@@ -1010,7 +1046,6 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
                 strcat(format_string, "%.2f");
                 break;
               }
-
             }
           }
         } else {
@@ -1339,6 +1374,10 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
   }
   case NODE_BINARY_EXPR: {
     BinaryOperationNode *bin_op = (BinaryOperationNode *)node;
+    IdentifierNode *rhs = resolve_type_identifier(bin_op->right->result_type);
+    IdentifierNode *lhs = resolve_type_identifier(bin_op->left->result_type);
+    SymbolEntry *rhs_symbol = rhs->symbol;
+    SymbolEntry *lhs_symbol = lhs->symbol;
 
     switch (bin_op->op) {
     case BINOP_IN: {
@@ -1359,11 +1398,20 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
       break;
     }
     default: {
-      fprintf(code_gen->output_file, "(");
-      generate_expression(code_gen, context, bin_op->left);
-      fprintf(code_gen->output_file, " %s ", binary_op_to_string(bin_op->op));
-      generate_expression(code_gen, context, bin_op->right);
-      fprintf(code_gen->output_file, ")");
+      if ((rhs_symbol && strcmp(rhs_symbol->name, "string") == 0) ||
+          (lhs_symbol && strcmp(lhs_symbol->name, "string") == 0)) {
+        fprintf(code_gen->output_file, "concat_string(");
+        generate_string_operand(code_gen, context, bin_op->left, true);
+        fprintf(code_gen->output_file, ", ");
+        generate_string_operand(code_gen, context, bin_op->right, true);
+        fprintf(code_gen->output_file, ")");
+      } else {
+        fprintf(code_gen->output_file, "(");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " %s ", binary_op_to_string(bin_op->op));
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ")");
+      }
     }
     }
     break;
