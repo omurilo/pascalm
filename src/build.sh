@@ -5,7 +5,7 @@
 # Etapa 1: Gerar fontes do Bison e Flex
 echo "Gerando parser e lexer..."
 bison -d -o parser/parser.tab.c parser/parser.y
-flex -o parser/lex.yy.c parser/lexer.l
+flex -o parser/lex.yy.c parser/parser.l
 
 # Etapa 2: Compilar tudo com GCC
 echo "Compilando o projeto..."
