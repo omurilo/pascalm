@@ -1,6 +1,7 @@
 #ifndef SYMBOL_TABLE_H
 #define SYMBOL_TABLE_H
 
+#include <stdint.h>
 #include "../commons.h"
 #include "../memory.h"
 
