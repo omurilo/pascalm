@@ -3,10 +3,11 @@
 void generate_string_definition(CodeGenerator *code_gen) {
   // definição do tipo `string`
   fprintf(code_gen->output_file, "typedef struct {\n");
-  fprintf(code_gen->output_file, "    unsigned char length;\n");
-  fprintf(code_gen->output_file, "    char data[255];\n");
+  fprintf(code_gen->output_file, "    unsigned int length;\n");
+  fprintf(code_gen->output_file, "    char *data;\n");
   fprintf(code_gen->output_file, "} string;\n\n");
   fprintf(code_gen->output_file, "string make_string(const char* c_str);\n");
+  fprintf(code_gen->output_file, "string make_string_from_char(char ch);\n");
   fprintf(code_gen->output_file,
           "string concat_string(string s1, string s2);\n\n");
 }
@@ -17,8 +18,17 @@ void generate_strings_helper_functions(CodeGenerator *code_gen) {
   fprintf(code_gen->output_file, "    string ps;\n");
   fprintf(code_gen->output_file, "    ps.length = strlen(c_str);\n");
   fprintf(code_gen->output_file, "    if(ps.length > 255) ps.length = 255;\n");
+  fprintf(code_gen->output_file,
+          "    ps.data = (char*)malloc(ps.length + 1);\n");
   fprintf(code_gen->output_file, "    strncpy(ps.data, c_str, ps.length);\n");
+  fprintf(code_gen->output_file, "    ps.data[ps.length] = '\\0';\n");
   fprintf(code_gen->output_file, "    return ps;\n");
+  fprintf(code_gen->output_file, "}\n\n");
+
+  fprintf(code_gen->output_file, "string make_string_from_char(char ch) {\n");
+  fprintf(code_gen->output_file, "    char s[2];\n");
+  fprintf(code_gen->output_file, "    sprintf(s, \"%%c\", ch);\n");
+  fprintf(code_gen->output_file, "    return make_string(s);\n");
   fprintf(code_gen->output_file, "}\n\n");
 
   // função para concatenar duas strings
@@ -30,9 +40,12 @@ void generate_strings_helper_functions(CodeGenerator *code_gen) {
   fprintf(code_gen->output_file,
           "    if(result.length > 255) result.length = 255;\n");
   fprintf(code_gen->output_file,
+          "    result.data = (char*)malloc(result.length + 1);\n");
+  fprintf(code_gen->output_file,
           "    memcpy(result.data, s1.data, s1.length);\n");
   fprintf(code_gen->output_file, "    memcpy(result.data + s1.length, s2.data, "
                                  "result.length - s1.length);\n");
+  fprintf(code_gen->output_file, "    result.data[result.length] = '\\0';\n");
   fprintf(code_gen->output_file, "    return result;\n");
   fprintf(code_gen->output_file, "}\n\n");
 }

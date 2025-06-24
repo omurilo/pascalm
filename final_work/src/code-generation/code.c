@@ -49,54 +49,54 @@ IdentifierNode *resolve_identifier(ASTNode *node) {
 }
 
 IdentifierNode *resolve_type_identifier(ASTNode *node) {
-  if (node->type == NODE_IDENTIFIER)
-    return resolve_identifier(node);
+  if (node == NULL)
+    return NULL;
 
-  if (node->type == NODE_TYPE_IDENTIFIER) {
+  switch (node->type) {
+  case NODE_IDENTIFIER:
+    return resolve_identifier(node);
+  case NODE_TYPE_IDENTIFIER: {
     TypeIdentifierNode *type_node = (TypeIdentifierNode *)node;
     if (type_node->kind == SYMBOL_TYPE) {
       return resolve_identifier((ASTNode *)type_node->id);
     } else if (type_node->kind == SYMBOL_BUILTIN) {
       return cast_pascal_to_c_type(type_node);
     }
+    return NULL;
   }
-
-  if (node->type == NODE_SIMPLE_TYPE) {
+  case NODE_SIMPLE_TYPE: {
     SimpleTypeNode *s_type = (SimpleTypeNode *)node;
     return resolve_type_identifier(s_type->type);
   }
-
-  if (node->type == NODE_ARRAY_TYPE) {
+  case NODE_ARRAY_TYPE: {
     ArrayTypeNode *array = (ArrayTypeNode *)node;
     return resolve_type_identifier(array->type);
   }
-
-  if (node->type == NODE_STRUCTURED_TYPE) {
+  case NODE_STRUCTURED_TYPE: {
     StructuredTypeNode *st_type = (StructuredTypeNode *)node;
     return resolve_type_identifier(st_type->type);
   }
 
-  if (node->type == NODE_MEMBER_ACCESS) {
+  case NODE_MEMBER_ACCESS: {
     MemberAccessNode *m_node = (MemberAccessNode *)node;
     return resolve_type_identifier(m_node->record);
   }
 
-  if (node->type == NODE_ARRAY_ACCESS) {
+  case NODE_ARRAY_ACCESS: {
     ArrayAccessNode *a_node = (ArrayAccessNode *)node;
     return resolve_type_identifier(a_node->array);
   }
 
-  if (node->type == NODE_RECORD_TYPE) {
+  case NODE_RECORD_TYPE: {
     yyerrorf(node->location,
              "The node record type is not mapped to resolve identifier");
+    return NULL;
+  }
+  default:
+    break;
   }
 
-  if (node->type == NODE_ARRAY_TYPE) {
-    yyerrorf(node->location,
-             "The node record type is not mapped to resolve identifier");
-  }
-
-  return (IdentifierNode *)create_builtin_identifier("void", node->location);
+  return NULL;
 }
 
 bool is_reference_type(ASTNode *node) {
@@ -124,6 +124,21 @@ bool is_reference_type(ASTNode *node) {
     break;
   }
   return false;
+}
+
+void generate_string_operand(CodeGenerator *code_gen, CompilerContext *context,
+                             ASTNode *operand_node) {
+  IdentifierNode *id = resolve_type_identifier(operand_node->result_type);
+
+  if (strcmp(id->name, "char") == 0) {
+    fprintf(code_gen->output_file, "make_string_from_char(");
+    generate_expression(code_gen, context, operand_node);
+    fprintf(code_gen->output_file, ")");
+  } else {
+    fprintf(code_gen->output_file, "make_string(");
+    generate_expression(code_gen, context, operand_node);
+    fprintf(code_gen->output_file, ")");
+  }
 }
 
 void generate_program(CodeGenerator *code_gen, CompilerContext *context,
@@ -599,7 +614,8 @@ void generate_array(CodeGenerator *code_gen, CompilerContext *context,
     } else if (element->type == NODE_TYPE_IDENTIFIER) {
       // TODO:
     } else {
-      LOG_ERROR("era pra quebrar? %s", get_node_type_name(element->type));
+      yyerrorf(element->location, "era pra quebrar? %s",
+               get_node_type_name(element->type));
       exit(1);
     }
   }
@@ -617,16 +633,10 @@ void generate_array(CodeGenerator *code_gen, CompilerContext *context,
 void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
                          ASTNode *node) {
   AssignmentNode *a = (AssignmentNode *)node;
-  if (code_gen->indent_level > 0) {
-    print_indent(code_gen);
-  }
 
   int temp_indent_level = code_gen->indent_level;
-  IdentifierNode *target_id = resolve_identifier(a->target);
-  IdentifierNode *field_id = NULL;
   if (a->target->type == NODE_IDENTIFIER) {
-    target_id = (IdentifierNode *)a->target;
-
+    IdentifierNode *target_id = (IdentifierNode *)a->target;
     if (code_gen->current_function &&
         strcmp(code_gen->current_function->name, target_id->name) == 0) {
       fprintf(code_gen->output_file, "return ");
@@ -636,63 +646,45 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
       code_gen->indent_level = temp_indent_level;
       return;
     }
-  } else if (a->target->type == NODE_MEMBER_ACCESS) {
-    MemberAccessNode *m_node = (MemberAccessNode *)a->target;
-    field_id = (IdentifierNode *)m_node->field;
-    if (m_node->record->type == NODE_IDENTIFIER) {
-      target_id = (IdentifierNode *)m_node->record;
-    } else if (m_node->record->type == NODE_ARRAY_ACCESS) {
-      ArrayAccessNode *a_node = (ArrayAccessNode *)m_node->record;
-      target_id = (IdentifierNode *)a_node->array;
-    } else if (m_node->record->type == NODE_MEMBER_ACCESS) {
-      MemberAccessNode *m_node = (MemberAccessNode *)a->target;
-      field_id = resolve_type_identifier(m_node->field);
-
-      if (m_node->record->type == NODE_IDENTIFIER) {
-        target_id = resolve_type_identifier(m_node->record);
-      } else if (m_node->record->type == NODE_ARRAY_ACCESS) {
-        target_id = resolve_type_identifier(m_node->record);
-      }
-    } else if (a->target->type == NODE_ARRAY_ACCESS) {
-      target_id = resolve_type_identifier(a->target);
-    }
-  } else if (a->target->type == NODE_ARRAY_ACCESS) {
-    target_id = resolve_type_identifier(a->target);
   }
 
-  bool is_struct_assignment = false;
-  if ((target_id != NULL && target_id->symbol != NULL) && field_id != NULL) {
-    SymbolEntry *s = target_id->symbol;
-    IdentifierNode *identifier_node =
-        resolve_type_identifier(target_id->symbol->info.var_info.type);
-    SymbolEntry *field_symb = context_lookup_field(
-        identifier_node->symbol->info.type_info.fields, field_id->name);
-    if (field_symb != NULL &&
-        strcmp(resolve_type_identifier(field_symb->info.var_info.type)->name,
-               "string") == 0)
-      is_struct_assignment = true;
+  print_indent(code_gen);
+
+  ASTNode *target_type_node = a->target->result_type;
+  IdentifierNode *type_id = NULL;
+
+  if (target_type_node) {
+    type_id = resolve_type_identifier(target_type_node);
   }
 
-  if (is_struct_assignment) {
-    fprintf(code_gen->output_file, "memcpy(&");
-    code_gen->indent_level = 0;
-    generate_expression(code_gen, context, a->target);
-    if (a->expression->type != NODE_BINARY_EXPR) {
-      fprintf(code_gen->output_file, ", &");
-    } else {
+  generate_expression(code_gen, context, a->target);
+  fprintf(code_gen->output_file, " = ");
+
+  code_gen->indent_level = 0;
+  if (type_id && strcmp(type_id->name, "string") == 0) {
+    if (a->expression->type == NODE_BINARY_EXPR) {
+      BinaryOperationNode *bin_op = (BinaryOperationNode *)a->expression;
+      fprintf(code_gen->output_file, "concat_string(");
+      generate_string_operand(code_gen, context, bin_op->left);
       fprintf(code_gen->output_file, ", ");
+      generate_string_operand(code_gen, context, bin_op->right);
+      fprintf(code_gen->output_file, ")");
+    } else {
+      fprintf(code_gen->output_file, "make_string(");
+      generate_string_operand(code_gen, context, a->expression);
+      fprintf(code_gen->output_file, ")");
     }
-    generate_expression(code_gen, context, a->expression);
-    fprintf(code_gen->output_file, ", sizeof(");
-    generate_expression(code_gen, context, a->target);
-    fprintf(code_gen->output_file, "));\n");
+    // else {
+    //   fprintf(code_gen->output_file,
+    //           "clone_string("); // Supondo uma função clone_string
+    //   generate_expression(code_gen, context, a->expression);
+    //   fprintf(code_gen->output_file, ")");
+    // }
   } else {
-    generate_expression(code_gen, context, a->target);
-    fprintf(code_gen->output_file, " = ");
-    code_gen->indent_level = 0;
     generate_expression(code_gen, context, a->expression);
-    fprintf(code_gen->output_file, ";\n");
   }
+
+  fprintf(code_gen->output_file, ";\n");
   code_gen->indent_level = temp_indent_level;
 }
 
@@ -722,6 +714,99 @@ void generate_if_statement(CodeGenerator *code_gen, CompilerContext *context,
     }
     fprintf(code_gen->output_file, "}\n");
   }
+}
+
+void generate_case_statement(CodeGenerator *code_gen, CompilerContext *context,
+                             ASTNode *node) {
+  CaseNode *case_stmt = (CaseNode *)node;
+  ListNode *case_items = (ListNode *)case_stmt->case_list;
+
+  print_indent(code_gen);
+  fprintf(code_gen->output_file, "switch(");
+  generate_expression(code_gen, context, case_stmt->expr);
+  fprintf(code_gen->output_file, ") {\n");
+
+  ASTNode *result_type = case_stmt->expr->result_type;
+  SymbolEntry *result_type_symbol =
+      resolve_type_identifier(result_type)->symbol;
+
+  while (case_items) {
+    if (case_items->element) {
+      CaseItemNode *item = (CaseItemNode *)case_items->element;
+      ListNode *value_list = (ListNode *)item->value_list;
+
+      while (value_list) {
+        if (value_list->element) {
+          print_indent(code_gen);
+          ConstantNode *const_node = (ConstantNode *)value_list->element;
+          if (!const_node->is_literal) {
+            IdentifierNode *id = (IdentifierNode *)const_node->identifier;
+            SymbolEntry *id_symbol = context_lookup(context, id->name);
+            fprintf(code_gen->output_file, "case %s:", id->name);
+          } else {
+            switch (const_node->const_type) {
+            case CONST_INTEGER: {
+
+              fprintf(code_gen->output_file, "case %d:",
+                      ((LiteralNode *)const_node->value)->value.int_val);
+              break;
+            }
+            case CONST_REAL: {
+              fprintf(code_gen->output_file, "case %.2f:",
+                      ((LiteralNode *)const_node->value)->value.real_val);
+              break;
+            }
+            case CONST_STRING: {
+              fprintf(code_gen->output_file, "case %s:",
+                      ((LiteralNode *)const_node->value)->value.str_val);
+              break;
+            }
+            case CONST_CHAR: {
+              fprintf(code_gen->output_file, "case %c:",
+                      ((LiteralNode *)const_node->value)->value.char_val);
+              break;
+            }
+            case CONST_BOOLEAN: {
+
+              fprintf(code_gen->output_file, "case %s:",
+                      ((LiteralNode *)const_node->value)->value.bool_val
+                          ? "true"
+                          : "false");
+              break;
+            }
+            default:
+              break;
+            }
+          }
+        }
+
+        value_list = (ListNode *)value_list->next;
+        if (value_list)
+          fprintf(code_gen->output_file, "\n");
+      }
+      fprintf(code_gen->output_file, " {\n");
+      code_gen->indent_level++;
+      generate_statement(code_gen, context, item->statement);
+      code_gen->indent_level--;
+      print_indent(code_gen);
+      fprintf(code_gen->output_file, "}\n");
+    }
+    case_items = (ListNode *)case_items->next;
+  }
+
+  print_indent(code_gen);
+  if (case_stmt->else_part != NULL) {
+    CaseElseNode *case_else = (CaseElseNode *)case_stmt->else_part;
+    fprintf(code_gen->output_file, "default: {\n");
+    code_gen->indent_level++;
+    generate_statement(code_gen, context, case_else->stmt);
+    code_gen->indent_level--;
+    print_indent(code_gen);
+    fprintf(code_gen->output_file, "}\n");
+  }
+
+  print_indent(code_gen);
+  fprintf(code_gen->output_file, "}\n");
 }
 
 void generate_while_statement(CodeGenerator *code_gen, CompilerContext *context,
@@ -973,8 +1058,9 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
         fprintf(code_gen->output_file, ", ");
       generate_expression(code_gen, context, curr->element);
       if (curr->element->result_type != NULL) {
-        IdentifierNode* result_id = resolve_type_identifier(curr->element->result_type);
-        if (strcmp(result_id->name, "string") == 0){
+        IdentifierNode *result_id =
+            resolve_type_identifier(curr->element->result_type);
+        if (strcmp(result_id->name, "string") == 0) {
           fprintf(code_gen->output_file, ".data");
         }
       }
@@ -1186,7 +1272,7 @@ void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
     generate_if_statement(code_gen, context, node);
     break;
   case NODE_CASE_STMT:
-    fprintf(code_gen->output_file, "/* case or case else */\n");
+    generate_case_statement(code_gen, context, node);
     break;
   case NODE_WHILE_STMT:
     generate_while_statement(code_gen, context, node);
@@ -1341,7 +1427,7 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
   }
   case NODE_ARRAY_ACCESS: {
     ArrayAccessNode *a_node = (ArrayAccessNode *)node;
-    IdentifierNode *array_id = resolve_type_identifier(a_node);
+    IdentifierNode *array_id = resolve_type_identifier(a_node->array);
     SymbolEntry *array_symbol = array_id->symbol;
 
     generate_expression(code_gen, context, a_node->array);
@@ -1350,25 +1436,20 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
     ListNode *subscripts = (ListNode *)a_node->subscript_list;
     while (subscripts) {
       if (subscripts->element) {
-        if (array_symbol->info.var_info.num_dimensions > 0 &&
-            subscripts->element) {
+        fprintf(code_gen->output_file, "[");
+        generate_expression(code_gen, context, subscripts->element);
+        if (array_symbol->info.var_info.num_dimensions > dim_idx) {
           int lower_bound =
               array_symbol->info.var_info.dimensions[dim_idx].lower;
-          fprintf(code_gen->output_file, "[");
-          generate_expression(code_gen, context, subscripts->element);
-          fprintf(code_gen->output_file, " - %d]", lower_bound);
-        } else {
-          fprintf(code_gen->output_file, "[");
-          generate_expression(code_gen, context, subscripts->element);
-          fprintf(code_gen->output_file, "]");
+          if (lower_bound != 0) {
+            fprintf(code_gen->output_file, " - %d", lower_bound);
+          }
         }
+        fprintf(code_gen->output_file, "]");
       }
 
       subscripts = (ListNode *)subscripts->next;
       dim_idx++;
-      if (dim_idx >= array_symbol->info.var_info.num_dimensions) {
-        return;
-      }
     }
     break;
   }

@@ -267,6 +267,46 @@ static bool check_signature_compatibility(ASTNode *expected_param_list,
   return true;
 }
 
+static int count_list_nodes(ASTNode *list_node) {
+  int count = 0;
+  ListNode *current = (ListNode *)list_node;
+  while (current) {
+    if (current->element) {
+      count++;
+    }
+    current = (ListNode *)current->next;
+  }
+  return count;
+}
+
+static bool get_bounds_from_type(ASTNode *type_node, CompilerContext *context,
+                                 DimensionBounds *out_bounds) {
+  if (!type_node)
+    return false;
+
+  if (type_node->type == NODE_TYPE_IDENTIFIER) {
+    IdentifierNode *id = ((TypeIdentifierNode *)type_node)->id;
+    SymbolEntry *type_symbol = context_lookup(context, id->name);
+    if (type_symbol && type_symbol->kind == SYMBOL_TYPE) {
+      return get_bounds_from_type(type_symbol->info.type_info.definition,
+                                  context, out_bounds);
+    }
+    return false;
+  }
+
+  if (type_node->type == NODE_SUBRANGE_TYPE) {
+    SubrangeTypeNode *sr_node = (SubrangeTypeNode *)type_node;
+    ConstantValue lower = evaluate_constant(context, sr_node->lower);
+    ConstantValue upper = evaluate_constant(context, sr_node->upper);
+
+    out_bounds->lower = lower.value.int_val;
+    out_bounds->upper = upper.value.int_val;
+    return true;
+  }
+
+  return false;
+}
+
 static void analyze_call_parameters(ASTNode *call_args_list,
                                     CompilerContext *context) {
   if (!context->current_function)
@@ -582,18 +622,37 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
                     .lower = lower.value.int_val,
                     .upper = upper.value.int_val,
                 };
-                s->info.var_info.dimensions =
-                    calloc(1 + offset, sizeof(DimensionBounds));
-                s->info.var_info.dimensions[offset].lower = dim.lower;
-                s->info.var_info.dimensions[offset].upper = dim.upper;
+                s->info.var_info.dimensions[i].lower = dim.lower;
+                s->info.var_info.dimensions[i].upper = dim.upper;
                 s->info.var_info.num_dimensions = offset + 1;
               } else if (element->type == NODE_ENUMERATED_TYPE) {
-                // TODO:
+                EnumeratedTypeNode *enum_node = (EnumeratedTypeNode *)element;
+                int count = count_list_nodes(enum_node->identifiers_list);
+
+                if (count > 0) {
+                  s->info.var_info.dimensions[i].lower = 0;
+                  s->info.var_info.dimensions[i].upper = count - 1;
+                } else {
+                  yyerrorf(
+                      element->location,
+                      "Enumerated type used as array index cannot be empty.");
+                  context->has_errors = true;
+                }
               } else if (element->type == NODE_TYPE_IDENTIFIER) {
-                // TODO:
+                DimensionBounds resolved_bounds;
+                if (get_bounds_from_type(element, context, &resolved_bounds)) {
+                  s->info.var_info.dimensions[i].lower = resolved_bounds.lower;
+                  s->info.var_info.dimensions[i].upper = resolved_bounds.upper;
+                } else {
+                  yyerrorf(element->location,
+                           "Type identifier '%s' cannot be resolved to a valid "
+                           "array index range.",
+                           ((TypeIdentifierNode *)element)->id->name);
+                  context->has_errors = true;
+                }
               } else {
-                LOG_ERROR("era pra quebrar? %s",
-                          get_node_type_name(element->type));
+                yyerrorf(element->location, "era pra quebrar? %s",
+                         get_node_type_name(element->type));
 
                 context->has_errors = true;
                 break;
