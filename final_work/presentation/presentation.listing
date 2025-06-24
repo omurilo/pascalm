@@ -1,5 +1,0 @@
-primary_expression ::= '[' element_list ']' | ...
-
-element_list ::= element { ',' element }
-
-element ::= expression [ '..' expression ]

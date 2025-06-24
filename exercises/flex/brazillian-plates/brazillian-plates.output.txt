@@ -1,3 +1,0 @@
-Valid plate: ABC1D23
-Valid plate: ABC-1234
-Valid plate: ABC2J28

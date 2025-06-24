@@ -1,8 +1,0 @@
-String texto = "uma string qlq";
-Double double = 1.23e69;
-Float float = 1.23e15;
-Integer int = 125e10;
-Real real = 124.095;
-Char char = '65';
-Char char = 'a';
-Boolean exist = True;
