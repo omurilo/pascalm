@@ -22,7 +22,7 @@ jobs:
     - name: Build the compiler
       run: |
         cd src
-        ./build.sh
+        make
         # Confirma que o executável foi criado
         ls -l pascalm 
 
