@@ -721,7 +721,7 @@ void generate_if_statement(CodeGenerator *code_gen, CompilerContext *context,
     print_indent(code_gen);
     fprintf(code_gen->output_file, "if(%s %s %s) {\n", temp1,
             binary_op_to_string(binop->op), temp2);
-    code_gen->indent_level = temp_indent_level+1;
+    code_gen->indent_level = temp_indent_level + 1;
     generate_statement(code_gen, context, if_stmt->then_stmt);
     code_gen->indent_level--;
   } else {
@@ -1330,17 +1330,35 @@ void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
   case NODE_PROC_CALL:
     generate_proc_call_statement(code_gen, context, node);
     break;
-  case NODE_GOTO_STMT:
-    fprintf(code_gen->output_file, "/* statement list */\n");
+  case NODE_GOTO_STMT: {
+    GotoNode *got = (GotoNode *)node;
+    LiteralNode *l = (LiteralNode *)got->label;
+    char id[255];
+    sprintf(id, "Label%d", l->value.int_val);
+    print_indent(code_gen);
+    fprintf(code_gen->output_file, "goto %s;\n", id);
     break;
+  }
   case NODE_WITH_STMT: {
     WithNode *with = (WithNode *)node;
     generate_statement(code_gen, context, with->body);
     break;
   }
-  case NODE_LABELED_STMT:
-    fprintf(code_gen->output_file, "/* statement list */\n");
+  case NODE_LABELED_STMT: {
+    LabeledStmtNode *lb_stmt = (LabeledStmtNode *)node;
+    LiteralNode *l = (LiteralNode *)lb_stmt->label;
+    char id[255];
+    sprintf(id, "Label%d", l->value.int_val);
+
+    int temp_indent_level = code_gen->indent_level;
+    print_indent(code_gen);
+    fprintf(code_gen->output_file, "%s: ", id);
+    code_gen->indent_level = 0;
+    generate_statement(code_gen, context, lb_stmt->statement);
+    code_gen->indent_level = temp_indent_level;
     break;
+  }
+
   default:
     break;
   }
@@ -1471,13 +1489,14 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
     } else if (literal->literal_type == LITERAL_REAL) {
       fprintf(code_gen->output_file, "%.2f", literal->value.real_val);
     } else if (literal->literal_type == LITERAL_BOOLEAN) {
+      LOG_DEBUG("O boolean deveria ser true? %d", literal->value.bool_val);
       fprintf(code_gen->output_file, "%s",
               literal->value.bool_val ? "true" : "false");
     } else if (literal->literal_type == LITERAL_STRING) {
-      fprintf(code_gen->output_file, "\"%s\"", // : "make_string(\"%s\")",
+      fprintf(code_gen->output_file, "\"%s\"",
               literal->value.str_val);
     } else if (literal->literal_type == LITERAL_CHAR) {
-      fprintf(code_gen->output_file, "'%c'", // : "'%c'",
+      fprintf(code_gen->output_file, "'%c'",
               literal->value.char_val);
     }
 

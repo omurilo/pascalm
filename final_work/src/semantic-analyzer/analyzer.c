@@ -465,30 +465,49 @@ static void analyze_call_parameters(ASTNode *call_args_list,
 }
 
 void analyze_labels(ASTNode *label, CompilerContext *context) {
-  LabelDeclarationNode *ld = (LabelDeclarationNode *)label;
-  switch (ld->value->type) {
-  case NODE_LITERAL: {
-    // LiteralNode *l = (LiteralNode *)ld->value;
-    // char *id;
-    // if (l->literal_type == LITERAL_INTEGER) {
-    //   sprintf(id, "L%d", l->value.int_val);
-    // } else if (l->literal_type == LITERAL_REAL) {
-    //   sprintf(id, "L%.2f", l->value.real_val);
-    // } else if (l->literal_type == LITERAL_CHAR) {
-    //   sprintf(id, "L%c", l->value.char_val);
-    // } else if (l->literal_type == LITERAL_BOOLEAN) {
-    //   sprintf(id, "L%s", l->value.bool_val ? "true" : "false");
-    // }
-    //
-    // SymbolEntry *s = create_symbol_entry(strdup(id), SYMBOL_LABEL,
-    //                                      context->scope_stack->scope_level,
-    //                                      ld->base.location);
-    // context_insert(context, strdup(id), s);
-    break;
+  if (label == NULL)
+    return;
+
+  if (label->type != NODE_LIST) {
+    ListNode *new_list = xalloc(1, sizeof(ListNode));
+    new_list->base.type = NODE_LIST;
+    new_list->base.location = label->location;
+    new_list->element = label;
+    new_list->next = NULL;
+    label = (ASTNode *)new_list;
   }
-  case NODE_GOTO_STMT:
-  default:
-    break;
+
+  ListNode *curr = (ListNode *)label;
+  while (curr) {
+    if (curr->element) {
+      LabelDeclarationNode *ld = (LabelDeclarationNode *)curr->element;
+      switch (ld->value->type) {
+      case NODE_LITERAL: {
+        LiteralNode *l = (LiteralNode *)ld->value;
+        char id[255];
+        if (l->literal_type == LITERAL_INTEGER) {
+          sprintf(id, "Label%d", l->value.int_val);
+        } else {
+          yyerrorf(curr->element->location,
+                   "Label cannot to be different from integer val");
+          context->has_errors = true;
+        }
+
+        SymbolEntry *s = create_symbol_entry(strdup(id), SYMBOL_LABEL,
+                                             context->scope_stack->scope_level,
+                                             ld->base.location);
+        LOG_DEBUG("vamos colocar na symbol table o id %s", id);
+        context_insert(context, strdup(id), s);
+        break;
+      }
+      default:
+        yyerrorf(curr->element->location, "%s not mapped here (%d)",
+                 get_node_type_name(ld->value->type), __LINE__);
+        break;
+      }
+    }
+
+    curr = (ListNode *)curr->next;
   }
 }
 
@@ -605,7 +624,6 @@ void analyze_types(ASTNode *types, CompilerContext *context) {
       if (type_expr_def->type == NODE_RECORD_TYPE) {
         analyze_record_fields(s, context);
       }
-
     }
 
     curr = (ListNode *)curr->next;
@@ -646,7 +664,8 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
               resolve_to_actual_type_def(variable->type_node, context);
           SymbolEntry *def_symbol = resolve_to_type_symbol(def, context);
 
-          if (def_symbol && def_symbol->kind == SYMBOL_BUILTIN && strcmp(def_symbol->name, "string") == 0) {
+          if (def_symbol && def_symbol->kind == SYMBOL_BUILTIN &&
+              strcmp(def_symbol->name, "string") == 0) {
             need_string_helpers = true;
           }
 
@@ -1805,6 +1824,37 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
 
     break;
   }
+  case NODE_LABELED_STMT: {
+    LabeledStmtNode *lb_stmt = (LabeledStmtNode *)statement;
+    LOG_DEBUG("%s é o tipo do lb_stmt->label", get_node_type_name(lb_stmt->label->type));
+    analyze_expression(lb_stmt->label, context);
+    analyze_statement(lb_stmt->statement, context);
+    break;
+  }
+  case NODE_GOTO_STMT: {
+    GotoNode *got = (GotoNode *)statement;
+    LiteralNode *l = (LiteralNode *)got->label;
+    char id[255];
+    if (l->literal_type == LITERAL_INTEGER) {
+      sprintf(id, "Label%d", l->value.int_val);
+    } else {
+      yyerrorf(statement->location,
+               "Label cannot to be different from integer val");
+      context->has_errors = true;
+    }
+
+    SymbolEntry *got_symbol = context_lookup(context, id);
+
+    if (!got_symbol) {
+      yyerrorf(statement->location, "Undefined goto %s label", id);
+      context->has_errors = true;
+    }
+
+    LOG_DEBUG("%s é o tipo do got->label", get_node_type_name(got->label->type));
+    analyze_expression(got->label, context);
+
+    break;
+  }
   default:
     yyerrorf(statement->location,
              "O tipo %s não foi mapeado no analyze_statement",
@@ -1935,7 +1985,7 @@ void analyze_semantics(ASTNode *root_node, CompilerContext *context) {
   /* ADDING BUILTIN TYPES TO GLOBAL CONTEXT */
   insert_builtin_types(context, program->base.location);
   if (block->labels) {
-    analyze_labels(block->constants, context);
+    analyze_labels(block->labels, context);
   }
 
   if (block->constants) {

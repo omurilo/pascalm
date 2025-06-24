@@ -11,7 +11,7 @@
 #define SAVE_CHAR yylval.character = yytext[1]
 #define SAVE_STRING yylval.string = strndup(yytext+1, yyleng - 2)
 #define SAVE_IDENTIFIER yylval.string = strdup(yytext)
-#define SAVE_BOOLEAN yylval.boolean = strcmp(yytext, "true") ? 1 : 0
+#define SAVE_BOOLEAN yylval.boolean = strcmp(yytext, "true") == 0 ? 1 : 0
 
 int yycolumn = 1;
 

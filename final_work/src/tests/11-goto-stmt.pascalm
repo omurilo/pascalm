@@ -1,0 +1,10 @@
+program GotoStatement;
+
+label 100;
+
+begin
+if true then
+  goto 100;
+
+100: writeln('essa é a linha 100 :S');
+end.
