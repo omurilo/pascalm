@@ -90,9 +90,8 @@ IdentifierNode *resolve_type_identifier(ASTNode *node) {
   case NODE_RECORD_TYPE: {
     LOG_DEBUG("(%d.%d-%d.%d) The node record type is not mapped to resolve "
               "identifier. (%d)",
-              type_node->location.first_line, type_node->location.first_column,
-              type_node->location.last_line, type_node->location.last_column,
-              __LINE__);
+              node->location.first_line, node->location.first_column,
+              node->location.last_line, node->location.last_column, __LINE__);
 
     return NULL;
   }
