@@ -4,12 +4,12 @@
 
 # Etapa 1: Gerar fontes do Bison e Flex
 echo "Gerando parser e lexer..."
-bison -d -o parser/parser.tab.c parser/parser.y
+bison -d -o parser/parser.tab.c parser/parser.y -Wcounterexamples
 flex -o parser/lex.yy.c parser/parser.l
 
 # Etapa 2: Compilar tudo com GCC
 echo "Compilando o projeto..."
-gcc -g -Wall -o compilador \
+gcc -O2 -Wall -Wextra -o pascalm \
     main.c \
     context.c \
     ast/ast.c \
@@ -19,7 +19,7 @@ gcc -g -Wall -o compilador \
     code-generation/utils.c \
     parser/parser.tab.c \
     parser/lex.yy.c \
-    -lfl -lm
+    -lfl
 
 # Verifica se a compilação foi bem-sucedida
 if [ $? -eq 0 ]; then

@@ -17,12 +17,12 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y flex bison build-essential
+        sudo apt-get install -y flex gcc libfl-dev bison build-essential
 
     - name: Build the compiler
       run: |
         cd src
-        make
+        make DEBUG=1 SHOW_WARNINGS=1
         # Confirma que o executável foi criado
         ls -l pascalm 
 
