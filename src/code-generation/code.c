@@ -88,8 +88,12 @@ IdentifierNode *resolve_type_identifier(ASTNode *node) {
   }
 
   case NODE_RECORD_TYPE: {
-    yyerrorf(node->location,
-             "The node record type is not mapped to resolve identifier");
+    LOG_DEBUG("(%d.%d-%d.%d) The node record type is not mapped to resolve "
+              "identifier. (%d)",
+              type_node->location.first_line, type_node->location.first_column,
+              type_node->location.last_line, type_node->location.last_column,
+              __LINE__);
+
     return NULL;
   }
   default:
@@ -1049,7 +1053,7 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
             }
           }
         } else {
-          LOG_ERROR("%s is not mapped to generate write param",
+          LOG_DEBUG("%s is not mapped to generate write param",
                     get_symbol_kind_name(id->kind));
         }
         break;
@@ -1170,7 +1174,7 @@ void generate_read(CodeGenerator *code_gen, CompilerContext *context,
             }
           }
         } else {
-          LOG_ERROR("%s is not mapped to generate write param",
+          LOG_DEBUG("%s is not mapped to generate write param",
                     get_symbol_kind_name(id->kind));
         }
         break;
@@ -1493,11 +1497,9 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
       fprintf(code_gen->output_file, "%s",
               literal->value.bool_val ? "true" : "false");
     } else if (literal->literal_type == LITERAL_STRING) {
-      fprintf(code_gen->output_file, "\"%s\"",
-              literal->value.str_val);
+      fprintf(code_gen->output_file, "\"%s\"", literal->value.str_val);
     } else if (literal->literal_type == LITERAL_CHAR) {
-      fprintf(code_gen->output_file, "'%c'",
-              literal->value.char_val);
+      fprintf(code_gen->output_file, "'%c'", literal->value.char_val);
     }
 
     break;

@@ -1,0 +1,9 @@
+[ERROR] compile_error/1-undeclared/test.pascalm:24.21-24.22: error: Illegal input in
+
+[ERROR] compile_error/1-undeclared/test.pascalm:22.8-22.9: error: An L-value (variable) is expected for a VAR parameter.
+
+[ERROR] compile_error/1-undeclared/test.pascalm:26.10-26.32: error: Undeclared identifier 'variavel_nao_declarada'
+
+[ERROR] compile_error/1-undeclared/test.pascalm:27.4-28.0: error: Compilation failed due to semantic errors.
+
+

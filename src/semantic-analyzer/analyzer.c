@@ -151,8 +151,10 @@ static SymbolEntry *resolve_to_type_symbol(ASTNode *type_node,
     return resolve_to_type_symbol(((ArrayTypeNode *)type_node)->type, context);
   }
 
-  yyerrorf(type_node->location, "The node of kind %s is not mapped here (%d)",
-           get_node_type_name(type_node->type), __LINE__);
+  LOG_DEBUG("The node of kind %s (%d.%d-%d.%d) is not mapped here (%d)",
+            get_node_type_name(type_node->type), type_node->location.first_line,
+            type_node->location.first_column, type_node->location.last_line,
+            type_node->location.last_column, __LINE__);
 
   return NULL;
 }
@@ -1826,7 +1828,8 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   }
   case NODE_LABELED_STMT: {
     LabeledStmtNode *lb_stmt = (LabeledStmtNode *)statement;
-    LOG_DEBUG("%s é o tipo do lb_stmt->label", get_node_type_name(lb_stmt->label->type));
+    LOG_DEBUG("%s é o tipo do lb_stmt->label", 
+              et_node_type_name(lb_stmt->label->type));
     analyze_expression(lb_stmt->label, context);
     analyze_statement(lb_stmt->statement, context);
     break;
@@ -1850,7 +1853,8 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
       context->has_errors = true;
     }
 
-    LOG_DEBUG("%s é o tipo do got->label", get_node_type_name(got->label->type));
+    LOG_DEBUG("%s é o tipo do got->label", 
+              et_node_type_name(got->label->type));
     analyze_expression(got->label, context);
 
     break;

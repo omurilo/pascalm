@@ -1,0 +1,32 @@
+name: Test PascalM Compiler
+
+on:
+  push:
+    branches: [ "main", "master" ] # Adapte para o nome da sua branch principal
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y flex bison build-essential
+
+    - name: Build the compiler
+      run: |
+        cd src
+        ./build.sh
+        # Confirma que o executável foi criado
+        ls -l pascalm 
+
+    - name: Run test suite
+      run: |
+        cd ./src/tests
+        ./run_tests.sh ../pascalm
