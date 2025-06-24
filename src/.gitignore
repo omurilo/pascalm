@@ -1,6 +1,7 @@
 *.dSYM
-../old
-../presentation
-../grammar
 build/**
 pascalm
+parser/lex.yy.c
+parser/parser.tab.c
+parser/parser.tab.h
+*.output
