@@ -22,7 +22,7 @@ jobs:
     - name: Build the compiler
       run: |
         cd src
-        make DEBUG=1 SHOW_WARNINGS=1
+        make
         # Confirma que o executável foi criado
         ls -l pascalm 
 
