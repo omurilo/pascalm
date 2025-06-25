@@ -53,7 +53,6 @@ ht *scope_stack_peek(ScopeStack *stack) {
 }
 
 ASTNode **with_stack_create(CompilerContext *context) {
-  ASTNode *stack = xalloc(1, sizeof(ASTNode));
   context->with_stack_capacity = 8;
   context->with_stack =
       xalloc(context->with_stack_capacity, sizeof(ASTNode *));

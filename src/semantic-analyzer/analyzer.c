@@ -70,8 +70,7 @@ static void insert_builtin_funcs_and_procs(CompilerContext *context,
   }
 }
 
-static ASTNode *get_type_from_literal(ASTNode *literal_node,
-                                      CompilerContext *context) {
+static ASTNode *get_type_from_literal(ASTNode *literal_node) {
   if (!literal_node || literal_node->type != NODE_LITERAL)
     return NULL;
   LiteralNode *l = (LiteralNode *)literal_node;
@@ -188,9 +187,6 @@ static ASTNode *resolve_to_actual_type_def(ASTNode *type_node,
 
 SymbolEntry *get_primitive_type(SymbolEntry *type_symbol) {
   if (type_symbol && type_symbol->kind == SYMBOL_TYPE_ALIAS) {
-    LOG_DEBUG("é um alias mesmo, ta nulo? %s", 
-              type_symbol->info.type_info.aliased_type);
-
     return type_symbol->info.type_info.aliased_type;
   }
   return type_symbol;
@@ -1244,7 +1240,7 @@ static ASTNode *analyze_expression(ASTNode *expression,
     return expression->result_type;
   }
   case NODE_LITERAL: {
-    expression->result_type = get_type_from_literal(expression, context);
+    expression->result_type = get_type_from_literal(expression);
     return expression->result_type;
   }
   case NODE_FORMAL_PARAM_SECTION: {
@@ -1429,10 +1425,6 @@ static ASTNode *analyze_expression(ASTNode *expression,
         bool r_is_real = strcmp(r_name, "real") == 0;
         bool l_is_int = strcmp(l_name, "integer") == 0;
         bool r_is_int = strcmp(r_name, "integer") == 0;
-        bool l_is_char = strcmp(l_name, "char") == 0;
-        bool r_is_char = strcmp(r_name, "char") == 0;
-        bool l_is_string = strcmp(l_name, "string") == 0;
-        bool r_is_string = strcmp(r_name, "string") == 0;
 
         if (l_is_real || r_is_real) {
           expression->result_type =
@@ -1496,9 +1488,11 @@ static ASTNode *analyze_expression(ASTNode *expression,
   }
   case NODE_ARRAY_TYPE: {
     ArrayTypeNode *array = (ArrayTypeNode *)expression;
-    IndexList *index_list = (IndexList *)array->index_list;
     SymbolEntry *array_type_symbol =
         resolve_to_type_symbol(array->type, context);
+    expression->result_type = array_type_symbol->info.type_info.definition;
+
+    return expression->result_type;
   }
   default:
     return NULL;
@@ -1801,7 +1795,6 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
 
     while (current_rec_var_node) {
       ASTNode *rec_var_expr = current_rec_var_node->element;
-      SymbolEntry *rec_symbol = resolve_to_type_symbol(rec_var_expr, context);
 
       ASTNode *type_node = analyze_expression(rec_var_expr, context);
       SymbolEntry *type_symbol = resolve_to_type_symbol(type_node, context);
@@ -1828,8 +1821,6 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
   }
   case NODE_LABELED_STMT: {
     LabeledStmtNode *lb_stmt = (LabeledStmtNode *)statement;
-    LOG_DEBUG("%s é o tipo do lb_stmt->label", 
-              et_node_type_name(lb_stmt->label->type));
     analyze_expression(lb_stmt->label, context);
     analyze_statement(lb_stmt->statement, context);
     break;
@@ -1853,8 +1844,6 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
       context->has_errors = true;
     }
 
-    LOG_DEBUG("%s é o tipo do got->label", 
-              et_node_type_name(got->label->type));
     analyze_expression(got->label, context);
 
     break;
@@ -1910,9 +1899,6 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
     if (vp) {
       TagFieldNode *tag = (TagFieldNode *)vp->tag_field;
       IdentifierNode *tag_id = (IdentifierNode *)tag->field;
-      TypeIdentifierNode *tag_tid = (TypeIdentifierNode *)tag->tag_type;
-      // SymbolEntry *tag_t_s =
-      //     context_lookup(context, ((IdentifierNode *)tag_tid->id)->name);
 
       SymbolEntry *tag_symbol = create_symbol_entry(
           tag_id->name, SYMBOL_FIELD, record_type_symbol->scope_level + 1,

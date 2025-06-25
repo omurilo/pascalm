@@ -106,7 +106,6 @@ bool is_reference_type(ASTNode *node) {
   switch (node->type) {
   case NODE_IDENTIFIER: {
     IdentifierNode *id = resolve_identifier(node);
-    LOG_DEBUG("o id deve estar nulo %s", id->symbol);
     return id->symbol->info.var_info.is_ref;
   }
   case NODE_TYPE_IDENTIFIER: {
@@ -176,7 +175,7 @@ void generate_block(CodeGenerator *code_gen, CompilerContext *context,
   ListNode *constants = (ListNode *)block->constants;
   while (constants) {
     if (constants->element) {
-      generate_constant(code_gen, context, constants->element);
+      generate_constant(code_gen, constants->element);
     }
 
     constants = (ListNode *)constants->next;
@@ -236,8 +235,7 @@ void generate_block(CodeGenerator *code_gen, CompilerContext *context,
   }
 }
 
-void generate_constant(CodeGenerator *code_gen, CompilerContext *context,
-                       ASTNode *node) {
+void generate_constant(CodeGenerator *code_gen, ASTNode *node) {
   ConstDeclarationNode *const_node = (ConstDeclarationNode *)node;
   IdentifierNode *id = (IdentifierNode *)const_node->identifier;
   LiteralNode *literal = (LiteralNode *)id->symbol->info.const_info.value;
@@ -503,7 +501,7 @@ void generate_type(CodeGenerator *code_gen, CompilerContext *context,
   case NODE_STRUCTURED_TYPE: {
     StructuredTypeNode *s_node = (StructuredTypeNode *)type_node->type_expr;
     if (s_node->type->type == NODE_RECORD_TYPE) {
-      generate_record(code_gen, context, node);
+      generate_record(code_gen, node);
       break;
     } else if (s_node->type->type == NODE_SET_TYPE) {
       fprintf(code_gen->output_file, "typedef unsigned long long %s;\n",
@@ -526,8 +524,7 @@ void generate_type(CodeGenerator *code_gen, CompilerContext *context,
   }
 }
 
-void generate_record(CodeGenerator *code_gen, CompilerContext *context,
-                     ASTNode *node) {
+void generate_record(CodeGenerator *code_gen, ASTNode *node) {
   TypeDeclarationNode *type_decl = (TypeDeclarationNode *)node;
   RecordTypeNode *r_node =
       (RecordTypeNode *)((StructuredTypeNode *)type_decl->type_expr)->type;
@@ -540,7 +537,7 @@ void generate_record(CodeGenerator *code_gen, CompilerContext *context,
   if (r_node->field_list) {
     FixedPartNode *fp_node =
         (FixedPartNode *)((FieldListNode *)r_node->field_list)->fixed_part;
-    generate_field_list(code_gen, fp_node->fields, context);
+    generate_field_list(code_gen, fp_node->fields);
   }
   if (r_node->variant_part) {
     VariantPartNode *vp_node = (VariantPartNode *)r_node->variant_part;
@@ -570,7 +567,7 @@ void generate_record(CodeGenerator *code_gen, CompilerContext *context,
 
         FieldListNode *fl_node = (FieldListNode *)v_rec_node->field_list;
         FixedPartNode *fp_node = (FixedPartNode *)fl_node->fixed_part;
-        generate_field_list(code_gen, fp_node->fields, context);
+        generate_field_list(code_gen, fp_node->fields);
 
         code_gen->indent_level--;
         print_indent(code_gen);
@@ -762,10 +759,6 @@ void generate_case_statement(CodeGenerator *code_gen, CompilerContext *context,
   generate_expression(code_gen, context, case_stmt->expr);
   fprintf(code_gen->output_file, ") {\n");
 
-  ASTNode *result_type = case_stmt->expr->result_type;
-  SymbolEntry *result_type_symbol =
-      resolve_type_identifier(result_type)->symbol;
-
   while (case_items) {
     if (case_items->element) {
       CaseItemNode *item = (CaseItemNode *)case_items->element;
@@ -777,7 +770,6 @@ void generate_case_statement(CodeGenerator *code_gen, CompilerContext *context,
           ConstantNode *const_node = (ConstantNode *)value_list->element;
           if (!const_node->is_literal) {
             IdentifierNode *id = (IdentifierNode *)const_node->identifier;
-            SymbolEntry *id_symbol = context_lookup(context, id->name);
             fprintf(code_gen->output_file, "case %s:", id->name);
           } else {
             switch (const_node->const_type) {
@@ -1569,8 +1561,7 @@ ASTNode *get_expression_type(ASTNode *expression_node) {
   return NULL;
 }
 
-void generate_field_list(CodeGenerator *code_gen, ASTNode *list_node,
-                         CompilerContext *context) {
+void generate_field_list(CodeGenerator *code_gen, ASTNode *list_node) {
   if (!list_node)
     return;
 
