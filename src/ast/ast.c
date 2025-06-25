@@ -1452,6 +1452,7 @@ ASTNode *create_variant_node(ASTNode *label_list, ASTNode *field_list,
   node->base.print = print_todo;
   node->case_labels = label_list;
   node->field_list = field_list;
+  node->name = NULL;
 
   return (ASTNode *)node;
 };

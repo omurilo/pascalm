@@ -173,5 +173,21 @@ SymbolEntry *create_symbol_entry(char *name, SymbolKind kind, int scope_level,
   symb->scope_level = scope_level <= 0 ? 0 : scope_level;
   symb->location = loc;
 
+  switch (kind) {
+  SYMBOL_FIELD:
+  SYMBOL_PARAMETER: {
+    symb->info.var_info.type = NULL;
+    symb->info.var_info.offset = 0;
+    symb->info.var_info.is_ref = NULL;
+    symb->info.var_info.dimensions = NULL;
+    symb->info.var_info.num_dimensions = 0;
+    symb->info.var_info.variant_access_prefix = NULL;
+
+    break;
+  }
+  default:
+    break;
+  }
+
   return symb;
 }

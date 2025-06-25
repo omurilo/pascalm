@@ -236,6 +236,7 @@ struct SymbolEntry {
       bool is_ref;
       DimensionBounds *dimensions;
       int num_dimensions;
+      const char *variant_access_prefix;
     } var_info;
 
     struct {

@@ -24,6 +24,7 @@ type
 var
   devs: array[1..10] of Employee;
   manager: Employee;
+  i: integer;
 
 begin
   manager.id := 101;
@@ -35,4 +36,5 @@ begin
   devs[1].status := Active;
   devs[1].projects[1] := 'Compiler Project'; 
   { Acesso a array dentro de variante de record dentro de array }
+  writeln('id:', devs[1].id, ' status:', devs[1].status, ' project:', devs[1].projects[1]);
 end.

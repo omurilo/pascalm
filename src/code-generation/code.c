@@ -1,5 +1,6 @@
 #include "code.h"
 #include "../logger.h"
+#include <stdio.h>
 
 CodeGenerator *create_code_generator(char *output_file) {
   CodeGenerator *code_gen = xalloc(1, sizeof(CodeGenerator));
@@ -121,8 +122,14 @@ bool is_reference_type(ASTNode *node) {
     IdentifierNode *id = resolve_identifier(arr->array);
     return id->symbol->info.var_info.is_ref;
   }
+  case NODE_MEMBER_ACCESS: {
+    MemberAccessNode *m_node = (MemberAccessNode *)node;
+    IdentifierNode *id = resolve_identifier(m_node->record);
+    return id->symbol->info.var_info.is_ref;
+    break;
+  }
   default:
-    yyerrorf(node->location, "%s não foi mapeado em is_reference_type", 
+    yyerrorf(node->location, "%s não foi mapeado em is_reference_type",
              get_node_type_name(node->type));
     break;
   }
@@ -144,6 +151,29 @@ void generate_string_operand(CodeGenerator *code_gen, CompilerContext *context,
   } else {
     generate_expression(code_gen, context, operand_node);
   }
+}
+
+void generate_enum_strings(CodeGenerator *code_gen,
+                           TypeDeclarationNode *type_node) {
+  SimpleTypeNode *s_node = (SimpleTypeNode *)type_node->type_expr;
+  EnumeratedTypeNode *enum_type = (EnumeratedTypeNode *)s_node->type;
+  IdentifierNode *type_node_id = resolve_type_identifier(type_node->identifier);
+
+  fprintf(code_gen->output_file, "const char* %s_to_string[] = {\n",
+          type_node_id->name);
+  code_gen->indent_level++;
+  ListNode *list = (ListNode *)enum_type->identifiers_list;
+  while (list) {
+    if (!list->element)
+      break;
+    print_indent(code_gen);
+    fprintf(code_gen->output_file, "\"%s\",\n",
+            ((IdentifierNode *)list->element)->name);
+
+    list = (ListNode *)list->next;
+  }
+  code_gen->indent_level--;
+  fprintf(code_gen->output_file, "};\n\n");
 }
 
 void generate_program(CodeGenerator *code_gen, CompilerContext *context,
@@ -376,19 +406,50 @@ void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
             LOG_ERROR("NODE_POINTER_TYPE\n");
           }
         } else {
-          LOG_ERROR("o kind não é symbol_type e n sei qual é: %s", 
+          LOG_ERROR("o kind não é symbol_type e n sei qual é: %s",
                     get_symbol_kind_name(c_type->kind));
         }
         fprintf(code_gen->output_file, ";\n");
       }
       break;
     } else if (s_node->type->type == NODE_ENUMERATED_TYPE) {
+      EnumeratedTypeNode *enum_type = (EnumeratedTypeNode *)s_node->type;
+      IdentifierNode *id_node = resolve_type_identifier((ASTNode *)s_node);
+
+      fprintf(code_gen->output_file, "typedef enum {\n");
+      ListNode *list = (ListNode *)enum_type->identifiers_list;
+      while (list) {
+        if (list->element) {
+          print_indent(code_gen);
+          fprintf(code_gen->output_file, "%s,",
+                  ((IdentifierNode *)list->element)->name);
+        }
+
+        list = (ListNode *)list->next;
+      }
+      fprintf(code_gen->output_file, "} %s;\n", id_node->name);
       break;
     } else if (s_node->type->type == NODE_SUBRANGE_TYPE) {
       break;
     }
     break;
   }
+  // case NODE_ENUMERATED_TYPE: {
+  //   EnumeratedTypeNode *enum_type = (EnumeratedTypeNode *)v_node->type_node;
+  //   fprintf(code_gen->output_file, "typedef enum {\n");
+  //   ListNode* list = (ListNode*)enum_type->identifiers_list;
+  //   while(list) {
+  //     if (list->element) {
+  //       print_indent(code_gen);
+  //       fprintf(code_gen->output_file, "%s,",
+  //       ((IdentifierNode*)list->element)->name);
+  //     }
+  //
+  //     list = (ListNode*)list->next;
+  //   }
+  //   fprintf(code_gen->output_file, "};\n");
+  //   break;
+  // }
   case NODE_POINTER_TYPE: {
     // PointerTypeNode *pt_node = (PointerTypeNode *)v_node->type_node;
     break;
@@ -491,6 +552,25 @@ void generate_type(CodeGenerator *code_gen, CompilerContext *context,
               resolve_type_identifier(type_node->identifier)->name);
       break;
     } else if (s_node->type->type == NODE_ENUMERATED_TYPE) {
+      EnumeratedTypeNode *enum_type = (EnumeratedTypeNode *)s_node->type;
+
+      generate_enum_strings(code_gen, type_node);
+
+      fprintf(code_gen->output_file, "typedef enum {\n");
+      code_gen->indent_level++;
+      ListNode *list = (ListNode *)enum_type->identifiers_list;
+      while (list) {
+        if (list->element) {
+          print_indent(code_gen);
+          fprintf(code_gen->output_file, "%s,\n",
+                  ((IdentifierNode *)list->element)->name);
+        }
+
+        list = (ListNode *)list->next;
+      }
+      code_gen->indent_level--;
+      fprintf(code_gen->output_file, "} %s;\n\n",
+              resolve_type_identifier(type_node->identifier)->name);
       break;
     } else if (s_node->type->type == NODE_SUBRANGE_TYPE) {
       break;
@@ -501,7 +581,7 @@ void generate_type(CodeGenerator *code_gen, CompilerContext *context,
   case NODE_STRUCTURED_TYPE: {
     StructuredTypeNode *s_node = (StructuredTypeNode *)type_node->type_expr;
     if (s_node->type->type == NODE_RECORD_TYPE) {
-      generate_record(code_gen, node);
+      generate_record(code_gen, context, node);
       break;
     } else if (s_node->type->type == NODE_SET_TYPE) {
       fprintf(code_gen->output_file, "typedef unsigned long long %s;\n",
@@ -524,7 +604,8 @@ void generate_type(CodeGenerator *code_gen, CompilerContext *context,
   }
 }
 
-void generate_record(CodeGenerator *code_gen, ASTNode *node) {
+void generate_record(CodeGenerator *code_gen, CompilerContext *context,
+                     ASTNode *node) {
   TypeDeclarationNode *type_decl = (TypeDeclarationNode *)node;
   RecordTypeNode *r_node =
       (RecordTypeNode *)((StructuredTypeNode *)type_decl->type_expr)->type;
@@ -537,49 +618,51 @@ void generate_record(CodeGenerator *code_gen, ASTNode *node) {
   if (r_node->field_list) {
     FixedPartNode *fp_node =
         (FixedPartNode *)((FieldListNode *)r_node->field_list)->fixed_part;
-    generate_field_list(code_gen, fp_node->fields);
-  }
-  if (r_node->variant_part) {
-    VariantPartNode *vp_node = (VariantPartNode *)r_node->variant_part;
+    generate_field_list(code_gen, context, fp_node->fields);
 
-    if (vp_node->tag_field) {
-      TagFieldNode *tag = (TagFieldNode *)vp_node->tag_field;
-      print_indent(code_gen);
-      fprintf(code_gen->output_file, "%s %s;\n",
-              resolve_type_identifier(tag->tag_type)->name,
-              ((IdentifierNode *)tag->field)->name);
-    }
+    if (((FieldListNode *)r_node->field_list)->variant_part) {
+      VariantPartNode *vp_node =
+          (VariantPartNode *)((FieldListNode *)r_node->field_list)
+              ->variant_part;
 
-    print_indent(code_gen);
-    fprintf(code_gen->output_file, "union {\n");
-    code_gen->indent_level++;
-
-    VariantListNode *v_list_node = (VariantListNode *)vp_node->variant_list;
-    ListNode *variants = (ListNode *)v_list_node->variants;
-    int variant_index = 0;
-
-    while (variants) {
-      VariantRecordNode *v_rec_node = (VariantRecordNode *)variants->element;
-      if (v_rec_node->field_list) {
+      if (vp_node->tag_field) {
+        TagFieldNode *tag = (TagFieldNode *)vp_node->tag_field;
         print_indent(code_gen);
-        fprintf(code_gen->output_file, "struct {\n");
-        code_gen->indent_level++;
-
-        FieldListNode *fl_node = (FieldListNode *)v_rec_node->field_list;
-        FixedPartNode *fp_node = (FixedPartNode *)fl_node->fixed_part;
-        generate_field_list(code_gen, fp_node->fields);
-
-        code_gen->indent_level--;
-        print_indent(code_gen);
-        fprintf(code_gen->output_file, "} variant_%d;\n", variant_index);
+        fprintf(code_gen->output_file, "%s %s;\n",
+                resolve_type_identifier(tag->tag_type)->name,
+                ((IdentifierNode *)tag->field)->name);
       }
-      variants = (ListNode *)variants->next;
-      variant_index++;
-    }
 
-    code_gen->indent_level--;
-    print_indent(code_gen);
-    fprintf(code_gen->output_file, "} variants;\n");
+      print_indent(code_gen);
+      fprintf(code_gen->output_file, "union {\n");
+      code_gen->indent_level++;
+
+      VariantListNode *v_list_node = (VariantListNode *)vp_node->variant_list;
+      ListNode *variants = (ListNode *)v_list_node->variants;
+
+      while (variants) {
+        VariantRecordNode *v_rec_node = (VariantRecordNode *)variants->element;
+        if (v_rec_node->field_list) {
+          print_indent(code_gen);
+          fprintf(code_gen->output_file, "struct {\n");
+          code_gen->indent_level++;
+
+          FieldListNode *fl_node = (FieldListNode *)v_rec_node->field_list;
+          FixedPartNode *fp_node = (FixedPartNode *)fl_node->fixed_part;
+          LOG_DEBUG("é aqui que deveria colocar certo e n coloca");
+          generate_field_list(code_gen, context, fp_node->fields);
+
+          code_gen->indent_level--;
+          print_indent(code_gen);
+          fprintf(code_gen->output_file, "} %s;\n", v_rec_node->name);
+        }
+        variants = (ListNode *)variants->next;
+      }
+
+      code_gen->indent_level--;
+      print_indent(code_gen);
+      fprintf(code_gen->output_file, "} data;\n");
+    }
   }
 
   code_gen->indent_level--;
@@ -673,9 +756,13 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
       generate_string_operand(code_gen, context, bin_op->right, true);
       fprintf(code_gen->output_file, ")");
     } else {
-      fprintf(code_gen->output_file, "make_string(");
-      generate_string_operand(code_gen, context, a->expression, false);
-      fprintf(code_gen->output_file, ")");
+      if (a->expression->type == NODE_IDENTIFIER) {
+        generate_string_operand(code_gen, context, a->expression, false);
+      } else {
+        fprintf(code_gen->output_file, "make_string(");
+        generate_string_operand(code_gen, context, a->expression, false);
+        fprintf(code_gen->output_file, ")");
+      }
     }
   } else {
     generate_expression(code_gen, context, a->expression);
@@ -927,6 +1014,13 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
   char format_string[255] = "";
   while (params) {
     if (params->element) {
+      IdentifierNode *id = resolve_type_identifier(params->element);
+      if (id)
+        LOG_DEBUG(
+            "O tipo do identificador %s é %s vs %s", id->name,
+            get_node_type_name(id->symbol->info.type_info.definition->type),
+            get_node_type_name(params->element->type));
+
       switch (params->element->type) {
       case NODE_LITERAL: {
         LiteralNode *literal = (LiteralNode *)params->element;
@@ -954,15 +1048,6 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
         } else if (literal->literal_type == LITERAL_NIL) {
           yyerrorf(literal->base.location, "Credo teve um nil ali!");
         }
-        break;
-      }
-      case NODE_ARRAY_ACCESS: {
-        // ArrayAccessNode *a_node = (ArrayAccessNode *)params->element;
-        // IdentifierNode *array_id = (IdentifierNode *)a_node->array;
-        // SymbolEntry *array_symbol = array_id->symbol;
-
-        strcat(format_string, "%d");
-
         break;
       }
       case NODE_BINARY_EXPR: {
@@ -999,6 +1084,10 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
           if (id_sym->info.var_info.type->type == NODE_TYPE_IDENTIFIER) {
             TypeIdentifierNode *s_t_id =
                 (TypeIdentifierNode *)id_sym->info.var_info.type;
+            IdentifierNode *s_id =
+                resolve_type_identifier(id_sym->info.var_info.type);
+            LOG_DEBUG("Ta usando o s_t_id->kind pra descobrir que é um: %s",
+                      s_id->name);
             if (s_t_id->kind == SYMBOL_BUILTIN) {
               const char *type_name =
                   resolve_type_identifier((ASTNode *)s_t_id)->name;
@@ -1017,6 +1106,9 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
               } else if (strcmp(type_name, "double") == 0) {
                 strcat(format_string, "%.2f");
               }
+              LOG_DEBUG("e dai vai usar: %s", format_string);
+            } else if (s_t_id->kind == SYMBOL_ENUM_VALUE) {
+              strcat(format_string, "%s");
             }
           } else if (id_sym->info.var_info.type->type == NODE_SIMPLE_TYPE) {
             SimpleTypeNode *s_t =
@@ -1049,6 +1141,7 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
         }
         break;
       }
+      case NODE_ARRAY_ACCESS:
       case NODE_MEMBER_ACCESS: {
         IdentifierNode *id =
             resolve_type_identifier(params->element->result_type);
@@ -1066,6 +1159,13 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
           break;
         } else if (strcmp(id->name, "double") == 0) {
           strcat(format_string, "%.2f");
+          break;
+        } else if (id->symbol->info.type_info.definition->type ==
+                   NODE_ENUMERATED_TYPE) {
+          strcat(format_string, "%s");
+          break;
+        } else {
+          strcat(format_string, "%d");
           break;
         }
 
@@ -1091,7 +1191,21 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
     if (curr->element && curr->element->type != NODE_LITERAL) {
       if (first)
         fprintf(code_gen->output_file, ", ");
-      generate_expression(code_gen, context, curr->element);
+      LOG_DEBUG(
+          "QUal é o tipo que essa generate expression vai tentar resolver? %s",
+          get_node_type_name(curr->element->type));
+      IdentifierNode *final_type_id =
+          resolve_type_identifier(curr->element->result_type);
+      if (final_type_id->symbol &&
+          final_type_id->symbol->info.type_info.definition->type ==
+              NODE_ENUMERATED_TYPE) {
+        fprintf(code_gen->output_file, "%s_to_string[", final_type_id->name);
+        generate_expression(code_gen, context, curr->element);
+        fprintf(code_gen->output_file, "]");
+      } else {
+        generate_expression(code_gen, context, curr->element);
+      }
+
       if (curr->element->result_type != NULL) {
         IdentifierNode *result_id =
             resolve_type_identifier(curr->element->result_type);
@@ -1375,13 +1489,19 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
       is_ref = s->info.var_info.is_ref;
     }
 
+    char expression_access[255] = "";
+    if (s && s->info.var_info.variant_access_prefix != NULL) {
+      sprintf(expression_access, "%s", s->info.var_info.variant_access_prefix);
+    }
+
     if (id->with_node != NULL) {
       generate_expression(code_gen, context, id->with_node);
-      fprintf(code_gen->output_file, ".%s", id->name);
+      fprintf(code_gen->output_file, ".%s%s", expression_access, id->name);
     } else if (s) {
-      fprintf(code_gen->output_file, is_ref ? "*%s" : "%s", id->name);
+      fprintf(code_gen->output_file, is_ref ? "*%s%s" : "%s%s",
+              expression_access, id->name);
     } else {
-      fprintf(code_gen->output_file, "%s", id->name);
+      fprintf(code_gen->output_file, "%s%s", expression_access, id->name);
     }
     break;
   }
@@ -1484,7 +1604,6 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
     } else if (literal->literal_type == LITERAL_REAL) {
       fprintf(code_gen->output_file, "%.2f", literal->value.real_val);
     } else if (literal->literal_type == LITERAL_BOOLEAN) {
-      LOG_DEBUG("O boolean deveria ser true? %d", literal->value.bool_val);
       fprintf(code_gen->output_file, "%s",
               literal->value.bool_val ? "true" : "false");
     } else if (literal->literal_type == LITERAL_STRING) {
@@ -1530,6 +1649,8 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
     is_ref = is_reference_type(m_node->record);
 
     if (m_node->record->type != NODE_IDENTIFIER) {
+      LOG_DEBUG("Vai chamar a generate expression pro tipo! %s",
+                get_node_type_name(m_node->record->type));
       generate_expression(code_gen, context, m_node->record);
     } else {
       IdentifierNode *id = resolve_identifier(m_node->record);
@@ -1561,12 +1682,15 @@ ASTNode *get_expression_type(ASTNode *expression_node) {
   return NULL;
 }
 
-void generate_field_list(CodeGenerator *code_gen, ASTNode *list_node) {
+void generate_field_list(CodeGenerator *code_gen, CompilerContext *context,
+                         ASTNode *list_node) {
   if (!list_node)
     return;
 
   ListNode *current_field_decl = (ListNode *)list_node;
   while (current_field_decl) {
+    if (!current_field_decl->element)
+      break;
     RecordFieldNode *field_decl =
         (RecordFieldNode *)current_field_decl->element;
     const char *c_type_str =
@@ -1575,8 +1699,41 @@ void generate_field_list(CodeGenerator *code_gen, ASTNode *list_node) {
     ListNode *id_list = (ListNode *)field_decl->field_list;
     while (id_list) {
       print_indent(code_gen);
-      fprintf(code_gen->output_file, "%s %s;\n", c_type_str,
-              ((IdentifierNode *)id_list->element)->name);
+      IdentifierNode *id = (IdentifierNode *)id_list->element;
+      SymbolEntry *id_symbol = id->symbol;
+
+      if (id_symbol->info.var_info.type->type == NODE_STRUCTURED_TYPE) {
+        StructuredTypeNode *st =
+            (StructuredTypeNode *)id_symbol->info.var_info.type;
+        TypeDeclarationNode *t_node = xalloc(1, sizeof(TypeDeclarationNode));
+        t_node->type_expr = (ASTNode *)st;
+        t_node->identifier = (ASTNode *)id;
+        int indent_temp = code_gen->indent_level;
+        code_gen->indent_level = 0;
+        switch (st->type->type) {
+        case NODE_ARRAY_TYPE: {
+          t_node->base.type = NODE_ARRAY_TYPE;
+
+          generate_array(code_gen, context, (ASTNode *)t_node, false);
+          code_gen->indent_level = indent_temp;
+          break;
+        }
+        case NODE_RECORD_TYPE: {
+          t_node->base.type = NODE_RECORD_TYPE;
+          generate_record(code_gen, context, (ASTNode *)t_node);
+          break;
+        }
+        case NODE_SET_TYPE: {
+          fprintf(code_gen->output_file, "unsigned long long %s;\n", id->name);
+        }
+        default:
+          break;
+        }
+      } else {
+        fprintf(code_gen->output_file, "%s %s;\n", c_type_str,
+                ((IdentifierNode *)id_list->element)->name);
+      }
+
       id_list = (ListNode *)id_list->next;
     }
     current_field_decl = (ListNode *)current_field_decl->next;

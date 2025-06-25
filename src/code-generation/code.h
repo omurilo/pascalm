@@ -18,7 +18,8 @@ void generate_type(CodeGenerator *code_gen, CompilerContext *context,
                    ASTNode *node);
 void generate_parameters(CodeGenerator *code_gen, CompilerContext *context,
                          ASTNode *node);
-void generate_record(CodeGenerator *code_gen, ASTNode *node);
+void generate_record(CodeGenerator *code_gen, CompilerContext *context,
+                     ASTNode *node);
 void generate_array(CodeGenerator *code_gen, CompilerContext *context,
                     ASTNode *node, bool disable_initialization);
 void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
@@ -36,7 +37,7 @@ void generate_strings_helper_functions(CodeGenerator *code_gen);
 void generate_set_helper_functions(CodeGenerator *code_gen);
 void generate_array_helper_functions(CodeGenerator *code_gen);
 
-void generate_field_list(CodeGenerator *code_gen, ASTNode *list_node);
+void generate_field_list(CodeGenerator *code_gen, CompilerContext *context, ASTNode *list_node);
 ASTNode *get_expression_type(ASTNode *expression_node);
 
 #endif

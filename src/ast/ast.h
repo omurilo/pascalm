@@ -508,6 +508,7 @@ struct VariantListNode {
 
 struct VariantRecordNode {
   ASTNode base;
+  const char *name;
   ASTNode *case_labels;
   ASTNode *field_list;
 };

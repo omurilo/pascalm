@@ -150,6 +150,10 @@ static SymbolEntry *resolve_to_type_symbol(ASTNode *type_node,
     return resolve_to_type_symbol(((ArrayTypeNode *)type_node)->type, context);
   }
 
+  if (type_node->type == NODE_SET_TYPE) {
+    return resolve_to_type_symbol(((SetTypeNode *)type_node)->type, context);
+  }
+
   LOG_DEBUG("The node of kind %s (%d.%d-%d.%d) is not mapped here (%d)",
             get_node_type_name(type_node->type), type_node->location.first_line,
             type_node->location.first_column, type_node->location.last_line,
@@ -194,10 +198,17 @@ SymbolEntry *get_primitive_type(SymbolEntry *type_symbol) {
 
 static int check_type_compatibility(ASTNode *dest_type, ASTNode *src_type,
                                     CompilerContext *context) {
+
   SymbolEntry *dest_symbol = resolve_to_type_symbol(dest_type, context);
   SymbolEntry *src_symbol = resolve_to_type_symbol(src_type, context);
   SymbolEntry *primitive_dest = get_primitive_type(dest_symbol);
   SymbolEntry *primitive_src = get_primitive_type(src_symbol);
+
+  if ((dest_type == src_type) ||
+      (primitive_dest->info.type_info.definition == src_type) ||
+      (primitive_src->info.type_info.definition == dest_type)) {
+    return true;
+  }
 
   if (primitive_dest == NULL || primitive_src == NULL) {
     LOG_DEBUG("Qual os tipos? [dest: %p(%p)] - [src: %p(%p)]",
@@ -589,38 +600,75 @@ void analyze_types(ASTNode *types, CompilerContext *context) {
       ASTNode *type_expr_def =
           resolve_to_actual_type_def(td->type_expr, context);
 
-      SymbolEntry *s = create_symbol_entry(id->name, tid->kind,
-                                           context->scope_stack->scope_level,
-                                           td->base.location);
+      if (type_expr_def->type == NODE_ENUMERATED_TYPE) {
+        EnumeratedTypeNode *enum_type = (EnumeratedTypeNode *)type_expr_def;
+        ListNode *list = (ListNode *)enum_type->identifiers_list;
 
-      s->info.type_info.definition = td->type_expr;
-      s->info.type_info.fields = NULL;
-      s->info.type_info.aliased_type = NULL;
+        SymbolEntry *s = create_symbol_entry(id->name, SYMBOL_TYPE,
+                                             context->scope_stack->scope_level,
+                                             type_expr_def->location);
 
-      SymbolEntry *type_expr_symbol =
-          resolve_to_type_symbol(type_expr_def, context);
-      if (type_expr_symbol && type_expr_symbol->kind == SYMBOL_BUILTIN) {
-        ASTNode *l = resolve_to_actual_type_def(
-            type_expr_symbol->info.type_info.definition, context);
-        SymbolEntry *l_symb = resolve_to_type_symbol(l, context);
-        s->info.type_info.aliased_type = create_symbol_entry(
-            id->name, SYMBOL_TYPE_ALIAS, context->scope_stack->scope_level,
-            td->base.location);
-        s->info.type_info.aliased_type->tag =
-            get_literal_type_from_name(l_symb->name);
-      }
+        s->info.type_info.definition = type_expr_def;
+        s->info.type_info.fields = NULL;
+        s->info.type_info.aliased_type = NULL;
 
-      id->symbol = s;
-      tid->symbol = id->symbol;
+        context_insert(context, id->name, s);
 
-      LOG_DEBUG("Estamos colocando na tabela de símbolos: %s e o símbolo ki"
-                "nd: %s\n",
-                id->name, get_symbol_kind_name(s->kind));
+        id->symbol = s;
+        tid->symbol = s;
 
-      context_insert(context, id->name, s);
+        while (list) {
+          if (list->element) {
+            IdentifierNode *e_id = (IdentifierNode *)list->element;
 
-      if (type_expr_def->type == NODE_RECORD_TYPE) {
-        analyze_record_fields(s, context);
+            SymbolEntry *e_symbol = create_symbol_entry(
+                e_id->name, SYMBOL_ENUM_VALUE,
+                context->scope_stack->scope_level, list->element->location);
+
+            e_symbol->info.type_info.definition = type_expr_def;
+            e_symbol->info.type_info.fields = NULL;
+            e_symbol->info.type_info.aliased_type = NULL;
+
+            context_insert(context, e_id->name, e_symbol);
+
+            e_id->symbol = e_symbol;
+          }
+          list = (ListNode *)list->next;
+        }
+      } else {
+        SymbolEntry *s = create_symbol_entry(id->name, tid->kind,
+                                             context->scope_stack->scope_level,
+                                             td->base.location);
+
+        s->info.type_info.definition = td->type_expr;
+        s->info.type_info.fields = NULL;
+        s->info.type_info.aliased_type = NULL;
+
+        SymbolEntry *type_expr_symbol =
+            resolve_to_type_symbol(type_expr_def, context);
+        if (type_expr_symbol && type_expr_symbol->kind == SYMBOL_BUILTIN) {
+          ASTNode *l = resolve_to_actual_type_def(
+              type_expr_symbol->info.type_info.definition, context);
+          SymbolEntry *l_symb = resolve_to_type_symbol(l, context);
+          s->info.type_info.aliased_type = create_symbol_entry(
+              id->name, SYMBOL_TYPE_ALIAS, context->scope_stack->scope_level,
+              td->base.location);
+          s->info.type_info.aliased_type->tag =
+              get_literal_type_from_name(l_symb->name);
+        }
+
+        id->symbol = s;
+        tid->symbol = id->symbol;
+
+        LOG_DEBUG("Estamos colocando na tabela de símbolos: %s e o símbolo ki"
+                  "nd: %s\n",
+                  id->name, get_symbol_kind_name(s->kind));
+
+        context_insert(context, id->name, s);
+
+        if (type_expr_def->type == NODE_RECORD_TYPE) {
+          analyze_record_fields(s, context);
+        }
       }
     }
 
@@ -758,6 +806,7 @@ static int analyze_parameter_section(FormalParameterSectionNode *param,
             param->base.location);
         s_p->info.var_info.is_ref = (param->kind == PARAM_VAR);
         s_p->info.var_info.type = param->type;
+
         context_insert(context, id->name, s_p);
         id_count++;
       }
@@ -1224,6 +1273,10 @@ static ASTNode *analyze_expression(ASTNode *expression,
     case SYMBOL_FIELD:
       expression->result_type = id->symbol->info.var_info.type;
       break;
+    case SYMBOL_ENUM_VALUE: {
+      expression->result_type = id->symbol->info.type_info.definition;
+      break;
+    }
     case SYMBOL_CONSTANT:
       expression->result_type =
           analyze_expression(id->symbol->info.const_info.value, context);
@@ -1356,6 +1409,11 @@ static ASTNode *analyze_expression(ASTNode *expression,
     ASTNode *left_type = analyze_expression(bin_op->left, context);
     ASTNode *right_type = analyze_expression(bin_op->right, context);
     switch (bin_op->op) {
+    case BINOP_IN: {
+      SymbolEntry *r_symb = resolve_to_type_symbol(right_type, context);
+      expression->result_type = r_symb->info.type_info.definition;
+      break;
+    }
     case BINOP_OR:
     case BINOP_AND:
     case BINOP_GT:
@@ -1493,6 +1551,32 @@ static ASTNode *analyze_expression(ASTNode *expression,
     expression->result_type = array_type_symbol->info.type_info.definition;
 
     return expression->result_type;
+  }
+  case NODE_SET_CONSTRUCTOR: {
+    SetLiteral *sl = (SetLiteral *)expression;
+
+    if (sl->count > 0) {
+
+      SetElement *se = (SetElement *)sl->elements[0];
+
+      if (se->type == SET_ELEMENT_SINGLE) {
+        expression->result_type = get_type_from_literal(se->value.single_value);
+      } else {
+        SymbolEntry *se_symbol =
+            resolve_to_type_symbol(se->value.range.start, context);
+        expression->result_type = se_symbol->info.type_info.definition;
+      }
+
+      return expression->result_type;
+    }
+
+    return NULL;
+    break;
+  }
+  case NODE_ENUMERATED_TYPE: {
+    expression->result_type = expression;
+    return expression->result_type;
+    break;
   }
   default:
     return NULL;
@@ -1646,6 +1730,7 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
         if (!check_type_compatibility(return_type, expr_type, context)) {
           yyerrorf(ass->base.location,
                    "Incompatible type for function return value.");
+          context->has_errors = true;
         }
         break;
       }
@@ -1653,7 +1738,6 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
 
     ASTNode *target_type = analyze_expression(ass->target, context);
     ASTNode *expr_type = analyze_expression(ass->expression, context);
-    LOG_DEBUG("%s", get_node_type_name(ass->expression->type));
     if (!check_type_compatibility(target_type, expr_type, context)) {
       yyerrorf(ass->base.location, "Type mismatch in assignment.");
 
@@ -1864,6 +1948,7 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
     return;
 
   RecordTypeNode *r_node = (RecordTypeNode *)result_type;
+
   if (r_node->field_list) {
     FixedPartNode *fp =
         (FixedPartNode *)((FieldListNode *)r_node->field_list)->fixed_part;
@@ -1913,19 +1998,35 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
       int variant_index = 0;
 
       while (variants) {
-        tag_symbol->info.var_info.offset = variant_index;
+        if (!variants->element)
+          break;
+
         VariantRecordNode *v_rec_node = (VariantRecordNode *)variants->element;
+        ListNode *case_labels = (ListNode *)v_rec_node->case_labels;
+        ConstantNode *xma = (ConstantNode *)case_labels->element;
+
+        char variant_name_buffer[100];
+        sprintf(variant_name_buffer, "variant_%s",
+                ((IdentifierNode *)xma->identifier)->name);
+
+        tag_symbol->info.var_info.offset = variant_index;
+        v_rec_node->name = strdup(variant_name_buffer);
+
         if (v_rec_node->field_list) {
           FieldListNode *fl_node = (FieldListNode *)v_rec_node->field_list;
           FixedPartNode *fp_node = (FixedPartNode *)fl_node->fixed_part;
-          ListNode *field_decls = (ListNode *)fp->fields;
+          ListNode *field_decls = (ListNode *)fp_node->fields;
 
           if (fp_node && fp_node->field_count > 0) {
             while (field_decls) {
+              if (!field_decls->element)
+                break;
               RecordFieldNode *field_decl =
                   (RecordFieldNode *)field_decls->element;
               ListNode *ids = (ListNode *)field_decl->field_list;
               while (ids) {
+                if (!ids->element)
+                  break;
                 IdentifierNode *id = (IdentifierNode *)ids->element;
                 SymbolEntry *field_symbol = create_symbol_entry(
                     id->name, SYMBOL_FIELD,
@@ -1934,6 +2035,12 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
                 field_symbol->info.var_info.type = field_decl->record_type;
                 field_symbol->info.var_info.is_ref = false;
                 field_symbol->info.var_info.offset = 0;
+
+                char access_prefix[200];
+                sprintf(access_prefix, "data.%s.", v_rec_node->name);
+                field_symbol->info.var_info.variant_access_prefix =
+                    strdup(access_prefix);
+
                 context_insert_field(context, record_type_symbol, field_symbol);
                 id->symbol = field_symbol;
                 ids = (ListNode *)ids->next;
