@@ -2,9 +2,13 @@ name: Test PascalM Compiler
 
 on:
   push:
-    branches: [ "main", "master" ] # Adapte para o nome da sua branch principal
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
   pull_request:
-    branches: [ "main", "master" ]
+    branches:
+      - main
 
 jobs:
   build-and-test:
@@ -30,3 +34,12 @@ jobs:
       run: |
         cd ./src/tests
         ./run_tests.sh ../pascalm
+
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        name: Release ${{ github.ref_name }}
+        generate_release_notes: true
+        files: |
+          ./src/pascalm
