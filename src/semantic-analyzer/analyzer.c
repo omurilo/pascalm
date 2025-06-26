@@ -9,6 +9,9 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
                                   CompilerContext *context);
 static void analyze_call_parameters(ASTNode *params, CompilerContext *context);
 static void analyze_functions(ASTNode *function, CompilerContext *context);
+static void analyze_array_bounds(ASTNode *array_def,
+                                 SymbolEntry *array_type_symbol,
+                                 CompilerContext *context);
 
 bool need_string_helpers = false;
 bool need_set_helpers = false;
@@ -154,6 +157,10 @@ static SymbolEntry *resolve_to_type_symbol(ASTNode *type_node,
     return resolve_to_type_symbol(((SetTypeNode *)type_node)->type, context);
   }
 
+  if (type_node->type == NODE_SUBRANGE_TYPE) {
+    return NULL;
+  }
+
   LOG_DEBUG("The node of kind %s (%d.%d-%d.%d) is not mapped here (%d)",
             get_node_type_name(type_node->type), type_node->location.first_line,
             type_node->location.first_column, type_node->location.last_line,
@@ -196,72 +203,96 @@ SymbolEntry *get_primitive_type(SymbolEntry *type_symbol) {
   return type_symbol;
 }
 
-static int check_type_compatibility(ASTNode *dest_type, ASTNode *src_type,
-                                    CompilerContext *context) {
+static bool check_type_compatibility(ASTNode *dest_type, ASTNode *src_type,
+                                     CompilerContext *context) {
 
-  SymbolEntry *dest_symbol = resolve_to_type_symbol(dest_type, context);
-  SymbolEntry *src_symbol = resolve_to_type_symbol(src_type, context);
-  SymbolEntry *primitive_dest = get_primitive_type(dest_symbol);
-  SymbolEntry *primitive_src = get_primitive_type(src_symbol);
+  ASTNode *dest_def = resolve_to_actual_type_def(dest_type, context);
+  ASTNode *src_def = resolve_to_actual_type_def(src_type, context);
 
-  if ((dest_type == src_type) ||
-      (primitive_dest->info.type_info.definition == src_type) ||
-      (primitive_src->info.type_info.definition == dest_type)) {
-    return true;
-  }
-
-  if (primitive_dest == NULL || primitive_src == NULL) {
-    LOG_DEBUG("Qual os tipos? [dest: %p(%p)] - [src: %p(%p)]",
-              (void *)dest_symbol, (void *)dest_type, (void *)src_symbol,
-              (void *)src_type);
-
+  if (!dest_def || !src_def) {
     return false;
   }
 
-  LiteralType dest_literal =
-      dest_symbol->tag != LITERAL_NIL
-          ? dest_symbol->tag
-          : get_literal_type_from_name(dest_symbol->name);
-  LiteralType src_literal = src_symbol->tag != LITERAL_NIL
-                                ? src_symbol->tag
-                                : get_literal_type_from_name(src_symbol->name);
-
-  if (dest_literal == LITERAL_CHAR && src_literal == LITERAL_INTEGER) {
-    // TODO: get value from integer to compare if is >= 0 and <= 255
+  if (dest_def == src_def || dest_def->type == src_def->type) {
     return true;
   }
 
-  if (dest_literal == LITERAL_STRING && src_literal == LITERAL_CHAR) {
-    // TODO: get value from integer to compare if is >= 0 and <= 255
-    return true;
+  switch (dest_def->type) {
+
+  case NODE_TYPE_IDENTIFIER: {
+    TypeIdentifierNode *dest_tid = (TypeIdentifierNode *)dest_def;
+    // IdentifierNode *dest_id = (IdentifierNode *)dest_tid->id;
+
+    if (src_def->type != NODE_TYPE_IDENTIFIER) {
+      break;
+    }
+
+    SymbolEntry *dest_symbol = resolve_to_type_symbol(dest_type, context);
+    SymbolEntry *src_symbol = resolve_to_type_symbol(src_type, context);
+
+    if (!dest_symbol || !src_symbol)
+      return false;
+
+    if (dest_symbol->tag == LITERAL_REAL &&
+        src_symbol->tag == LITERAL_INTEGER) {
+      return true;
+    }
+
+    if (dest_symbol->tag == LITERAL_STRING && src_symbol->tag == LITERAL_CHAR) {
+      return true;
+    }
+
+    if (dest_symbol->tag == src_symbol->tag) {
+      return true;
+    }
+
+    break;
   }
 
-  if (dest_literal == LITERAL_INTEGER && src_literal == LITERAL_INTEGER) {
-    return true;
+  case NODE_SUBRANGE_TYPE: {
+    SubrangeTypeNode *dest_sub = (SubrangeTypeNode *)dest_def;
+    return check_type_compatibility(dest_sub->upper, src_type, context);
   }
 
-  if (dest_literal == LITERAL_REAL && src_literal == LITERAL_INTEGER) {
-    return true;
+  case NODE_SET_TYPE: {
+    if (src_def->type == NODE_TYPE_IDENTIFIER) {
+      TypeIdentifierNode *src_tid = (TypeIdentifierNode *)src_def;
+      IdentifierNode *src_id = (IdentifierNode *)src_tid->id;
+      LOG_DEBUG("tentar buscar algo que define ele como node set type.");
+      SymbolEntry *src_symbol = resolve_to_type_symbol(src_type, context);
+      LOG_DEBUG("Symbol Name: %s, Symbol Kind? %s", src_symbol->name,
+                src_id->name);
+    }
+    if (src_def->type != NODE_SET_TYPE)
+      return false;
+
+    SetTypeNode *dest_set = (SetTypeNode *)dest_def;
+    SetTypeNode *src_set = (SetTypeNode *)src_def;
+
+    LOG_DEBUG("problema que não deveria. %s - %s",
+              get_node_type_name(dest_set->type->type),
+              get_node_type_name(src_set->type->type));
+
+    return check_type_compatibility(dest_set->type, src_set->type, context);
   }
 
-  if (primitive_dest == primitive_src) {
-    return true;
+  case NODE_STRUCTURED_TYPE: {
+    LOG_DEBUG("NODE_STRUCTURED_TYPE com ? %s",
+              get_node_type_name(src_def->type));
+    break;
   }
-
-  if (primitive_dest->tag == LITERAL_REAL &&
-      primitive_src->tag == LITERAL_INTEGER) {
-    return true;
+  case NODE_SIMPLE_TYPE: {
+    LOG_DEBUG("NODE_SIMPLE_TYPE com ? %s", get_node_type_name(src_def->type));
+    break;
   }
+  case NODE_RECORD_TYPE:
+  case NODE_ARRAY_TYPE:
+  case NODE_ENUMERATED_TYPE:
+    return false;
 
-  if (primitive_dest->tag == LITERAL_CHAR &&
-      primitive_src->tag == LITERAL_INTEGER) {
-    // TODO: get value from integer to compare if is >= 0 and <= 255
-    return true;
+  default:
+    break;
   }
-
-  LOG_DEBUG("Qual os tipos? [src: %s[%s]] [dest: %s[%s]]", src_symbol->name,
-            cast_from_literal_type_name(src_symbol->tag), dest_symbol->name,
-            cast_from_literal_type_name(dest_symbol->tag));
 
   return false;
 }
@@ -668,6 +699,8 @@ void analyze_types(ASTNode *types, CompilerContext *context) {
 
         if (type_expr_def->type == NODE_RECORD_TYPE) {
           analyze_record_fields(s, context);
+        } else if (type_expr_def->type == NODE_ARRAY_TYPE) {
+          analyze_array_bounds(type_expr_def, s, context);
         }
       }
     }
@@ -716,60 +749,7 @@ void analyze_variables(ASTNode *variables, CompilerContext *context) {
           }
 
           if (def && def->type == NODE_ARRAY_TYPE) {
-            ArrayTypeNode *array = (ArrayTypeNode *)def;
-            IndexList *index_list = (IndexList *)array->index_list;
-
-            s->info.var_info.num_dimensions = index_list->count;
-            s->info.var_info.dimensions = xalloc(
-                s->info.var_info.num_dimensions, sizeof(DimensionBounds));
-
-            for (int i = 0; i < index_list->count; i++) {
-              ASTNode *element = index_list->indexes[i];
-              if (element->type == NODE_SUBRANGE_TYPE) {
-                SubrangeTypeNode *sr_node = (SubrangeTypeNode *)element;
-                ConstantValue lower =
-                    evaluate_constant(context, sr_node->lower);
-                ConstantValue upper =
-                    evaluate_constant(context, sr_node->upper);
-                DimensionBounds dim = {
-                    .lower = lower.value.int_val,
-                    .upper = upper.value.int_val,
-                };
-                s->info.var_info.dimensions[i].lower = dim.lower;
-                s->info.var_info.dimensions[i].upper = dim.upper;
-              } else if (element->type == NODE_ENUMERATED_TYPE) {
-                EnumeratedTypeNode *enum_node = (EnumeratedTypeNode *)element;
-                int count = count_list_nodes(enum_node->identifiers_list);
-
-                if (count > 0) {
-                  s->info.var_info.dimensions[i].lower = 0;
-                  s->info.var_info.dimensions[i].upper = count - 1;
-                } else {
-                  yyerrorf(
-                      element->location,
-                      "Enumerated type used as array index cannot be empty.");
-                  context->has_errors = true;
-                }
-              } else if (element->type == NODE_TYPE_IDENTIFIER) {
-                DimensionBounds resolved_bounds;
-                if (get_bounds_from_type(element, context, &resolved_bounds)) {
-                  s->info.var_info.dimensions[i].lower = resolved_bounds.lower;
-                  s->info.var_info.dimensions[i].upper = resolved_bounds.upper;
-                } else {
-                  yyerrorf(element->location,
-                           "Type identifier '%s' cannot be resolved to a valid "
-                           "array index range.",
-                           ((TypeIdentifierNode *)element)->id->name);
-                  context->has_errors = true;
-                }
-              } else {
-                yyerrorf(element->location, "era pra quebrar? %s",
-                         get_node_type_name(element->type));
-
-                context->has_errors = true;
-                break;
-              }
-            }
+            analyze_array_bounds(def, s, context);
           }
 
           s->info.var_info.offset = offset + index;
@@ -808,6 +788,13 @@ static int analyze_parameter_section(FormalParameterSectionNode *param,
         s_p->info.var_info.type = param->type;
 
         context_insert(context, id->name, s_p);
+
+        ASTNode *def = resolve_to_actual_type_def(param->type, context);
+
+        if (def->type == NODE_ARRAY_TYPE) {
+          analyze_array_bounds(def, s_p, context);
+        }
+
         id_count++;
       }
       identifiers = (ListNode *)identifiers->next;
@@ -1235,6 +1222,12 @@ static ASTNode *analyze_expression(ASTNode *expression,
     return NULL;
 
   switch (expression->type) {
+  case NODE_SUBRANGE_TYPE: {
+    LOG_DEBUG("COMO QUE CHEGA ATÉ AQUI ESSE NEGÓCIO? ");
+    expression->result_type = expression;
+    return expression->result_type;
+    break;
+  }
   case NODE_IDENTIFIER: {
     IdentifierNode *id = (IdentifierNode *)expression;
     if (id->symbol == NULL) {
@@ -1368,6 +1361,7 @@ static ASTNode *analyze_expression(ASTNode *expression,
 
     ASTNode *operand_type = analyze_expression(u_op->operand, context);
     if (operand_type == NULL) {
+      LOG_DEBUG("colocando result type = NULL (%d)", __LINE__);
       expression->result_type = NULL;
       return NULL;
     }
@@ -1409,22 +1403,28 @@ static ASTNode *analyze_expression(ASTNode *expression,
     ASTNode *left_type = analyze_expression(bin_op->left, context);
     ASTNode *right_type = analyze_expression(bin_op->right, context);
     switch (bin_op->op) {
-    case BINOP_IN: {
-      SymbolEntry *r_symb = resolve_to_type_symbol(right_type, context);
-      expression->result_type = r_symb->info.type_info.definition;
-      break;
-    }
+    case BINOP_IN:
     case BINOP_OR:
     case BINOP_AND:
     case BINOP_GT:
     case BINOP_GTE:
     case BINOP_LT:
     case BINOP_LTE:
-    case BINOP_EQ:
-      expression->result_type =
-          create_builtin_type_identifier("boolean", bin_op->base.location);
+    case BINOP_EQ: {
+      SymbolEntry *boolean = context_lookup(context, "boolean");
+      expression->result_type = boolean->info.type_info.definition;
       break;
+    }
     case BINOP_PLUS: {
+      ASTNode *l_def = resolve_to_actual_type_def(left_type, context);
+      ASTNode *r_def = resolve_to_actual_type_def(right_type, context);
+
+      if (l_def && r_def && l_def->type == r_def->type &&
+          l_def->type == NODE_SET_TYPE) {
+        expression->result_type = l_def;
+        break;
+      }
+
       SymbolEntry *l_symb = resolve_to_type_symbol(left_type, context);
       SymbolEntry *r_symb = resolve_to_type_symbol(right_type, context);
 
@@ -1446,21 +1446,24 @@ static ASTNode *analyze_expression(ASTNode *expression,
         bool r_is_string = strcmp(r_name, "string") == 0;
 
         if (l_is_real || r_is_real) {
-          expression->result_type =
-              create_builtin_type_identifier("real", bin_op->base.location);
+          SymbolEntry *real = context_lookup(context, "real");
+          expression->result_type = real->info.type_info.definition;
         } else if (l_is_int && r_is_int) {
-          expression->result_type =
-              create_builtin_type_identifier("integer", bin_op->base.location);
+          SymbolEntry *integer = context_lookup(context, "integer");
+          expression->result_type = integer->info.type_info.definition;
         } else if ((l_is_string || l_is_char) && (r_is_string || r_is_char)) {
-          expression->result_type =
-              create_builtin_type_identifier("string", bin_op->base.location);
+          SymbolEntry *string = context_lookup(context, "string");
+          expression->result_type = string->info.type_info.definition;
         } else {
+          LOG_DEBUG("colocando result type = NULL (%d)", __LINE__);
           expression->result_type = NULL;
         }
       } else {
+        LOG_DEBUG("colocando result type = NULL (%d)", __LINE__);
         expression->result_type = NULL;
       }
 
+      LOG_DEBUG("colocando result type = NULL (%d)", __LINE__);
       break;
     }
     case BINOP_MINUS:
@@ -1468,13 +1471,28 @@ static ASTNode *analyze_expression(ASTNode *expression,
     case BINOP_DIV:
     case BINOP_MOD:
     case BINOP_TIMES: {
+      ASTNode *l_def = resolve_to_actual_type_def(left_type, context);
+      ASTNode *r_def = resolve_to_actual_type_def(right_type, context);
+
+      if (l_def && r_def && l_def->type == r_def->type &&
+          l_def->type == NODE_SET_TYPE) {
+        expression->result_type = l_def;
+        break;
+      }
+
       SymbolEntry *l_symb = resolve_to_type_symbol(left_type, context);
       SymbolEntry *r_symb = resolve_to_type_symbol(right_type, context);
 
-      const char *r_name = r_symb->tag != LITERAL_NIL
+      if (!l_symb || !r_symb) {
+        LOG_DEBUG("colocando result type = NULL (%d)", __LINE__);
+        expression->result_type = NULL;
+        break;
+      }
+
+      const char *r_name = r_symb != NULL && r_symb->tag != LITERAL_NIL
                                ? cast_from_literal_type_name(r_symb->tag)
                                : r_symb->name;
-      const char *l_name = l_symb->tag != LITERAL_NIL
+      const char *l_name = r_symb != NULL && l_symb->tag != LITERAL_NIL
                                ? cast_from_literal_type_name(l_symb->tag)
                                : l_symb->name;
 
@@ -1491,15 +1509,18 @@ static ASTNode *analyze_expression(ASTNode *expression,
           expression->result_type =
               create_builtin_type_identifier("integer", bin_op->base.location);
         } else {
+          LOG_DEBUG("colocando result type = NULL (%d)", __LINE__);
           expression->result_type = NULL;
         }
       } else {
+        LOG_DEBUG("colocando result type = NULL (%d)", __LINE__);
         expression->result_type = NULL;
       }
 
       break;
     }
     default:
+      LOG_DEBUG("colocando result type = NULL (%d)", __LINE__);
       expression->result_type = NULL;
       break;
     }
@@ -1554,24 +1575,44 @@ static ASTNode *analyze_expression(ASTNode *expression,
   }
   case NODE_SET_CONSTRUCTOR: {
     SetLiteral *sl = (SetLiteral *)expression;
+    ASTNode *base_type_node = NULL;
 
     if (sl->count > 0) {
+      SetElement *first_element = (SetElement *)sl->elements[0];
 
-      SetElement *se = (SetElement *)sl->elements[0];
+      if (first_element->type == SET_ELEMENT_SINGLE) {
+        if (first_element->value.single_value->type == NODE_LITERAL) {
 
-      if (se->type == SET_ELEMENT_SINGLE) {
-        expression->result_type = get_type_from_literal(se->value.single_value);
+          base_type_node =
+              get_type_from_literal(first_element->value.single_value);
+        } else {
+          SymbolEntry *range_start_symbol =
+              resolve_to_type_symbol(first_element->value.range.start, context);
+          base_type_node = range_start_symbol->info.type_info.definition;
+        }
       } else {
-        SymbolEntry *se_symbol =
-            resolve_to_type_symbol(se->value.range.start, context);
-        expression->result_type = se_symbol->info.type_info.definition;
+        SymbolEntry *range_start_symbol =
+            resolve_to_type_symbol(first_element->value.range.start, context);
+        base_type_node = range_start_symbol->info.type_info.definition;
+        LOG_DEBUG("Base type node não existiu! SET_ELEMENT_RANGE %s",
+                  range_start_symbol->name);
       }
-
+    } else {
+      LOG_DEBUG("Veio nulo porque o sl->count não é maior que 0");
+      expression->result_type = NULL;
       return expression->result_type;
     }
 
-    return NULL;
-    break;
+    if (!base_type_node) {
+      return NULL;
+    }
+
+    ASTNode *set_type_node =
+        create_set_of_type_node(base_type_node, expression->location);
+
+    expression->result_type = set_type_node;
+
+    return expression->result_type;
   }
   case NODE_ENUMERATED_TYPE: {
     expression->result_type = expression;
@@ -1612,11 +1653,8 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
             if (!const_node->is_literal) {
               IdentifierNode *id = (IdentifierNode *)const_node->identifier;
               SymbolEntry *id_symbol = context_lookup(context, id->name);
-              ASTNode *item_type = resolve_to_actual_type_def(
-                  id_symbol->info.const_info.definition, context);
-              ConstantNode *con = (ConstantNode *)item_type;
 
-              switch (con->const_type) {
+              switch (const_node->const_type) {
               case CONST_INTEGER: {
                 if (strcmp(result_type_symbol->name, "integer") != 0) {
                   yyerrorf(const_node->base.location,
@@ -1738,6 +1776,7 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
 
     ASTNode *target_type = analyze_expression(ass->target, context);
     ASTNode *expr_type = analyze_expression(ass->expression, context);
+
     if (!check_type_compatibility(target_type, expr_type, context)) {
       yyerrorf(ass->base.location, "Type mismatch in assignment.");
 
@@ -1810,7 +1849,7 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
 
     if (id->kind == SYMBOL_BUILTIN) {
       if (!s) {
-        s = create_symbol_entry(id->name, SYMBOL_BUILTIN, 0,
+        s = create_symbol_entry(id->name, SYMBOL_BUILTIN_FUNCTION, 0,
                                 func->base.location);
 
         context_insert(context, id->name, s);
@@ -1823,7 +1862,7 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
       id->symbol = s;
     }
 
-    if (!s || (s->kind != SYMBOL_PROCEDURE && s->kind != SYMBOL_BUILTIN)) {
+    if (!s || (s->kind != SYMBOL_PROCEDURE && s->kind != SYMBOL_BUILTIN && s->kind != SYMBOL_BUILTIN_FUNCTION)) {
       yyerrorf(id->base.location, "Identifier '%s' is not a procedure. (%s)",
                id->name, get_symbol_kind_name(s->kind));
       break;
@@ -1937,6 +1976,64 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
              "O tipo %s não foi mapeado no analyze_statement",
              get_node_type_name(statement->type));
     break;
+  }
+}
+
+static void analyze_array_bounds(ASTNode *array_def,
+                                 SymbolEntry *array_type_symbol,
+                                 CompilerContext *context) {
+  ArrayTypeNode *array = (ArrayTypeNode *)array_def;
+  IndexList *index_list = (IndexList *)array->index_list;
+
+  array_type_symbol->info.var_info.num_dimensions = index_list->count;
+  array_type_symbol->info.var_info.dimensions = xalloc(
+      array_type_symbol->info.var_info.num_dimensions, sizeof(DimensionBounds));
+
+  for (int i = 0; i < index_list->count; i++) {
+    ASTNode *element = index_list->indexes[i];
+    if (element->type == NODE_SUBRANGE_TYPE) {
+      SubrangeTypeNode *sr_node = (SubrangeTypeNode *)element;
+      ConstantValue lower = evaluate_constant(context, sr_node->lower);
+      ConstantValue upper = evaluate_constant(context, sr_node->upper);
+      DimensionBounds dim = {
+          .lower = lower.value.int_val,
+          .upper = upper.value.int_val,
+      };
+      array_type_symbol->info.var_info.dimensions[i].lower = dim.lower;
+      array_type_symbol->info.var_info.dimensions[i].upper = dim.upper;
+    } else if (element->type == NODE_ENUMERATED_TYPE) {
+      EnumeratedTypeNode *enum_node = (EnumeratedTypeNode *)element;
+      int count = count_list_nodes(enum_node->identifiers_list);
+
+      if (count > 0) {
+        array_type_symbol->info.var_info.dimensions[i].lower = 0;
+        array_type_symbol->info.var_info.dimensions[i].upper = count - 1;
+      } else {
+        yyerrorf(element->location,
+                 "Enumerated type used as array index cannot be empty.");
+        context->has_errors = true;
+      }
+    } else if (element->type == NODE_TYPE_IDENTIFIER) {
+      DimensionBounds resolved_bounds;
+      if (get_bounds_from_type(element, context, &resolved_bounds)) {
+        array_type_symbol->info.var_info.dimensions[i].lower =
+            resolved_bounds.lower;
+        array_type_symbol->info.var_info.dimensions[i].upper =
+            resolved_bounds.upper;
+      } else {
+        yyerrorf(element->location,
+                 "Type identifier '%s' cannot be resolved to a valid "
+                 "array index range.",
+                 ((TypeIdentifierNode *)element)->id->name);
+        context->has_errors = true;
+      }
+    } else {
+      yyerrorf(element->location, "era pra quebrar? %s",
+               get_node_type_name(element->type));
+
+      context->has_errors = true;
+      break;
+    }
   }
 }
 

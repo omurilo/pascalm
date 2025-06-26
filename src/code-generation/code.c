@@ -96,6 +96,18 @@ IdentifierNode *resolve_type_identifier(ASTNode *node) {
 
     return NULL;
   }
+  case NODE_SET_TYPE: {
+    SetTypeNode *st_type = (SetTypeNode *)node;
+    return resolve_type_identifier(st_type->type);
+  }
+  case NODE_SUBRANGE_TYPE: {
+    SubrangeTypeNode *sb = (SubrangeTypeNode *)node;
+    return resolve_type_identifier(sb->lower);
+  }
+  case NODE_CONSTANT: {
+    ConstantNode *cons = (ConstantNode *)node;
+    return cons->is_literal ? NULL : resolve_type_identifier(cons->identifier);
+  }
   default:
     break;
   }
@@ -381,7 +393,8 @@ void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
             fprintf(code_gen->output_file, " = false");
           }
         } else if (c_type->kind == SYMBOL_TYPE) {
-          SymbolEntry *s = context_lookup(context, c_type_id->name);
+          // SymbolEntry *s = context_lookup(context, c_type_id->name);
+       SymbolEntry *s = c_type_id->symbol;
           if (s->info.type_info.definition->type == NODE_STRUCTURED_TYPE) {
             StructuredTypeNode *sym_t_node =
                 (StructuredTypeNode *)s->info.type_info.definition;
@@ -389,6 +402,8 @@ void generate_vars(CodeGenerator *code_gen, CompilerContext *context,
               fprintf(code_gen->output_file, " = 0ULL");
             } else if (sym_t_node->type->type == NODE_RECORD_TYPE) {
               fprintf(code_gen->output_file, " = {0}");
+            } else if (sym_t_node->type->type == NODE_ARRAY_TYPE) {
+              /* não precisa inicializar eu acho */
             } else {
               LOG_ERROR("o tipo é structured mas o interno n sei qual é: %s"
                         "",
@@ -649,7 +664,6 @@ void generate_record(CodeGenerator *code_gen, CompilerContext *context,
 
           FieldListNode *fl_node = (FieldListNode *)v_rec_node->field_list;
           FixedPartNode *fp_node = (FixedPartNode *)fl_node->fixed_part;
-          LOG_DEBUG("é aqui que deveria colocar certo e n coloca");
           generate_field_list(code_gen, context, fp_node->fields);
 
           code_gen->indent_level--;
@@ -688,6 +702,9 @@ void generate_array(CodeGenerator *code_gen, CompilerContext *context,
     print_indent(code_gen);
   }
 
+  fprintf(code_gen->output_file, "%s %s", element_type,
+          resolve_type_identifier(t_node->identifier)->name);
+
   for (int i = 0; i < index_list->count; i++) {
     ASTNode *element = index_list->indexes[i];
     if (element->type == NODE_SUBRANGE_TYPE) {
@@ -704,10 +721,8 @@ void generate_array(CodeGenerator *code_gen, CompilerContext *context,
                get_node_type_name(element->type));
       exit(1);
     }
+    fprintf(code_gen->output_file, "[%d]", array_size);
   }
-
-  fprintf(code_gen->output_file, "%s %s[%d]", element_type,
-          resolve_type_identifier(t_node->identifier)->name, array_size);
 
   if (strcmp(element_type, "int") == 0 && !disable_initialization) {
     fprintf(code_gen->output_file, " = {0}");
@@ -902,6 +917,7 @@ void generate_case_statement(CodeGenerator *code_gen, CompilerContext *context,
       fprintf(code_gen->output_file, " {\n");
       code_gen->indent_level++;
       generate_statement(code_gen, context, item->statement);
+      fprintf(code_gen->output_file, "break;\n");
       code_gen->indent_level--;
       print_indent(code_gen);
       fprintf(code_gen->output_file, "}\n");
@@ -1014,12 +1030,6 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
   char format_string[255] = "";
   while (params) {
     if (params->element) {
-      IdentifierNode *id = resolve_type_identifier(params->element);
-      if (id)
-        LOG_DEBUG(
-            "O tipo do identificador %s é %s vs %s", id->name,
-            get_node_type_name(id->symbol->info.type_info.definition->type),
-            get_node_type_name(params->element->type));
 
       switch (params->element->type) {
       case NODE_LITERAL: {
@@ -1035,7 +1045,7 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
           strcat(format_string, str);
           break;
         } else if (literal->literal_type == LITERAL_BOOLEAN) {
-          strcat(format_string, literal->value.bool_val ? "true" : "false");
+          strcat(format_string, literal->value.bool_val ? "TRUE" : "FALSE");
           break;
         } else if (literal->literal_type == LITERAL_STRING) {
           strcat(format_string, literal->value.str_val);
@@ -1059,6 +1069,13 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
           strcat(format_string, "%.2f");
         } else if (strcmp(id->name, "string") == 0) {
           strcat(format_string, "%s");
+        } else if (strcmp(id->name, "boolean") == 0 ||
+                   strcmp(id->name, "bool") == 0) {
+          strcat(format_string, "%s");
+        } else {
+          LOG_ERROR("NODE_BINARY_EXPR write definition of data use for format "
+                    "string %s",
+                    id != NULL ? id->name : "(null)");
         }
 
         break;
@@ -1070,8 +1087,13 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
           strcat(format_string, "%d");
         } else if (strcmp(id->name, "double") == 0) {
           strcat(format_string, "%.2f");
-        } else if (strcmp(id->name, "bool") == 0) {
-          strcat(format_string, "%d");
+        } else if (strcmp(id->name, "boolean") == 0 ||
+                   strcmp(id->name, "bool") == 0) {
+          strcat(format_string, "%s");
+        } else {
+          LOG_ERROR("NODE_UNARY_EXPR write definition of data use for format "
+                    "string %s",
+                    id != NULL ? id->name : "(null)");
         }
 
         break;
@@ -1084,10 +1106,6 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
           if (id_sym->info.var_info.type->type == NODE_TYPE_IDENTIFIER) {
             TypeIdentifierNode *s_t_id =
                 (TypeIdentifierNode *)id_sym->info.var_info.type;
-            IdentifierNode *s_id =
-                resolve_type_identifier(id_sym->info.var_info.type);
-            LOG_DEBUG("Ta usando o s_t_id->kind pra descobrir que é um: %s",
-                      s_id->name);
             if (s_t_id->kind == SYMBOL_BUILTIN) {
               const char *type_name =
                   resolve_type_identifier((ASTNode *)s_t_id)->name;
@@ -1097,7 +1115,8 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
               } else if (strcmp(type_name, "char") == 0) {
                 strcat(format_string, "%c");
                 break;
-              } else if (strcmp(type_name, "bool") == 0) {
+              } else if (strcmp(type_name, "bool") == 0 ||
+                         strcmp(type_name, "boolean") == 0) {
                 strcat(format_string, "%s");
                 break;
               } else if (strcmp(type_name, "string") == 0) {
@@ -1106,7 +1125,6 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
               } else if (strcmp(type_name, "double") == 0) {
                 strcat(format_string, "%.2f");
               }
-              LOG_DEBUG("e dai vai usar: %s", format_string);
             } else if (s_t_id->kind == SYMBOL_ENUM_VALUE) {
               strcat(format_string, "%s");
             }
@@ -1123,7 +1141,8 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
               } else if (strcmp(type_name, "char") == 0) {
                 strcat(format_string, "%c");
                 break;
-              } else if (strcmp(type_name, "bool") == 0) {
+              } else if (strcmp(type_name, "bool") == 0 ||
+                         strcmp(type_name, "boolean") == 0) {
                 strcat(format_string, "%s");
                 break;
               } else if (strcmp(type_name, "string") == 0) {
@@ -1191,9 +1210,6 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
     if (curr->element && curr->element->type != NODE_LITERAL) {
       if (first)
         fprintf(code_gen->output_file, ", ");
-      LOG_DEBUG(
-          "QUal é o tipo que essa generate expression vai tentar resolver? %s",
-          get_node_type_name(curr->element->type));
       IdentifierNode *final_type_id =
           resolve_type_identifier(curr->element->result_type);
       if (final_type_id->symbol &&
@@ -1211,6 +1227,9 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
             resolve_type_identifier(curr->element->result_type);
         if (strcmp(result_id->name, "string") == 0) {
           fprintf(code_gen->output_file, ".data");
+        } else if (strcmp(result_id->name, "bool") == 0 ||
+                   strcmp(result_id->name, "bool") == 0) {
+          fprintf(code_gen->output_file, " ? \"TRUE\" : \"FALSE\"");
         }
       }
     }
@@ -1323,7 +1342,7 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
                                   CompilerContext *context, ASTNode *node) {
   FunctionCallNode *f_call = (FunctionCallNode *)node;
   IdentifierNode *id = (IdentifierNode *)f_call->function;
-  SymbolEntry *s = context_lookup(context, id->name);
+  SymbolEntry *s = id->symbol;
 
   bool is_function_call =
       (s &&
@@ -1498,54 +1517,151 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
       generate_expression(code_gen, context, id->with_node);
       fprintf(code_gen->output_file, ".%s%s", expression_access, id->name);
     } else if (s) {
-      fprintf(code_gen->output_file, is_ref ? "*%s%s" : "%s%s",
+      fprintf(code_gen->output_file, is_ref ? "(*%s%s)" : "%s%s",
               expression_access, id->name);
     } else {
       fprintf(code_gen->output_file, "%s%s", expression_access, id->name);
     }
+
     break;
   }
   case NODE_BINARY_EXPR: {
     BinaryOperationNode *bin_op = (BinaryOperationNode *)node;
-    IdentifierNode *rhs = resolve_type_identifier(bin_op->right->result_type);
-    IdentifierNode *lhs = resolve_type_identifier(bin_op->left->result_type);
-    SymbolEntry *rhs_symbol = rhs->symbol;
-    SymbolEntry *lhs_symbol = lhs->symbol;
 
-    switch (bin_op->op) {
-    case BINOP_IN: {
-      fprintf(code_gen->output_file, "((");
+    bool is_set_operation = node->result_type->type == NODE_SET_TYPE;
+
+    if (bin_op->op == BINOP_IN) {
+
+      fprintf(code_gen->output_file, "(((");
       generate_expression(code_gen, context, bin_op->right);
-      fprintf(code_gen->output_file, " & (1ULL << (");
+      fprintf(code_gen->output_file, ") & (1ULL << ((");
       generate_expression(code_gen, context, bin_op->left);
-      fprintf(code_gen->output_file, " %% 64))) != 0");
-      fprintf(code_gen->output_file, ")");
+      fprintf(code_gen->output_file, ") %% 64))) != 0)");
       break;
     }
-    case BINOP_DIV: {
-      fprintf(code_gen->output_file, "(div(");
-      generate_expression(code_gen, context, bin_op->left);
-      fprintf(code_gen->output_file, ", ");
-      generate_expression(code_gen, context, bin_op->right);
-      fprintf(code_gen->output_file, ").quot)");
-      break;
-    }
-    default: {
-      if ((rhs_symbol && strcmp(rhs_symbol->name, "string") == 0) ||
-          (lhs_symbol && strcmp(lhs_symbol->name, "string") == 0)) {
-        fprintf(code_gen->output_file, "concat_string(");
-        generate_string_operand(code_gen, context, bin_op->left, true);
-        fprintf(code_gen->output_file, ", ");
-        generate_string_operand(code_gen, context, bin_op->right, true);
-        fprintf(code_gen->output_file, ")");
-      } else {
+
+    if (is_set_operation) {
+      switch (bin_op->op) {
+      case BINOP_PLUS: // União
         fprintf(code_gen->output_file, "(");
         generate_expression(code_gen, context, bin_op->left);
-        fprintf(code_gen->output_file, " %s ", binary_op_to_string(bin_op->op));
+        fprintf(code_gen->output_file, " | ");
         generate_expression(code_gen, context, bin_op->right);
         fprintf(code_gen->output_file, ")");
+        break;
+      case BINOP_TIMES: // Interseção
+        fprintf(code_gen->output_file, "(");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " & ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ")");
+        break;
+      case BINOP_MINUS: // Diferença
+        fprintf(code_gen->output_file, "(");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " & ~");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ")");
+        break;
+      case BINOP_EQ:
+        fprintf(code_gen->output_file, "(");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " == ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ")");
+        break;
+      case BINOP_GT:
+        fprintf(code_gen->output_file, "(((");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " & ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ") == ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ") && ("); // E...
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " != ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, "))");
+        break;
+      case BINOP_GTE:
+        fprintf(code_gen->output_file, "((");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " & ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ") == ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ")");
+        break;
+      case BINOP_LT:
+        fprintf(code_gen->output_file, "(((");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " & ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ") == ");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, ") && ("); // E...
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " != ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, "))");
+        break;
+      case BINOP_LTE:
+        fprintf(code_gen->output_file, "((");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " & ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ") == ");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, ")");
+        break;
+      case BINOP_NEQ:
+        fprintf(code_gen->output_file, "(");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, " != ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ")");
+        break;
+      default:
+        fprintf(code_gen->output_file, " /* OP_NAO_SUPORTADO_PARA_SET */ ");
+        break;
       }
-    }
+    } else {
+      if (bin_op->op == BINOP_DIV) {
+        fprintf(code_gen->output_file, "(div(");
+        generate_expression(code_gen, context, bin_op->left);
+        fprintf(code_gen->output_file, ", ");
+        generate_expression(code_gen, context, bin_op->right);
+        fprintf(code_gen->output_file, ").quot)");
+
+      } else {
+        IdentifierNode *rhs =
+            resolve_type_identifier(bin_op->right->result_type);
+        IdentifierNode *lhs =
+            resolve_type_identifier(bin_op->left->result_type);
+
+        if (!rhs || !lhs) {
+          break;
+        }
+
+        SymbolEntry *rhs_symbol = rhs->symbol;
+        SymbolEntry *lhs_symbol = lhs->symbol;
+
+        if ((rhs_symbol && strcmp(rhs_symbol->name, "string") == 0) ||
+            (lhs_symbol && strcmp(lhs_symbol->name, "string") == 0)) {
+          fprintf(code_gen->output_file, "concat_string(");
+          generate_string_operand(code_gen, context, bin_op->left, true);
+          fprintf(code_gen->output_file, ", ");
+          generate_string_operand(code_gen, context, bin_op->right, true);
+          fprintf(code_gen->output_file, ")");
+        } else {
+          fprintf(code_gen->output_file, "(");
+          generate_expression(code_gen, context, bin_op->left);
+          fprintf(code_gen->output_file, " %s ",
+                  binary_op_to_string(bin_op->op));
+          generate_expression(code_gen, context, bin_op->right);
+          fprintf(code_gen->output_file, ")");
+        }
+      }
     }
     break;
   }
@@ -1563,26 +1679,34 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
       for (int i = 0; i < sl->count; i++) {
         SetElement *se = sl->elements[i];
         if (se->type == SET_ELEMENT_SINGLE) {
-          LiteralNode *literal = (LiteralNode *)se->value.single_value;
-          fprintf(code_gen->output_file, " | (1ULL << ");
-          if (literal->literal_type == LITERAL_INTEGER) {
-            fprintf(code_gen->output_file, "%d %% 64", literal->value.int_val);
-          } else if (literal->literal_type == LITERAL_REAL) {
-            fprintf(code_gen->output_file, "%.2f %% 64",
-                    literal->value.real_val);
-          } else if (literal->literal_type == LITERAL_BOOLEAN) {
+          if (se->value.single_value->type == NODE_LITERAL) {
+            LiteralNode *literal = (LiteralNode *)se->value.single_value;
+            fprintf(code_gen->output_file, " | (1ULL << ");
+            if (literal->literal_type == LITERAL_INTEGER) {
+              fprintf(code_gen->output_file, "%d %% 64",
+                      literal->value.int_val);
+            } else if (literal->literal_type == LITERAL_REAL) {
+              fprintf(code_gen->output_file, "%.2f %% 64",
+                      literal->value.real_val);
+            } else if (literal->literal_type == LITERAL_BOOLEAN) {
+              fprintf(code_gen->output_file, "%s",
+                      literal->value.bool_val ? "true" : "false");
+            } else if (literal->literal_type == LITERAL_STRING) {
+              fprintf(code_gen->output_file,
+                      "\"%s\" %% 64", //: "make_string(\"%s\") %% 64",
+                      literal->value.str_val);
+            } else if (literal->literal_type == LITERAL_CHAR) {
+              fprintf(code_gen->output_file, "'%c' %% 64", // : "'%c' %% 64",
+                      literal->value.char_val);
+            }
+            fprintf(code_gen->output_file, ")");
+          } else if (se->value.single_value->type == NODE_IDENTIFIER) {
+            fprintf(code_gen->output_file, " | (1ULL << ");
             fprintf(code_gen->output_file, "%s",
-                    literal->value.bool_val ? "true" : "false");
-          } else if (literal->literal_type == LITERAL_STRING) {
-            fprintf(code_gen->output_file,
-                    "\"%s\" %% 64", //: "make_string(\"%s\") %% 64",
-                    literal->value.str_val);
-          } else if (literal->literal_type == LITERAL_CHAR) {
-            fprintf(code_gen->output_file, "'%c' %% 64", // : "'%c' %% 64",
-                    literal->value.char_val);
+                    ((IdentifierNode *)se->value.single_value)->name);
+            fprintf(code_gen->output_file, ")");
           }
-          fprintf(code_gen->output_file, ")");
-        } else if (se->type == SET_ELEMENT_RANGE) {
+        } else {
           LOG_ERROR("[DEBUG generate expression] - SET LITERAL -> elements %d "
                     "range start: %s - end: %s\n",
                     i, get_node_type_name(se->value.range.start->type),
@@ -1649,8 +1773,6 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
     is_ref = is_reference_type(m_node->record);
 
     if (m_node->record->type != NODE_IDENTIFIER) {
-      LOG_DEBUG("Vai chamar a generate expression pro tipo! %s",
-                get_node_type_name(m_node->record->type));
       generate_expression(code_gen, context, m_node->record);
     } else {
       IdentifierNode *id = resolve_identifier(m_node->record);

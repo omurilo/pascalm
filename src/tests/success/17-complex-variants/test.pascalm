@@ -1,0 +1,77 @@
+program ComplexVariantTest;
+
+type
+  { Enum para o tipo da figura e para as cores }
+  TShapeKind = (Circle, Rectangle, Square);
+  TColor = (Red, Green, Blue);
+
+  { Record com parte variante baseada no enum TShapeKind }
+  TShape = record
+    id: integer;
+    color: TColor;
+    case kind: TShapeKind of
+      Circle: (radius: integer);
+      Rectangle: (width, height: integer);
+      Square: (side: integer);
+  end;
+  
+  TShapeArray = array[1..3] of TShape;
+
+var
+  shapes: TShapeArray;
+  i: integer;
+
+{ Procedimento para imprimir os detalhes de uma figura }
+procedure print_shape_details(s: TShape);
+begin
+  write('Shape id ', s.id);
+  write(', color ');
+  write(s.color); (* Testando a impressão do enum *)
+  write(', kind ');
+  write(s.kind);  (* Testando a impressão do enum da tag *)
+  
+  case s.kind of
+    Circle: writeln(', radius: ', s.radius);
+    Rectangle: writeln(', width: ', s.width, ', height: ', s.height);
+    Square: writeln(', side: ', s.side)
+  end;
+end;
+
+begin
+  { Inicializa um círculo }
+  shapes[1].id := 101;
+  shapes[1].color := Red;
+  shapes[1].kind := Circle;
+  shapes[1].radius := 10;
+  
+  { Inicializa um retângulo }
+  shapes[2].id := 102;
+  shapes[2].color := Blue;
+  shapes[2].kind := Rectangle;
+  shapes[2].width := 8;
+  shapes[2].height := 5;
+
+  { Inicializa um quadrado }
+  shapes[3].id := 103;
+  shapes[3].color := Green;
+  shapes[3].kind := Square;
+  shapes[3].side := 7;
+
+  writeln('--- Shape Details ---');
+  for i := 1 to 3 do
+  begin
+    print_shape_details(shapes[i]);
+  end;
+  
+  { Acessando um campo variante depois de uma modificação da tag }
+  writeln('--- Testing Variant Access Safety ---');
+  writeln('Accessing rectangle width: ', shapes[2].width);
+  { Mudar o tipo da figura 2 para um círculo }
+  shapes[2].kind := Circle;
+  shapes[2].radius := 20;
+  
+  (* O acesso a 'width' agora seria indefinido em Pascal,
+  mas testamos a impressão do novo estado *)
+  writeln('Shape 2 was changed.');
+  print_shape_details(shapes[2]);
+end.

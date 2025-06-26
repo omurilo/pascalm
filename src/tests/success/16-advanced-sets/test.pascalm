@@ -1,0 +1,52 @@
+program AdvancedSetTest;
+
+type
+  TColors = (Red, Green, Blue, Yellow, Magenta, Cyan);
+  TColorSet = set of TColors;
+
+var
+  primary_colors, secondary_colors, all_colors: TColorSet;
+  is_member: boolean;
+  
+  vowels, letters: set of 'a'..'z';
+  
+  odd_digits, even_digits, prime_digits: set of 0..9;
+
+begin
+  { Teste com tipo enumerado }
+  writeln('--- Enum Set Test ---');
+  primary_colors := [Red, Green, Blue];
+  secondary_colors := [Yellow, Magenta, Cyan];
+  
+  all_colors := primary_colors + secondary_colors;
+
+  is_member := Green in primary_colors;
+  writeln('Is Green in primary_colors? ', is_member);
+  
+  is_member := Yellow in primary_colors;
+  writeln('Is Yellow in primary_colors? ', is_member);
+
+  is_member := Blue in all_colors;
+  writeln('Is Blue in all_colors? ', is_member);
+
+  { Teste com char e sub-range }
+  writeln('--- Char Set Test ---');
+  vowels := ['a', 'e', 'i', 'o', 'u'];
+  is_member := 'a' in vowels;
+  writeln('Is ''a'' a vowel? ', is_member);
+  is_member := 'b' in vowels;
+  writeln('Is ''b'' a vowel? ', is_member);
+
+  { Teste com integer e sub-range }
+  writeln('--- Integer Set Test ---');
+  odd_digits := [1, 3, 5, 7, 9];
+  even_digits := [0, 2, 4, 6, 8];
+  prime_digits := [2, 3, 5, 7];
+  
+  writeln('Is 2 in odd_digits? ', 2 in odd_digits);
+  writeln('Is 4 in even_digits? ', 4 in even_digits);
+  
+  { Teste de interseção * }
+  writeln('Is 3 in (odd_digits * prime_digits)? ', 3 in (odd_digits * prime_digits));
+  writeln('Is 4 in (odd_digits * prime_digits)? ', 4 in (odd_digits * prime_digits));
+end.

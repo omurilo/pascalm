@@ -9,7 +9,7 @@
 #define SAVE_INTEGER yylval.integer = atoi(yytext)
 #define SAVE_NUMBER yylval.number = atof(yytext)
 #define SAVE_CHAR yylval.character = yytext[1]
-#define SAVE_STRING yylval.string = strndup(yytext+1, yyleng - 2)
+#define SAVE_STRING yylval.string = process_string_literal(yytext)
 #define SAVE_IDENTIFIER yylval.string = strdup(yytext)
 #define SAVE_BOOLEAN yylval.boolean = strcmp(yytext, "true") == 0 ? 1 : 0
 
@@ -40,101 +40,112 @@ ID {ALPHA}{ALPHANUM}*
 UINT {DIGIT}+
 REAL {UINT}(\.{UINT})?([eE][+-]{UINT})?
 CHAR \'[a-zA-Z]\'
-STRING \'(\\.|[^\\'])*\'
+STRING \'(('')|[^\\'])*\'
 
 %x COMMENT
 
 %%
-\{[^}]*\}       {}
-"(*"            { BEGIN(COMMENT); comment_nesting = 1; }
-<COMMENT>"(*"   { comment_nesting++; }
-<COMMENT>"*)"   {
-                  if (--comment_nesting == 0) BEGIN(INITIAL);
-                }
-<COMMENT>[^\n]+ {}
-<COMMENT>\n     { yycolumn = 1; }
-[ \t]+
-[\r\n]+         { yycolumn = 1; }
 
-"+"             {return PLUS;}
-"-"             {return MINUS;}
-"/"             {return DIVIDE;}
-"*"             {return TIMES;}
-"("             {return L_PAREN;}
-")"             {return R_PAREN;}
-"{"             {return L_BRACE;}
-"}"             {return R_BRACE;}
-"["             {return L_BRACKET;}
-"]"             {return R_BRACKET;}
-">="            {return GTE;}
-"<="            {return LTE;}
-">"             {return GT;}
-"<"             {return LT;}
-"="             {return EQ;}
-"<>"            {return NEQ;}
-":="            {return ASSIGN;}
-","             {return COMMA;}
-":"             {return COLON;}
-";"             {return SEMICOLON;}
-".."            {return DOTDOT;}
-"."             {return DOT;}
-"^"             {return CARET;}
+<COMMENT>{
+  "(*"            { comment_nesting++; }
+  "*)"            {
+                      comment_nesting--;
+                      if (comment_nesting <= 0) { BEGIN(INITIAL); }
+                  }
+  [^*\n()]+          {}
+  [\r\n]+         { yycolumn = 1; }
+  <<EOF>>         { 
+                    yyerror("Fim de arquivo inesperado dentro de um comentario (* ... *)");
+                    BEGIN(INITIAL);
+                    return 0;
+                  }
+}
+<INITIAL>{
+  \{[^}]*\}       {}
+  "(*"            { BEGIN(COMMENT); comment_nesting = 1; }
+  [ \t]+
+  [\r\n]+         { yycolumn = 1; }
 
-"program"       { return PROGRAM; }
-"var"           { return VAR; }
-"const"         { return CONST; }
-"type"          { return TYPE; }
-"label"         { return LABEL; }
-"procedure"     { return PROCEDURE; }
-"function"      { return FUNCTION; }
-"begin"         { return BEGIN_TOK; }
-"end"           { return END; }
-"if"            { return IF; }
-"then"          { return THEN; }
-"else"          { return ELSE; }
-"while"         { return WHILE; }
-"do"            { return DO; }
-"for"           { return FOR; }
-"to"            { return TO; }
-"downto"        { return DOWNTO; }
-"repeat"        { return REPEAT; }
-"until"         { return UNTIL; }
-"case"          { return CASE; }
-"of"            { return OF; }
-"goto"          { return GOTO; }
-"array"         { return ARRAY; }
-"record"        { return RECORD; }
-"set"           { return SET; }
-"in"            { return IN; }
-"file"          { return FILE_TOK; }
-"integer"       { return INTEGER; }
-"real"          { return REAL; }
-"boolean"       { return BOOLEAN; }
-"string"        { return STRING; }
-"char"          { return CHAR; }
-"not"           { return NOT; }
-"and"           { return AND; }
-"or"            { return OR; }
-"div"           { return DIV; }
-"mod"           { return MOD; }
-"write"         { return WRITE; }
-"writeln"       { return WRITELN; }
-"read"          { return READ; }
-"readln"        { return READLN; }
-"Chr"           { return CHR; }
-"nil"           { return NIL; }
-"with"          { return WITH; }
-"forward"       { return FORWARD; }
-"packed"        { return PACKED; }
+  "+"             {return PLUS;}
+  "-"             {return MINUS;}
+  "/"             {return DIVIDE;}
+  "*"             {return TIMES;}
+  "("             {return L_PAREN;}
+  ")"             {return R_PAREN;}
+  "{"             {return L_BRACE;}
+  "}"             {return R_BRACE;}
+  "["             {return L_BRACKET;}
+  "]"             {return R_BRACKET;}
+  ">="            {return GTE;}
+  "<="            {return LTE;}
+  ">"             {return GT;}
+  "<"             {return LT;}
+  "="             {return EQ;}
+  "<>"            {return NEQ;}
+  ":="            {return ASSIGN;}
+  ","             {return COMMA;}
+  ":"             {return COLON;}
+  ";"             {return SEMICOLON;}
+  ".."            {return DOTDOT;}
+  "."             {return DOT;}
+  "^"             {return CARET;}
 
-"false"|"true"  {SAVE_BOOLEAN; return BOOLEAN_LITERAL;}
-{CHAR}          {SAVE_CHAR; return CHAR_LITERAL;}
-{UINT}          {SAVE_INTEGER; return INTEGER_LITERAL;}
-{REAL}          {SAVE_NUMBER; return REAL_LITERAL;}
-{ID}            {SAVE_IDENTIFIER; return IDENTIFIER;}
-{STRING}        {SAVE_STRING; return STRING_LITERAL;}
+  "program"       { return PROGRAM; }
+  "var"           { return VAR; }
+  "const"         { return CONST; }
+  "type"          { return TYPE; }
+  "label"         { return LABEL; }
+  "procedure"     { return PROCEDURE; }
+  "function"      { return FUNCTION; }
+  "begin"         { return BEGIN_TOK; }
+  "end"           { return END; }
+  "if"            { return IF; }
+  "then"          { return THEN; }
+  "else"          { return ELSE; }
+  "while"         { return WHILE; }
+  "do"            { return DO; }
+  "for"           { return FOR; }
+  "to"            { return TO; }
+  "downto"        { return DOWNTO; }
+  "repeat"        { return REPEAT; }
+  "until"         { return UNTIL; }
+  "case"          { return CASE; }
+  "of"            { return OF; }
+  "goto"          { return GOTO; }
+  "array"         { return ARRAY; }
+  "record"        { return RECORD; }
+  "set"           { return SET; }
+  "in"            { return IN; }
+  "file"          { return FILE_TOK; }
+  "integer"       { return INTEGER; }
+  "real"          { return REAL; }
+  "boolean"       { return BOOLEAN; }
+  "string"        { return STRING; }
+  "char"          { return CHAR; }
+  "not"           { return NOT; }
+  "and"           { return AND; }
+  "or"            { return OR; }
+  "div"           { return DIV; }
+  "mod"           { return MOD; }
+  "write"         { return WRITE; }
+  "writeln"       { return WRITELN; }
+  "read"          { return READ; }
+  "readln"        { return READLN; }
+  "Chr"           { return CHR; }
+  "nil"           { return NIL; }
+  "with"          { return WITH; }
+  "forward"       { return FORWARD; }
+  "packed"        { return PACKED; }
 
-.               { yyerror((const char*)"Illegal input in"); }
+  "false"|"true"  {SAVE_BOOLEAN; return BOOLEAN_LITERAL;}
+  {CHAR}          {SAVE_CHAR; return CHAR_LITERAL;}
+  {UINT}          {SAVE_INTEGER; return INTEGER_LITERAL;}
+  {REAL}          {SAVE_NUMBER; return REAL_LITERAL;}
+  {ID}            {SAVE_IDENTIFIER; return IDENTIFIER;}
+  {STRING}        {SAVE_STRING; return STRING_LITERAL;}
+
+  .               { yyerror((const char*)"Illegal input in"); }
+}
 %%
 
 int yywrap(void) {

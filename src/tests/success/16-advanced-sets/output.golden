@@ -1,0 +1,12 @@
+--- Enum Set Test ---
+Is Green in primary_colors? TRUE
+Is Yellow in primary_colors? FALSE
+Is Blue in all_colors? TRUE
+--- Char Set Test ---
+Is 'a' a vowel? TRUE
+Is 'b' a vowel? FALSE
+--- Integer Set Test ---
+Is 2 in odd_digits? FALSE
+Is 4 in even_digits? TRUE
+Is 3 in (odd_digits * prime_digits)? TRUE
+Is 4 in (odd_digits * prime_digits)? FALSE

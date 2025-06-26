@@ -1,0 +1,43 @@
+program MultiDimArrayTest;
+
+type
+  TMatrix = array[1..3, 1..2] of integer;
+
+var
+  matrix: TMatrix;
+  i, j: integer;
+
+procedure print_matrix(var m: TMatrix);
+var
+  row, col: integer;
+begin
+  writeln('Printing matrix:');
+  for row := 1 to 3 do
+  begin
+    { Imprime cada linha em um formato previsível }
+    writeln('Row ', row, ': [', m[row, 1], ', ', m[row, 2], ']');
+  end;
+end;
+
+begin
+  { Inicializa a matriz com valores }
+  writeln('Initializing matrix...');
+  for i := 1 to 3 do
+  begin
+    for j := 1 to 2 do
+    begin
+      matrix[i, j] := (i * 10) + j;
+    end;
+  end;
+
+  { Imprime um valor específico para verificação }
+  writeln('Value at [2, 2] is: ', matrix[2, 2]);
+
+  { Passa a matriz para um procedimento }
+  print_matrix(matrix);
+
+  { Modifica um valor e imprime novamente }
+  matrix[3, 1] := 99;
+  writeln('Modified value at [3, 1].');
+  print_matrix(matrix);
+end.

@@ -175,6 +175,7 @@ SymbolEntry *create_symbol_entry(char *name, SymbolKind kind, int scope_level,
 
   switch (kind) {
   SYMBOL_FIELD:
+  SYMBOL_VARIABLE:
   SYMBOL_PARAMETER: {
     symb->info.var_info.type = NULL;
     symb->info.var_info.offset = 0;

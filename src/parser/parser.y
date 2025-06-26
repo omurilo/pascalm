@@ -395,7 +395,7 @@ statement:
   | BEGIN_TOK statement_list END  { $$ = create_stmt_list_node($2, create_location(@$)); }
   | IF expression THEN statement %prec LOWER_THAN_ELSE { $$ = create_if_stmt_node($2, $4, NULL, create_location(@$)); }
   | IF expression THEN statement ELSE statement { $$ = create_if_stmt_node($2, $4, $6, create_location(@$)); }
-  | CASE expression OF case_list END { $$ = create_case_stmt_node($2, $4, NULL, create_location(@$)); }
+  | CASE expression OF case_list optional_semicolon END { $$ = create_case_stmt_node($2, $4, NULL, create_location(@$)); }
   | CASE expression OF case_list SEMICOLON case_else END { $$ = create_case_stmt_with_else_node($2, $4, $6, create_location(@$)); }
   | WHILE expression DO statement { $$ = create_while_stmt_node($2, $4, create_location(@$)); }
   | REPEAT statement_list UNTIL expression { $$ = create_repeat_until_stmt_list_node($2, $4, create_location(@$)); }
@@ -425,6 +425,10 @@ case_list:
   | case_list SEMICOLON case_item { 
       $$ = append_case_item($1, $3, create_location(@$)); 
     }
+
+optional_semicolon:
+     empty
+   | SEMICOLON
 
 case_item:
     case_label_list COLON statement { 

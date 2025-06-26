@@ -74,7 +74,7 @@ fi
 # Controle de Verbosidade
 # ===========================
 # Silencia a saída ou a exibe, dependendo de SHOW_WARNINGS
-if [ "$SHOW_WARNINGS" = "1" ]; then
+if [ "$SHOW_WARNINGS" = "1" or "$DEBUG" = "1" ]; then
     REDIRECT_CMD=""
 else
     # A mágica do 'eval' é necessária para que a string de redirecionamento funcione corretamente

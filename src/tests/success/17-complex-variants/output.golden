@@ -1,0 +1,8 @@
+--- Shape Details ---
+Shape id 101, color Red, kind Circle, radius: 10
+Shape id 102, color Blue, kind Rectangle, width: 8, height: 5
+Shape id 103, color Green, kind Square, side: 7
+--- Testing Variant Access Safety ---
+Accessing rectangle width: 8
+Shape 2 was changed.
+Shape id 102, color Blue, kind Circle, radius: 20

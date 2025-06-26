@@ -18,7 +18,7 @@ BINARIES     = $(patsubst $(TEST_DIR)/%.pascalm,$(OUT_DIR)/%,$(PASCAL_FILES))
 
 PARSER_OUTPUTS = parser/parser.tab.c parser/parser.tab.h parser/lex.yy.c
 
-PARSER_SRCS  = parser/parser.tab.c parser/lex.yy.c
+PARSER_SRCS  = parser/parser.tab.c parser/lex.yy.c parser/utils.c
 SRCS         = $(wildcard $(addsuffix /*.c, $(SRC_DIRS))) main.c context.c logger.c $(PARSER_SRCS)
 OBJS         = $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
@@ -65,7 +65,7 @@ endif
 # ===========================
 # Controle de Verbosidade
 # ===========================
-ifeq ($(SHOW_WARNINGS),1)
+ifneq ($(filter 1,$(SHOW_WARNINGS) $(DEBUG)),)
 	SILENT :=
 	OUTPUT_REDIRECT :=
 else

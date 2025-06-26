@@ -1,0 +1,11 @@
+Initializing matrix...
+Value at [2, 2] is: 22
+Printing matrix:
+Row 1: [11, 12]
+Row 2: [21, 22]
+Row 3: [31, 32]
+Modified value at [3, 1].
+Printing matrix:
+Row 1: [11, 12]
+Row 2: [21, 22]
+Row 3: [99, 32]

@@ -1773,7 +1773,8 @@ ASTNode *create_set_literal(SourceLocation loc) {
   node->base.type = NODE_SET_CONSTRUCTOR;
   node->base.location = loc;
   node->base.print = print_todo;
-  node->elements = NULL;
+  node->elements = xalloc(1, sizeof(SetElement *));
+  node->elements[0] = NULL;
   node->capacity = 0;
   node->count = 0;
 
@@ -2306,6 +2307,8 @@ const char *get_symbol_kind_name(SymbolKind symb) {
     return "SYMBOL_FORWARD_DECL";
   case SYMBOL_BUILTIN:
     return "SYMBOL_BUILTIN";
+  case SYMBOL_BUILTIN_FUNCTION:
+    return "SYMBOL_BUILTIN_FUNCTION";
   default:
     return "UNKNOWN_SYMBOL_NAME";
   }

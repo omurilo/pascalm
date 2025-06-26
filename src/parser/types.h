@@ -16,9 +16,11 @@ typedef struct YYLTYPE {
 int yywrap(void);
 extern int yyparse();
 extern int yylex();
-extern FILE* yyin;
+extern FILE *yyin;
 extern YYLTYPE yylloc;
 
 extern void yyerror(const char *msg);
+
+char *process_string_literal(char *text);
 
 #endif
