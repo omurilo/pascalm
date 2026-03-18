@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <strings.h>
-#include "ast/ast.h"
-#include "parser/types.h"
-#include "parser/parser.tab.h"
-#include "code-generation/code.h"
-#include "semantic-analyzer/analyzer.h"
+#include <string.h>
+#include "ast.h"
+#include "types.h"
+#include "parser.tab.h"
+#include "code.h"
+#include "analyzer.h"
 #include "context.h"
 #include "logger.h"
 #include "memory.h"
@@ -101,6 +101,11 @@ int main(int argc, char **argv) {
     if (generate_code) {
       LOG_TRACE("Iniciando etapada de geração de código...");
       CodeGenerator *code_gen = create_code_generator(output);
+      /* Configura o caminho da stdlib: pode ser sobrescrito com -stdlib */
+#ifndef PASCALM_STDLIB_PATH
+#define PASCALM_STDLIB_PATH "./stdlib"
+#endif
+      code_gen->stdlib_path = PASCALM_STDLIB_PATH;
       generate_program(code_gen, context, root);
       fclose(code_gen->output_file);
     }

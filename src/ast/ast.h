@@ -3,8 +3,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "../commons.h"
-#include "../context.h"
+#include <string.h>
+#include "commons.h"
+#include "context.h"
 
 typedef struct ProgramNode ProgramNode; // Raiz da AST, contendo o nome do
                                         // programa e seu bloco principal
@@ -55,6 +56,7 @@ typedef struct MemberAccessNode
     MemberAccessNode; // Acesso a campos (record.field)
 typedef struct ArrayAccessNode ArrayAccessNode;   // Acesso a elementos de array
 typedef struct FunctionCallNode FunctionCallNode; // Chamada de função
+typedef struct StdlibCallNode StdlibCallNode; // Chamada de função da stdlib
 typedef struct SetConstructorNode SetConstructorNode; // Construtor de conjunto
 
 typedef struct LabelDeclarationNode
@@ -200,6 +202,8 @@ struct ProgramNode {
   ASTNode *heading;
   bool need_set_helpers;
   bool need_string_helpers;
+  bool need_socket_helpers;
+  bool need_http_helpers;
 };
 
 struct HeadingNode {
@@ -356,6 +360,13 @@ struct FunctionCallNode {
   ASTNode base;
   ASTNode *function;
   ASTNode *params;
+};
+
+struct StdlibCallNode {
+    ASTNode base;
+    char *function_name;
+    ListNode *args; // Lista de argumentos (ASTNode*)
+    ASTNode *result_type; // Tipo de retorno da função stdlib
 };
 
 struct GotoNode {
@@ -718,6 +729,11 @@ ASTNode *add_constants_to_block(ASTNode *block, ASTNode *constants);
 ASTNode *add_types_to_block(ASTNode *block, ASTNode *types);
 ASTNode *add_variables_to_block(ASTNode *block, ASTNode *variables);
 ASTNode *add_procs_funcs_to_block(ASTNode *block, ASTNode *proc_funcs);
+
+ASTNode *create_stdlib_call_node(const char *function_name, ListNode *args, SourceLocation loc);
+ASTNode *create_stdlib_call_node2(const char *function_name, ASTNode *arg1, ASTNode *arg2, SourceLocation loc);
+ASTNode *create_stdlib_call_node3(const char *function_name, ASTNode *arg1, ASTNode *arg2, ASTNode *arg3, SourceLocation loc);
+ASTNode *create_stdlib_call_node4(const char *function_name, ASTNode *arg1, ASTNode *arg2, ASTNode *arg3, ASTNode *arg4, SourceLocation loc);
 
 /* UTILS */
 ASTNode *update_identifier_node_kind(ASTNode *id, SymbolKind);

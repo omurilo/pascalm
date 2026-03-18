@@ -15,12 +15,15 @@ static void analyze_array_bounds(ASTNode *array_def,
 
 bool need_string_helpers = false;
 bool need_set_helpers = false;
+bool need_socket_helpers = false;
+bool need_http_helpers = false;
 
 static void insert_builtin_types(CompilerContext *context,
                                  SourceLocation location) {
-  char *builtin_types[5] = {"integer", "real", "boolean", "char", "string"};
+  /* cstring = raw C char* (used for HttpRequest/HttpResponse fields) */
+  char *builtin_types[7] = {"integer", "real", "boolean", "char", "string", "Socket", "cstring"};
 
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 7; i++) {
     ASTNode *result =
         create_builtin_type_identifier(builtin_types[i], location);
     TypeIdentifierNode *tid = (TypeIdentifierNode *)result;
@@ -35,6 +38,72 @@ static void insert_builtin_types(CompilerContext *context,
     tid->symbol = s;
 
     context_insert(context, id->name, s);
+  }
+}
+
+/* Registra um campo em um SymbolEntry de tipo builtin (como HttpRequest).
+ * Cria a hashtable de campos se necessário, sem exigir SYMBOL_TYPE. */
+static void insert_builtin_field(SymbolEntry *record_symbol,
+                                 const char *field_name,
+                                 const char *field_type_name,
+                                 CompilerContext *context,
+                                 SourceLocation location) {
+  if (record_symbol->info.type_info.fields == NULL) {
+    record_symbol->info.type_info.fields = ht_create();
+  }
+
+  ASTNode *field_type = create_builtin_type_identifier(field_type_name, location);
+  TypeIdentifierNode *tid = (TypeIdentifierNode *)field_type;
+  IdentifierNode *tid_id = (IdentifierNode *)tid->id;
+  tid_id->symbol = context_lookup(context, field_type_name);
+
+  SymbolEntry *field = create_symbol_entry(field_name, SYMBOL_FIELD,
+                                           context->scope_stack->scope_level,
+                                           location);
+  field->info.var_info.type = field_type;
+  field->info.var_info.is_ref = false;
+
+  ht_set(record_symbol->info.type_info.fields, field_name, field);
+}
+
+static void insert_http_types(CompilerContext *context, SourceLocation location) {
+  /* HttpRequest */
+  {
+    ASTNode *result = create_builtin_type_identifier("HttpRequest", location);
+    TypeIdentifierNode *tid = (TypeIdentifierNode *)result;
+    IdentifierNode *id = (IdentifierNode *)tid->id;
+    SymbolEntry *s = create_symbol_entry("HttpRequest", SYMBOL_BUILTIN,
+                                         context->scope_stack->scope_level, location);
+    s->info.type_info.definition = result;
+    s->info.type_info.fields = NULL;
+    id->symbol = s;
+    tid->symbol = s;
+    context_insert(context, "HttpRequest", s);
+
+    insert_builtin_field(s, "method",       "cstring", context, location);
+    insert_builtin_field(s, "path",         "cstring", context, location);
+    insert_builtin_field(s, "version",      "cstring", context, location);
+    insert_builtin_field(s, "host",         "cstring", context, location);
+    insert_builtin_field(s, "body",         "cstring", context, location);
+    insert_builtin_field(s, "header_count", "integer", context, location);
+  }
+
+  /* HttpResponse */
+  {
+    ASTNode *result = create_builtin_type_identifier("HttpResponse", location);
+    TypeIdentifierNode *tid = (TypeIdentifierNode *)result;
+    IdentifierNode *id = (IdentifierNode *)tid->id;
+    SymbolEntry *s = create_symbol_entry("HttpResponse", SYMBOL_BUILTIN,
+                                         context->scope_stack->scope_level, location);
+    s->info.type_info.definition = result;
+    s->info.type_info.fields = NULL;
+    id->symbol = s;
+    tid->symbol = s;
+    context_insert(context, "HttpResponse", s);
+
+    insert_builtin_field(s, "status_code", "integer", context, location);
+    insert_builtin_field(s, "status_text", "cstring", context, location);
+    insert_builtin_field(s, "body",        "cstring", context, location);
   }
 }
 
@@ -1619,6 +1688,71 @@ static ASTNode *analyze_expression(ASTNode *expression,
     return expression->result_type;
     break;
   }
+  case NODE_STDLIB_CALL: {
+    StdlibCallNode *call = (StdlibCallNode *)expression;
+    ListNode *args = call->args;
+    while (args) {
+      if (args->element)
+        analyze_expression(args->element, context);
+      args = (ListNode *)args->next;
+    }
+    if (call->function_name) {
+      // SOCKET
+      if (strcmp(call->function_name, "socket_create") == 0) {
+        need_socket_helpers = true;
+        expression->result_type = create_builtin_type_identifier("Socket", expression->location);
+      } else if (strcmp(call->function_name, "socket_bind") == 0 ||
+                 strcmp(call->function_name, "socket_listen") == 0 ||
+                 strcmp(call->function_name, "socket_accept") == 0 ||
+                 strcmp(call->function_name, "socket_connect") == 0 ||
+                 strcmp(call->function_name, "socket_close") == 0 ||
+                 strcmp(call->function_name, "socket_send") == 0) {
+        need_socket_helpers = true;
+        expression->result_type = create_builtin_type_identifier("integer", expression->location);
+      } else if (strcmp(call->function_name, "socket_recv") == 0) {
+        need_socket_helpers = true;
+        expression->result_type = create_builtin_type_identifier("string", expression->location);
+      // HTTP
+      } else if (strcmp(call->function_name, "http_send_request") == 0 ||
+                 strcmp(call->function_name, "http_send_response") == 0) {
+        need_http_helpers = true;
+        expression->result_type = create_builtin_type_identifier("integer", expression->location);
+      } else if (strcmp(call->function_name, "http_read_request") == 0) {
+        need_http_helpers = true;
+        expression->result_type = create_builtin_type_identifier("HttpRequest", expression->location);
+      } else if (strcmp(call->function_name, "http_read_response") == 0) {
+        need_http_helpers = true;
+        expression->result_type = create_builtin_type_identifier("integer", expression->location);
+      // STRING
+      } else if (strcmp(call->function_name, "make_string") == 0 ||
+                 strcmp(call->function_name, "make_string_from_char") == 0 ||
+                 strcmp(call->function_name, "concat_string") == 0) {
+        expression->result_type = create_builtin_type_identifier("string", expression->location);
+      // SET
+      } else if (strcmp(call->function_name, "set_is_empty") == 0) {
+        expression->result_type = create_builtin_type_identifier("integer", expression->location);
+      } else if (strcmp(call->function_name, "set_include") == 0 ||
+                 strcmp(call->function_name, "set_exclude") == 0) {
+        expression->result_type = create_builtin_type_identifier("integer", expression->location);
+      } else if (strcmp(call->function_name, "print_set") == 0) {
+        expression->result_type = create_builtin_type_identifier("void", expression->location);
+      // ARRAY
+      } else if (strcmp(call->function_name, "check_array_bounds") == 0) {
+        expression->result_type = create_builtin_type_identifier("void", expression->location);
+      // Fallbacks
+      } else if (strcmp(call->function_name, "readln") == 0 || strcmp(call->function_name, "read") == 0) {
+        expression->result_type = create_builtin_type_identifier("string", expression->location);
+      } else if (strcmp(call->function_name, "writeln") == 0 || strcmp(call->function_name, "write") == 0) {
+        expression->result_type = create_builtin_type_identifier("void", expression->location);
+      } else {
+        // Default: inteiro
+        expression->result_type = create_builtin_type_identifier("integer", expression->location);
+      }
+    } else {
+      expression->result_type = NULL;
+    }
+    return expression->result_type;
+  }
   default:
     return NULL;
   }
@@ -1874,6 +2008,23 @@ static void analyze_statement(ASTNode *statement, CompilerContext *context) {
     analyze_call_parameters(func->params, context);
     context->current_function = NULL;
 
+    break;
+  }
+  case NODE_STDLIB_CALL: {
+    StdlibCallNode *call = (StdlibCallNode *)statement;
+    ListNode *args = call->args;
+    while (args) {
+      if (args->element)
+        analyze_expression(args->element, context);
+      args = (ListNode *)args->next;
+    }
+    if (call->function_name) {
+      if (strncmp(call->function_name, "socket_", 7) == 0) {
+        need_socket_helpers = true;
+      } else if (strncmp(call->function_name, "http_", 5) == 0) {
+        need_http_helpers = true;
+      }
+    }
     break;
   }
   case NODE_REPEAT_STMT: {
@@ -2134,7 +2285,7 @@ static void analyze_record_fields(SymbolEntry *record_type_symbol,
                 field_symbol->info.var_info.offset = 0;
 
                 char access_prefix[200];
-                sprintf(access_prefix, "data.%s.", v_rec_node->name);
+                                              sprintf(access_prefix, "data.%s.", v_rec_node->name);
                 field_symbol->info.var_info.variant_access_prefix =
                     strdup(access_prefix);
 
@@ -2178,6 +2329,7 @@ void analyze_semantics(ASTNode *root_node, CompilerContext *context) {
   LOG_TRACE("Passagem 1: Coletando declarações de topo...");
   /* ADDING BUILTIN TYPES TO GLOBAL CONTEXT */
   insert_builtin_types(context, program->base.location);
+  insert_http_types(context, program->base.location);
   if (block->labels) {
     analyze_labels(block->labels, context);
   }
@@ -2205,6 +2357,8 @@ void analyze_semantics(ASTNode *root_node, CompilerContext *context) {
 
   program->need_string_helpers = need_string_helpers;
   program->need_set_helpers = need_set_helpers;
+  program->need_socket_helpers = need_socket_helpers;
+  program->need_http_helpers = need_http_helpers;
 
   LOG_TRACE("Análise Semântica concluída.");
 }

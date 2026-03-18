@@ -2,8 +2,8 @@
 #define SYMBOL_TABLE_H
 
 #include <stdint.h>
-#include "../commons.h"
-#include "../memory.h"
+#include "commons.h"
+#include "memory.h"
 
 typedef struct ht ht;
 

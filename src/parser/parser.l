@@ -1,9 +1,9 @@
 %option noyywrap nounput noinput batch yylineno
 %{
-#include <stdio.h>
 #include <string.h>
+#include <stdio.h>
 #include "types.h"
-#include "../ast/ast.h"
+#include "ast.h"
 #include "parser.tab.h"
 
 #define SAVE_INTEGER yylval.integer = atoi(yytext)
@@ -40,7 +40,7 @@ ID {ALPHA}{ALPHANUM}*
 UINT {DIGIT}+
 REAL {UINT}(\.{UINT})?([eE][+-]{UINT})?
 CHAR \'[a-zA-Z]\'
-STRING \'(('')|[^\\'])*\'
+STRING \'(('')|(\\.)|([^'\\]))*\'
 
 %x COMMENT
 
@@ -90,52 +90,68 @@ STRING \'(('')|[^\\'])*\'
   "."             {return DOT;}
   "^"             {return CARET;}
 
-  "program"       { return PROGRAM; }
-  "var"           { return VAR; }
-  "const"         { return CONST; }
-  "type"          { return TYPE; }
-  "label"         { return LABEL; }
-  "procedure"     { return PROCEDURE; }
-  "function"      { return FUNCTION; }
-  "begin"         { return BEGIN_TOK; }
-  "end"           { return END; }
-  "if"            { return IF; }
-  "then"          { return THEN; }
-  "else"          { return ELSE; }
-  "while"         { return WHILE; }
-  "do"            { return DO; }
-  "for"           { return FOR; }
-  "to"            { return TO; }
-  "downto"        { return DOWNTO; }
-  "repeat"        { return REPEAT; }
-  "until"         { return UNTIL; }
-  "case"          { return CASE; }
-  "of"            { return OF; }
-  "goto"          { return GOTO; }
-  "array"         { return ARRAY; }
-  "record"        { return RECORD; }
-  "set"           { return SET; }
-  "in"            { return IN; }
-  "file"          { return FILE_TOK; }
-  "integer"       { return INTEGER; }
-  "real"          { return REAL; }
-  "boolean"       { return BOOLEAN; }
-  "string"        { return STRING; }
-  "char"          { return CHAR; }
-  "not"           { return NOT; }
-  "and"           { return AND; }
-  "or"            { return OR; }
-  "div"           { return DIV; }
-  "mod"           { return MOD; }
-  "write"         { return WRITE; }
-  "writeln"       { return WRITELN; }
-  "read"          { return READ; }
-  "readln"        { return READLN; }
-  "Chr"           { return CHR; }
-  "nil"           { return NIL; }
-  "with"          { return WITH; }
-  "forward"       { return FORWARD; }
-  "packed"        { return PACKED; }
+  "program"            { return PROGRAM; }
+  "var"                { return VAR; }
+  "const"              { return CONST; }
+  "type"               { return TYPE; }
+  "label"              { return LABEL; }
+  "procedure"          { return PROCEDURE; }
+  "function"           { return FUNCTION; }
+  "begin"              { return BEGIN_TOK; }
+  "end"                { return END; }
+  "if"                 { return IF; }
+  "then"               { return THEN; }
+  "else"               { return ELSE; }
+  "while"              { return WHILE; }
+  "do"                 { return DO; }
+  "for"                { return FOR; }
+  "to"                 { return TO; }
+  "downto"             { return DOWNTO; }
+  "repeat"             { return REPEAT; }
+  "until"              { return UNTIL; }
+  "case"               { return CASE; }
+  "of"                 { return OF; }
+  "goto"               { return GOTO; }
+  "array"              { return ARRAY; }
+  "record"             { return RECORD; }
+  "set"                { return SET; }
+  "in"                 { return IN; }
+  "file"               { return FILE_TOK; }
+  "integer"            { return INTEGER; }
+  "real"               { return REAL; }
+  "boolean"            { return BOOLEAN; }
+  "string"             { return STRING; }
+  "char"               { return CHAR; }
+  "not"                { return NOT; }
+  "and"                { return AND; }
+  "or"                 { return OR; }
+  "div"                { return DIV; }
+  "mod"                { return MOD; }
+  "write"              { return WRITE; }
+  "writeln"            { return WRITELN; }
+  "read"               { return READ; }
+  "readln"             { return READLN; }
+  "Chr"                { return CHR; }
+  "nil"                { return NIL; }
+  "with"               { return WITH; }
+  "forward"            { return FORWARD; }
+  "packed"             { return PACKED; }
+  "Socket"             { return SOCKET; }
+  "HttpRequest"        { return HTTP_REQUEST; }
+  "HttpResponse"       { return HTTP_RESPONSE; }
+  "HttpHeader"         { return HTTP_HEADER; }
+  "socket_create"      { return SOCKET_CREATE; }
+  "socket_accept"      { return SOCKET_ACCEPT; }
+  "socket_bind"             { return SOCKET_BIND; }
+  "socket_connect"          { return SOCKET_CONNECT; }
+  "socket_listen"           { return SOCKET_LISTEN; }
+  "socket_recv"             { return SOCKET_RECV; }
+  "socket_send"             { return SOCKET_SEND; }
+  "socket_close"            { return SOCKET_CLOSE; }
+  "http_send_request"  { return HTTP_SEND_REQUEST; }
+  "http_read_request"  { return HTTP_READ_REQUEST; }
+  "http_send_response" { return HTTP_SEND_RESPONSE; }
+  "http_read_response" { return HTTP_READ_RESPONSE; }
 
   "false"|"true"  {SAVE_BOOLEAN; return BOOLEAN_LITERAL;}
   {CHAR}          {SAVE_CHAR; return CHAR_LITERAL;}

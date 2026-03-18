@@ -1,9 +1,9 @@
 #ifndef CODE_H
 #define CODE_H
 
-#include "../ast/ast.h"
-#include "../context.h"
-#include "../commons.h"
+#include "ast.h"
+#include "context.h"
+#include "commons.h"
 
 CodeGenerator *create_code_generator(char *output_file);
 

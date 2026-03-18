@@ -1,8 +1,8 @@
 #include "ast.h"
 #include <string.h>
 #include <assert.h>
-#include "../logger.h"
-#include "../memory.h"
+#include "logger.h"
+#include "memory.h"
 
 SourceLocation create_location(YYLTYPE loc) {
   SourceLocation result;
@@ -2230,6 +2230,8 @@ const char *get_node_type_name(NodeType type) {
     return "NODE_ARRAY_ACCESS";
   case NODE_FUNC_CALL:
     return "NODE_FUNC_CALL";
+  case NODE_STDLIB_CALL:
+    return "NODE_STDLIB_CALL";
   case NODE_SET_CONSTRUCTOR:
     return "NODE_SET_CONSTRUCTOR";
   case NODE_CONSTANT:
@@ -2571,6 +2573,12 @@ void free_node(ASTNode *node) {
     free(pc);
     break;
   }
+  case NODE_STDLIB_CALL: {
+    StdlibCallNode *stdc = (StdlibCallNode *)node;
+    // free_node(stdc->args);
+    free(stdc);
+    break;
+  }
   case NODE_IF_STMT: {
     IfNode *ifn = (IfNode *)node;
     free_node(ifn->else_stmt);
@@ -2829,3 +2837,47 @@ void free_node(ASTNode *node) {
     abort();
   }
 };
+
+ASTNode *create_stdlib_call_node(const char *function_name, ListNode *args, SourceLocation loc) {
+    StdlibCallNode *node = xalloc(1, sizeof(StdlibCallNode));
+    node->base.type = NODE_STDLIB_CALL;
+    node->base.location = loc;
+    node->base.print = print_todo;
+    node->function_name = strdup(function_name);
+    node->args = args;
+    
+    return (ASTNode *)node;
+}
+
+ASTNode *create_stdlib_call_node2(const char *function_name, ASTNode *arg1, ASTNode *arg2, SourceLocation loc) {
+    ListNode *args = xalloc(1, sizeof(ListNode));
+    args->element = arg1;
+    args->next = xalloc(1, sizeof(ListNode));
+    ((ListNode *)args->next)->element = arg2;
+    ((ListNode *)args->next)->next = NULL;
+    return create_stdlib_call_node(function_name, args, loc);
+}
+
+ASTNode *create_stdlib_call_node3(const char *function_name, ASTNode *arg1, ASTNode *arg2, ASTNode *arg3, SourceLocation loc) {
+    ListNode *args = xalloc(1, sizeof(ListNode));
+    args->element = arg1;
+    args->next = xalloc(1, sizeof(ListNode));
+    ((ListNode *)args->next)->element = arg2;
+    ((ListNode *)args->next)->next = xalloc(1, sizeof(ListNode));
+    ((ListNode *)((ListNode *)args->next)->next)->element = arg3;
+    ((ListNode *)((ListNode *)args->next)->next)->next = NULL;
+    return create_stdlib_call_node(function_name, args, loc);
+}
+
+ASTNode *create_stdlib_call_node4(const char *function_name, ASTNode *arg1, ASTNode *arg2, ASTNode *arg3, ASTNode *arg4, SourceLocation loc) {
+    ListNode *args = xalloc(1, sizeof(ListNode));
+    args->element = arg1;
+    args->next = xalloc(1, sizeof(ListNode));
+    ((ListNode *)args->next)->element = arg2;
+    ((ListNode *)args->next)->next = xalloc(1, sizeof(ListNode));
+    ((ListNode *)((ListNode *)args->next)->next)->element = arg3;
+    ((ListNode *)((ListNode *)args->next)->next)->next = xalloc(1, sizeof(ListNode));
+    ((ListNode *)((ListNode *)((ListNode *)args->next)->next)->next)->element = arg4;
+    ((ListNode *)((ListNode *)((ListNode *)args->next)->next)->next)->next = NULL;
+    return create_stdlib_call_node(function_name, args, loc);
+}

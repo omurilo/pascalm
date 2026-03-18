@@ -1,4 +1,4 @@
-#include "../commons.h"
+#include "commons.h"
 
 void generate_string_definition(CodeGenerator *code_gen) {
   // definição do tipo `string`

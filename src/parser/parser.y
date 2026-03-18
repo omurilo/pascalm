@@ -1,12 +1,12 @@
 %require "3.8.2"
 
 %{
-#include <stdlib.h>
 #include <string.h>
-#include "../commons.h"
-#include "../ast/ast.h"
-#include "../symbol-table/symbol-table.h"
-#include "../code-generation/code.h"
+#include <stdlib.h>
+#include "commons.h"
+#include "ast.h"
+#include "symbol-table.h"
+#include "code.h"
 
 ASTNode *root = NULL;
 %}
@@ -34,6 +34,9 @@ ASTNode *root = NULL;
 %token WHILE DO FOR TO DOWNTO REPEAT UNTIL CASE OF GOTO
 %token INTEGER REAL BOOLEAN CHAR ARRAY RECORD SET FILE_TOK STRING
 %token READ WRITE READLN WRITELN CHR
+%token SOCKET HTTP_REQUEST HTTP_RESPONSE HTTP_HEADER
+%token SOCKET_CREATE SOCKET_CONNECT SOCKET_BIND SOCKET_LISTEN SOCKET_ACCEPT SOCKET_SEND SOCKET_RECV SOCKET_CLOSE
+%token HTTP_SEND_REQUEST HTTP_READ_REQUEST HTTP_SEND_RESPONSE HTTP_READ_RESPONSE
 
 /* Symbols */
 %token GT GTE LT LTE NEQ EQ
@@ -405,6 +408,18 @@ statement:
   | GOTO label { $$ = create_goto_label_node($2, create_location(@$)); }
   | WITH record_variable_list DO statement { $$ = create_with_record_list_node($2, $4, create_location(@$)); }
   | label COLON statement { $$ = create_label_stmt_node($1, $3, create_location(@$)); }
+  | SOCKET_CREATE L_PAREN R_PAREN { $$ = create_stdlib_call_node("socket_create", NULL, create_location(@$)); }
+  | SOCKET_CONNECT L_PAREN expression COMMA expression COMMA expression R_PAREN { $$ = create_stdlib_call_node3("socket_connect", $3, $5, $7, create_location(@$)); }
+  | SOCKET_BIND L_PAREN expression COMMA expression COMMA expression R_PAREN { $$ = create_stdlib_call_node3("socket_bind", $3, $5, $7, create_location(@$)); }
+  | SOCKET_LISTEN L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("socket_listen", $3, $5, create_location(@$)); }
+  | SOCKET_ACCEPT L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("socket_accept", $3, $5, create_location(@$)); }
+  | SOCKET_SEND L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("socket_send", $3, $5, create_location(@$)); }
+  | SOCKET_RECV L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("socket_recv", $3, $5, create_location(@$)); }
+  | SOCKET_CLOSE L_PAREN expression R_PAREN { $$ = create_stdlib_call_node2("socket_close", $3, NULL, create_location(@$)); }
+  | HTTP_SEND_REQUEST L_PAREN expression COMMA expression COMMA expression COMMA expression R_PAREN { $$ = create_stdlib_call_node4("http_send_request", $3, $5, $7, $9, create_location(@$)); }
+  | HTTP_READ_REQUEST L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("http_read_request", $3, $5, create_location(@$)); }
+  | HTTP_SEND_RESPONSE L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("http_send_response", $3, $5, create_location(@$)); }
+  | HTTP_READ_RESPONSE L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("http_read_response", $3, $5, create_location(@$)); }
 
 variable:  
     varid { $$ = $1; }
@@ -558,6 +573,18 @@ primary_expression:
     }
   | L_BRACKET element_list R_BRACKET { $$ = $2; }
   | L_PAREN expression R_PAREN { $$ = $2; } 
+  | SOCKET_CREATE L_PAREN R_PAREN { $$ = create_stdlib_call_node("socket_create", NULL, create_location(@$)); }
+  | SOCKET_CONNECT L_PAREN expression COMMA expression COMMA expression R_PAREN { $$ = create_stdlib_call_node3("socket_connect", $3, $5, $7, create_location(@$)); }
+  | SOCKET_BIND L_PAREN expression COMMA expression COMMA expression R_PAREN { $$ = create_stdlib_call_node3("socket_bind", $3, $5, $7, create_location(@$)); }
+  | SOCKET_LISTEN L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("socket_listen", $3, $5, create_location(@$)); }
+  | SOCKET_ACCEPT L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("socket_accept", $3, $5, create_location(@$)); }
+  | SOCKET_SEND L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("socket_send", $3, $5, create_location(@$)); }
+  | SOCKET_RECV L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("socket_recv", $3, $5, create_location(@$)); }
+  | SOCKET_CLOSE L_PAREN expression R_PAREN { $$ = create_stdlib_call_node2("socket_close", $3, NULL, create_location(@$)); }
+  | HTTP_SEND_REQUEST L_PAREN expression COMMA expression COMMA expression COMMA expression R_PAREN { $$ = create_stdlib_call_node4("http_send_request", $3, $5, $7, $9, create_location(@$)); }
+  | HTTP_READ_REQUEST L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("http_read_request", $3, $5, create_location(@$)); }
+  | HTTP_SEND_RESPONSE L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("http_send_response", $3, $5, create_location(@$)); }
+  | HTTP_READ_RESPONSE L_PAREN expression COMMA expression R_PAREN { $$ = create_stdlib_call_node2("http_read_response", $3, $5, create_location(@$)); }
 
 element_list:
     empty { 
@@ -594,6 +621,10 @@ typeid:
   | INTEGER { $$ = create_builtin_type_identifier("integer", create_location(@$)); }
   | REAL { $$ = create_builtin_type_identifier("real", create_location(@$)); }
   | STRING { $$ = create_builtin_type_identifier("string", create_location(@$)); }
+  | SOCKET { $$ = create_builtin_type_identifier("Socket", create_location(@$)); }
+  | HTTP_REQUEST { $$ = create_builtin_type_identifier("HttpRequest", create_location(@$)); }
+  | HTTP_RESPONSE { $$ = create_builtin_type_identifier("HttpResponse", create_location(@$)); }
+  | HTTP_HEADER { $$ = create_builtin_type_identifier("HttpHeader", create_location(@$)); }
   | identifier {
       ASTNode *typeId = update_identifier_node_kind($1, SYMBOL_TYPE);
       $$ = create_type_identifier((IdentifierNode*)typeId, create_location(@$));

@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include "commons.h"
-#include "parser/types.h"
+#include "types.h"
 
 #ifdef DEBUG
 #define LOG_DEBUG(...)                                                         \

@@ -1,6 +1,6 @@
 #include "logger.h"
 #include "commons.h"
-#include "parser/types.h"
+#include "types.h"
 
 extern YYLTYPE yylloc;
 

@@ -6,7 +6,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <stdbool.h>
-#include "parser/types.h"
+#include "types.h"
 
 typedef struct ht ht;
 typedef struct ASTNode ASTNode;
@@ -17,6 +17,7 @@ typedef struct CodeGenerator {
   FILE *output_file;
   int indent_level;
   SymbolEntry *current_function;
+  char *stdlib_path; // caminho para a pasta stdlib (ex: "/path/to/stdlib")
 } CodeGenerator;
 
 typedef enum ParameterKind {
@@ -100,6 +101,7 @@ typedef enum NodeType {
   NODE_MEMBER_ACCESS,
   NODE_ARRAY_ACCESS,
   NODE_FUNC_CALL,
+  NODE_STDLIB_CALL,
   NODE_SET_CONSTRUCTOR,
   NODE_CONSTANT,
   NODE_TYPE_IDENTIFIER,

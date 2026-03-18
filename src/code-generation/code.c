@@ -1,14 +1,78 @@
 #include "code.h"
-#include "../logger.h"
+#include "logger.h"
 #include <stdio.h>
+#include <string.h>
+
+/* Emite uma string C escapada — converte bytes especiais em sequências \n, \r, etc. */
+static void emit_c_string(FILE *out, const char *s) {
+  for (; *s; s++) {
+    switch ((unsigned char)*s) {
+      case '\n': fputs("\\n", out); break;
+      case '\r': fputs("\\r", out); break;
+      case '\t': fputs("\\t", out); break;
+      case '\\': fputs("\\\\", out); break;
+      case '"':  fputs("\\\"", out); break;
+      default:   fputc(*s, out); break;
+    }
+  }
+}
+
+static bool stdlib_arg_needs_address(const char *fn, int arg_index) {
+  if (strcmp(fn, "socket_accept") == 0) {
+    return arg_index == 0 || arg_index == 1;
+  }
+  /* demais funções socket: apenas o primeiro arg é Socket* */
+  if (strcmp(fn, "socket_bind") == 0 ||
+      strcmp(fn, "socket_listen") == 0 ||
+      strcmp(fn, "socket_connect") == 0 ||
+      strcmp(fn, "socket_send") == 0 ||
+      strcmp(fn, "socket_recv") == 0 ||
+      strcmp(fn, "socket_close") == 0) {
+    return arg_index == 0;
+  }
+  if (strcmp(fn, "http_send_request") == 0 ||
+      strcmp(fn, "http_read_request") == 0 ||
+      strcmp(fn, "http_send_response") == 0 ||
+      strcmp(fn, "http_read_response") == 0) {
+    return arg_index == 0 || arg_index == 1;
+  }
+  return false;
+}
 
 CodeGenerator *create_code_generator(char *output_file) {
   CodeGenerator *code_gen = xalloc(1, sizeof(CodeGenerator));
 
   code_gen->output_file = fopen(output_file, "w");
   code_gen->indent_level = 0;
+  code_gen->stdlib_path = NULL;
 
   return code_gen;
+}
+
+/* Emite o conteúdo de um arquivo da stdlib diretamente no output gerado.
+ * name é o nome do arquivo sem caminho (ex: "socket.h" ou "socket.c"). */
+static void emit_stdlib_file(CodeGenerator *code_gen, const char *name) {
+  if (!code_gen->stdlib_path) {
+    LOG_ERROR("stdlib_path não configurado no CodeGenerator\n");
+    return;
+  }
+
+  char path[1024];
+  snprintf(path, sizeof(path), "%s/%s", code_gen->stdlib_path, name);
+
+  FILE *f = fopen(path, "r");
+  if (!f) {
+    LOG_ERROR("Não foi possível abrir stdlib file: %s\n", path);
+    return;
+  }
+
+  char buf[4096];
+  size_t n;
+  while ((n = fread(buf, 1, sizeof(buf), f)) > 0) {
+    fwrite(buf, 1, n, code_gen->output_file);
+  }
+  fclose(f);
+  fprintf(code_gen->output_file, "\n");
 }
 
 void print_indent(CodeGenerator *code_gen) {
@@ -34,6 +98,17 @@ IdentifierNode *cast_pascal_to_c_type(TypeIdentifierNode *node) {
                                                          id->base.location);
     if (strcmp(id->name, "string") == 0)
       return id;
+    if (strcmp(id->name, "Socket") == 0)
+      return id;
+    if (strcmp(id->name, "HttpRequest") == 0)
+      return id;
+    if (strcmp(id->name, "HttpResponse") == 0)
+      return id;
+    if (strcmp(id->name, "HttpHeader") == 0)
+      return id;
+    if (strcmp(id->name, "cstring") == 0)
+      return (IdentifierNode *)create_builtin_identifier("char *",
+                                                         id->base.location);
   }
   default:
     LOG_ERROR("void (%d.%d-%d.%d)\n\n\n", node->base.location.first_line,
@@ -188,6 +263,11 @@ void generate_enum_strings(CodeGenerator *code_gen,
   fprintf(code_gen->output_file, "};\n\n");
 }
 
+static void generate_socket_stdlib(CodeGenerator *code_gen) {
+  emit_stdlib_file(code_gen, "socket.h");
+  emit_stdlib_file(code_gen, "socket.c");
+}
+
 void generate_program(CodeGenerator *code_gen, CompilerContext *context,
                       ASTNode *node) {
   ProgramNode *program = (ProgramNode *)node;
@@ -195,10 +275,24 @@ void generate_program(CodeGenerator *code_gen, CompilerContext *context,
   fprintf(code_gen->output_file, "#include <stdio.h>\n");
   fprintf(code_gen->output_file, "#include <stdlib.h>\n");
   fprintf(code_gen->output_file, "#include <string.h>\n");
-  fprintf(code_gen->output_file, "#include <stdbool.h>\n\n");
+  fprintf(code_gen->output_file, "#include <stdbool.h>\n");
+  fprintf(code_gen->output_file, "\n");
 
-  if (program->need_string_helpers)
-    generate_string_definition(code_gen);
+  if (program->need_socket_helpers || program->need_http_helpers) {
+    /* socket.h e socket.c sempre emitidos antes do http, pois http depende de Socket/PascalString */
+    generate_socket_stdlib(code_gen);
+  }
+  if (program->need_http_helpers) {
+    emit_stdlib_file(code_gen, "http.h");
+    emit_stdlib_file(code_gen, "http.c");
+  }
+  if (program->need_string_helpers) {
+    emit_stdlib_file(code_gen, "strings.h");
+    emit_stdlib_file(code_gen, "strings.c");
+  }
+
+  // if (program->need_string_helpers)
+  //   generate_string_definition(code_gen);
 
   generate_block(code_gen, context, program->block, true,
                  program->need_set_helpers, program->need_string_helpers);
@@ -247,10 +341,10 @@ void generate_block(CodeGenerator *code_gen, CompilerContext *context,
       fprintf(code_gen->output_file, "\n");
   }
 
-  if (string_helpers)
-    generate_strings_helper_functions(code_gen);
-  if (set_helpers)
-    generate_set_helper_functions(code_gen);
+  // if (string_helpers)
+  //   generate_strings_helper_functions(code_gen);
+  // if (set_helpers)
+  //   generate_set_helper_functions(code_gen);
 
   ListNode *procs_funcs = (ListNode *)block->procs_funcs;
   while (procs_funcs) {
@@ -550,8 +644,9 @@ void generate_parameters(CodeGenerator *code_gen, CompilerContext *context,
     }
 
     params_list = (ListNode *)params_list->next;
-    if (params_list)
+    if (params_list) {
       fprintf(code_gen->output_file, ", ");
+    }
   }
 }
 
@@ -773,12 +868,18 @@ void generate_assignment(CodeGenerator *code_gen, CompilerContext *context,
     } else {
       if (a->expression->type == NODE_IDENTIFIER) {
         generate_string_operand(code_gen, context, a->expression, false);
+      } else if (a->expression->type == NODE_STDLIB_CALL) {
+        /* stdlib call já retorna string diretamente — não envolver com make_string */
+        generate_expression(code_gen, context, a->expression);
       } else {
         fprintf(code_gen->output_file, "make_string(");
         generate_string_operand(code_gen, context, a->expression, false);
         fprintf(code_gen->output_file, ")");
       }
     }
+  } else if (type_id && strcmp(type_id->name, "cstring") == 0) {
+    /* cstring = raw C char* field (HttpRequest/HttpResponse); assign directly */
+    generate_expression(code_gen, context, a->expression);
   } else {
     generate_expression(code_gen, context, a->expression);
   }
@@ -1176,6 +1277,10 @@ void generate_write(CodeGenerator *code_gen, CompilerContext *context,
         } else if (strcmp(id->name, "string") == 0) {
           strcat(format_string, "%s");
           break;
+        } else if (strcmp(id->name, "cstring") == 0 ||
+                   strcmp(id->name, "char *") == 0) {
+          strcat(format_string, "%s");
+          break;
         } else if (strcmp(id->name, "double") == 0) {
           strcat(format_string, "%.2f");
           break;
@@ -1408,7 +1513,9 @@ void generate_proc_call_statement(CodeGenerator *code_gen,
       if (params->element->type == NODE_LITERAL &&
           ((LiteralNode *)params->element)->literal_type == LITERAL_STRING) {
         LiteralNode *l = (LiteralNode *)params->element;
-        fprintf(code_gen->output_file, "make_string(\"%s\")", l->value.str_val);
+        fprintf(code_gen->output_file, "make_string(\"");
+        emit_c_string(code_gen->output_file, l->value.str_val);
+        fprintf(code_gen->output_file, "\")");
       } else {
         if (var_params[index] == 1) {
           fprintf(code_gen->output_file, "&");
@@ -1484,6 +1591,30 @@ void generate_statement(CodeGenerator *code_gen, CompilerContext *context,
     code_gen->indent_level = 0;
     generate_statement(code_gen, context, lb_stmt->statement);
     code_gen->indent_level = temp_indent_level;
+    break;
+  }
+  case NODE_STDLIB_CALL: {
+    StdlibCallNode *call = (StdlibCallNode *)node;
+    if (code_gen->indent_level > 0) {
+      print_indent(code_gen);
+    }
+    fprintf(code_gen->output_file, "%s(", call->function_name);
+    ListNode *arg = call->args;
+    int idx = 0;
+    bool first = true;
+    while (arg) {
+      if (arg->element) {
+        if (!first) fprintf(code_gen->output_file, ", ");
+        first = false;
+        if (stdlib_arg_needs_address(call->function_name, idx)) {
+          fprintf(code_gen->output_file, "&");
+        }
+        generate_expression(code_gen, context, arg->element);
+      }
+      arg = (ListNode *)arg->next;
+      idx++;
+    }
+    fprintf(code_gen->output_file, ");\n");
     break;
   }
 
@@ -1731,7 +1862,9 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
       fprintf(code_gen->output_file, "%s",
               literal->value.bool_val ? "true" : "false");
     } else if (literal->literal_type == LITERAL_STRING) {
-      fprintf(code_gen->output_file, "\"%s\"", literal->value.str_val);
+      fprintf(code_gen->output_file, "\"");
+      emit_c_string(code_gen->output_file, literal->value.str_val);
+      fprintf(code_gen->output_file, "\"");
     } else if (literal->literal_type == LITERAL_CHAR) {
       fprintf(code_gen->output_file, "'%c'", literal->value.char_val);
     }
@@ -1787,6 +1920,27 @@ void generate_expression(CodeGenerator *code_gen, CompilerContext *context,
     break;
   }
   case NODE_SET_ELEMENT: {
+    break;
+  }
+  case NODE_STDLIB_CALL: {
+    StdlibCallNode *call = (StdlibCallNode *)node;
+    fprintf(code_gen->output_file, "%s(", call->function_name);
+    ListNode *arg = call->args;
+    int idx = 0;
+    bool first = true;
+    while (arg) {
+      if (arg->element) {
+        if (!first) fprintf(code_gen->output_file, ", ");
+        first = false;
+        if (stdlib_arg_needs_address(call->function_name, idx)) {
+          fprintf(code_gen->output_file, "&");
+        }
+        generate_expression(code_gen, context, arg->element);
+      }
+      arg = (ListNode *)arg->next;
+      idx++;
+    }
+    fprintf(code_gen->output_file, ")");
     break;
   }
   default:
