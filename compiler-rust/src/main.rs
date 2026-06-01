@@ -9,6 +9,7 @@ use crate::ast::CompilationUnit;
 
 mod lexer;
 mod ast;
+mod typed_ast;
 mod symbol_table;
 mod analyzer;
 mod codegen;
@@ -25,11 +26,18 @@ struct Args {
 
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
+
+    #[arg(short = 'L', long)]
+    lib_path: Vec<String>,
 }
+
+const RUNTIME_BC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/runtime_lib.bc"));
+include!(concat!(env!("OUT_DIR"), "/libs.rs"));
 
 fn main() {
     let args = Args::parse();
     let mut loader = ModuleLoader::new();
+    loader.search_paths = args.lib_path.iter().map(PathBuf::from).collect();
     
     match loader.load_recursively(Path::new(&args.file), args.verbose) {
         Ok(_) => {
@@ -37,8 +45,12 @@ fn main() {
             let context = Context::create();
             let mut module_interfaces = HashMap::new();
             let mut generated_ir_files = Vec::new();
+            let mut used_builtin_libs = HashSet::new();
 
             for name in sorted_units {
+                if loader.embedded_units.contains_key(&name) {
+                    used_builtin_libs.insert(name.clone());
+                }
                 let unit = loader.modules.get(&name).unwrap();
                 match unit {
                     CompilationUnit::Program(p) => {
@@ -83,8 +95,58 @@ fn main() {
                 }
             }
 
-            println!("Compilation successful. Generated files: {:?}", generated_ir_files);
-            println!("To link (example): clang {} -o {}", generated_ir_files.join(" "), args.output.as_deref().unwrap_or("output"));
+            println!("Compilation successful. Generated IR files: {:?}", generated_ir_files);
+            
+            let output_exe = args.output.unwrap_or_else(|| "output".to_string());
+            println!("Linking into executable '{}'...", output_exe);
+
+            let mut clang_args = generated_ir_files.clone();
+            let mut temp_libs = Vec::new();
+
+            for asset in get_stdlib_assets() {
+                if used_builtin_libs.contains(asset.name) {
+                    let temp_path = format!("lib{}_tmp.a", asset.name);
+                    fs::write(&temp_path, asset.archive).expect("Failed to write temporary library");
+                    clang_args.push(temp_path.clone());
+                    temp_libs.push(temp_path);
+                }
+            }
+
+            // Write embedded runtime_lib.bc to temp file for linking
+            let runtime_bc_path = "runtime_lib_tmp.bc";
+            fs::write(runtime_bc_path, RUNTIME_BC).expect("Failed to write temporary runtime_lib.bc");
+            clang_args.push(runtime_bc_path.to_string());
+            let status = std::process::Command::new("clang")
+                .args(&clang_args)
+                .arg("-o")
+                .arg(&output_exe)
+                .arg("-lm")
+                .arg("-lpthread")
+                .arg("-ldl")
+                .arg("-fuse-ld=lld")
+                .arg("-O2")
+                .status();
+                
+            match status {
+                Ok(s) if s.success() => {
+                    println!("Linking successful!");
+                    for ir_file in generated_ir_files {
+                        let _ = fs::remove_file(ir_file);
+                    }
+                    for lib in temp_libs {
+                        let _ = fs::remove_file(lib);
+                    }
+                    let _ = fs::remove_file(runtime_bc_path);
+                }
+                Ok(s) => {
+                    eprintln!("Linker failed with exit code: {}", s.code().unwrap_or(-1));
+                    std::process::exit(1);
+                }
+                Err(e) => {
+                    eprintln!("Failed to execute linker (clang): {}. Make sure clang is installed.", e);
+                    std::process::exit(1);
+                }
+            }
         }
         Err(e) => {
             eprintln!("Error: {}", e);
@@ -96,20 +158,38 @@ fn main() {
 struct ModuleLoader {
     modules: HashMap<String, CompilationUnit>,
     loading_stack: Vec<String>,
+    search_paths: Vec<PathBuf>,
+    embedded_units: HashMap<String, &'static str>,
 }
 
 impl ModuleLoader {
     fn new() -> Self {
-        Self {
+        let mut loader = Self {
             modules: HashMap::new(),
             loading_stack: Vec::new(),
+            search_paths: Vec::new(),
+            embedded_units: HashMap::new(),
+        };
+        loader.setup_stdlib();
+        loader
+    }
+
+    fn setup_stdlib(&mut self) {
+        for asset in get_stdlib_assets() {
+            if !asset.source.is_empty() {
+                self.embedded_units.insert(asset.name.to_string(), asset.source);
+            }
         }
     }
 
     fn load_recursively(&mut self, path: &Path, verbose: bool) -> Result<(), String> {
         let input = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
+        self.parse_and_load(input, path.to_path_buf(), verbose)
+    }
+
+    fn parse_and_load(&mut self, input: String, source_path: PathBuf, verbose: bool) -> Result<(), String> {
         if verbose {
-            println!("Tokens for {}:", path.display());
+            println!("Tokens for {}:", source_path.display());
             let mut debug_lexer = lexer::Token::lexer(&input);
             while let Some(token) = debug_lexer.next() {
                 println!("  {:?} at {:?}", token, debug_lexer.span());
@@ -118,7 +198,7 @@ impl ModuleLoader {
         let lexer = lexer::Lexer::new(&input);
         let parser = parser::CompilationUnitParser::new();
         
-        let unit = parser.parse(lexer).map_err(|e| format!("Parse error in {}: {:?}", path.display(), e))?;
+        let unit = parser.parse(lexer).map_err(|e| format!("Parse error in {}: {:?}", source_path.display(), e))?;
         let name = match &unit {
             CompilationUnit::Program(p) => p.name.to_lowercase(),
             CompilationUnit::Unit(u) => u.name.to_lowercase(),
@@ -137,25 +217,43 @@ impl ModuleLoader {
         let deps = match &unit {
             CompilationUnit::Program(p) => p.uses.clone().unwrap_or_default(),
             CompilationUnit::Unit(u) => {
-                let mut d = u.interface.uses.clone().unwrap_or_default();
-                d.extend(u.implementation.uses.clone().unwrap_or_default());
+                let d = u.interface.uses.clone().unwrap_or_default();
+                // d.extend(u.implementation.uses.clone().unwrap_or_default());
                 d
             }
         };
 
-        let base_dir = path.parent().unwrap_or(Path::new("."));
+        let base_dir = source_path.parent().unwrap_or(Path::new("."));
         for dep in deps {
             let dep_lower = dep.to_lowercase();
             if !self.modules.contains_key(&dep_lower) {
-                // Try to find dep.pas or dep.pascalm
-                let mut dep_path = base_dir.join(format!("{}.pas", dep_lower));
-                if !dep_path.exists() {
-                    dep_path = base_dir.join(format!("{}.pascalm", dep_lower));
+                // 1. Check embedded units
+                if let Some(content) = self.embedded_units.get(&dep_lower) {
+                    let virtual_path = PathBuf::from(format!("builtin://{}.pas", dep_lower));
+                    self.parse_and_load(content.to_string(), virtual_path, verbose)?;
+                    continue;
                 }
-                if !dep_path.exists() {
-                    return Err(format!("Could not find unit '{}' used in {}", dep, path.display()));
+
+                // 2. Check local and provided search paths
+                let mut found = false;
+                let mut paths_to_check = vec![base_dir.to_path_buf()];
+                paths_to_check.extend(self.search_paths.clone());
+
+                for search_path in paths_to_check {
+                    let mut dep_path = search_path.join(format!("{}.pas", dep_lower));
+                    if !dep_path.exists() {
+                        dep_path = search_path.join(format!("{}.pascalm", dep_lower));
+                    }
+                    if dep_path.exists() {
+                        self.load_recursively(&dep_path, verbose)?;
+                        found = true;
+                        break;
+                    }
                 }
-                self.load_recursively(&dep_path, verbose)?;
+
+                if !found {
+                    return Err(format!("Could not find unit '{}' used in {}", dep, source_path.display()));
+                }
             }
         }
 
@@ -187,8 +285,8 @@ impl ModuleLoader {
         let deps = match unit {
             CompilationUnit::Program(p) => p.uses.clone().unwrap_or_default(),
             CompilationUnit::Unit(u) => {
-                let mut d = u.interface.uses.clone().unwrap_or_default();
-                d.extend(u.implementation.uses.clone().unwrap_or_default());
+                let d = u.interface.uses.clone().unwrap_or_default();
+                // d.extend(u.implementation.uses.clone().unwrap_or_default());
                 d
             }
         };

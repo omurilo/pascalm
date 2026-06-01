@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use crate::ast::*;
+use crate::typed_ast as typed;
 use crate::symbol_table::{SymbolTable, SymbolKind};
 
 pub struct SemanticAnalyzer {
@@ -9,6 +10,44 @@ pub struct SemanticAnalyzer {
 }
 
 impl SemanticAnalyzer {
+    // ... setup_builtins etc ...
+    
+    fn convert_type(&self, te: &TypeExpr) -> typed::Type {
+        match te {
+            TypeExpr::Simple(name) => match name.to_lowercase().as_str() {
+                "integer" => typed::Type::Integer,
+                "real" => typed::Type::Real,
+                "boolean" => typed::Type::Boolean,
+                "char" => typed::Type::Char,
+                "string" => typed::Type::String,
+                _ => {
+                    if let Some(SymbolKind::Type { type_expr }) = self.symbol_table.lookup(name) {
+                        self.convert_type(type_expr)
+                    } else {
+                        typed::Type::Void // Error case
+                    }
+                }
+            }
+            TypeExpr::Array { element_type, .. } => typed::Type::Array {
+                element_type: Box::new(self.convert_type(element_type)),
+                size: 100, // Placeholder
+            },
+            TypeExpr::Record { fields, .. } => {
+                let mut typed_fields = Vec::new();
+                for f in fields {
+                    let ft = self.convert_type(&f.type_expr);
+                    for id in &f.ids {
+                        typed_fields.push((id.clone(), ft.clone()));
+                    }
+                }
+                typed::Type::Record { fields: typed_fields }
+            }
+            TypeExpr::Pointer(inner) => typed::Type::Pointer(Box::new(self.convert_type(inner))),
+            TypeExpr::Set(inner) => typed::Type::Set(Box::new(self.convert_type(inner))),
+            TypeExpr::Enum(ids) => typed::Type::Enum(ids.clone()),
+            _ => typed::Type::Void,
+        }
+    }
     pub fn new() -> Self {
         let mut analyzer = Self {
             symbol_table: SymbolTable::new(),
@@ -49,6 +88,16 @@ impl SemanticAnalyzer {
         let _ = self.symbol_table.insert("Ord".to_string(), SymbolKind::Function {
             params: vec![Param::Variable { is_var: false, ids: vec!["val".to_string()], type_name: "char".to_string() }],
             return_type: "integer".to_string(),
+        });
+
+        // Runtime functions
+        let _ = self.symbol_table.insert("RuntimeInit".to_string(), SymbolKind::Procedure { params: Vec::new() });
+        let _ = self.symbol_table.insert("Sqrt".to_string(), SymbolKind::Function {
+            params: vec![Param::Variable { is_var: false, ids: vec!["n".to_string()], type_name: "real".to_string() }],
+            return_type: "real".to_string(),
+        });
+        let _ = self.symbol_table.insert("Halt".to_string(), SymbolKind::Procedure {
+            params: vec![Param::Variable { is_var: false, ids: vec!["code".to_string()], type_name: "integer".to_string() }],
         });
     }
 

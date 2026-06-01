@@ -108,6 +108,8 @@ pub enum Token {
     Uses,
     #[token("initialization", ignore(case))]
     Initialization,
+    #[token("external", ignore(case))]
+    External,
 
     // Symbols
     #[token("+")]

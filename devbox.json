@@ -3,7 +3,8 @@
   "packages": [
     "flex@latest",
     "bison@latest",
-    "gdb@latest"
+    "gdb@latest",
+    "llvm_18"
   ],
   "shell": {
     "init_hook": [

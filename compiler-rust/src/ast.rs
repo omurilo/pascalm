@@ -113,6 +113,8 @@ pub enum TypeExpr {
         end: Expr,
     },
     Enum(Vec<String>),
+    Procedure { params: Option<Vec<Param>> },
+    Function { params: Option<Vec<Param>>, return_type: String },
 }
 
 #[derive(Debug, Clone, PartialEq)]

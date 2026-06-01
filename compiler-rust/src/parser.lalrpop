@@ -59,6 +59,7 @@ extern {
         "implementation" => Token::Implementation,
         "uses" => Token::Uses,
         "initialization" => Token::Initialization,
+        "external" => Token::External,
 
         "+" => Token::Plus,
         "-" => Token::Minus,
@@ -126,7 +127,7 @@ InterfaceSection: InterfaceSection = {
     <constants:(ConstDecl ";")?>
     <types:(TypeDecl ";")?>
     <variables:(VarDecl ";")?>
-    <headers:(ProcFuncDecl ";")?> => InterfaceSection {
+    <headers:(ProcFuncHeaderList ";")?> => InterfaceSection {
         uses,
         constants: constants.map(|(c, _)| c),
         types: types.map(|(t, _)| t),
@@ -232,6 +233,23 @@ VarItem: VarDecl = {
     <ids:IdentifierList> ":" <te:TypeExpr> => VarDecl { ids, type_expr: te },
 };
 
+ProcFuncHeaderList: Vec<ProcFuncDecl> = {
+    <decl:ProcFuncHeader> => vec![decl],
+    <mut list:ProcFuncHeaderList> ";" <decl:ProcFuncHeader> => {
+        list.push(decl);
+        list
+    }
+};
+
+ProcFuncHeader: ProcFuncDecl = {
+    "procedure" <name:"identifier"> <params:Parameters?> => {
+        ProcFuncDecl::Procedure { name, params, block_or_forward: BlockOrForward::Forward }
+    },
+    "function" <name:"identifier"> <params:Parameters?> ":" <rt:TypeName> => {
+        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: BlockOrForward::Forward }
+    }
+};
+
 ProcFuncDecl: Vec<ProcFuncDecl> = {
     <decl:ProcOrFunc> => vec![decl],
     <mut list:ProcFuncDecl> ";" <decl:ProcOrFunc> => {
@@ -241,17 +259,18 @@ ProcFuncDecl: Vec<ProcFuncDecl> = {
 };
 
 ProcOrFunc: ProcFuncDecl = {
-    "procedure" <name:"identifier"> <params:Parameters?> ";" <body:BlockOrForward> => {
-        ProcFuncDecl::Procedure { name, params, block_or_forward: body }
+    "procedure" <name:"identifier"> <params:Parameters?> ";" <block:BlockOrExternal> => {
+        ProcFuncDecl::Procedure { name, params, block_or_forward: block }
     },
-    "function" <name:"identifier"> <params:Parameters?> ":" <rt:TypeName> ";" <body:BlockOrForward> => {
-        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: body }
+    "function" <name:"identifier"> <params:Parameters?> ":" <rt:TypeName> ";" <block:BlockOrExternal> => {
+        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: block }
     }
 };
 
-BlockOrForward: BlockOrForward = {
-    <b:Block> => BlockOrForward::Block(Box::new(b)),
+BlockOrExternal: BlockOrForward = {
     "forward" => BlockOrForward::Forward,
+    "external" => BlockOrForward::Forward, // Treat external as forward/empty for now
+    <b:Block> => BlockOrForward::Block(Box::new(b)),
 };
 
 Parameters: Vec<Param> = {
@@ -309,6 +328,8 @@ TypeExpr: TypeExpr = {
     "file" "of" <te:TypeExpr> => TypeExpr::File(Box::new(te)),
     <start:Constant> ".." <end:Constant> => TypeExpr::Subrange { start, end },
     "(" <ids:IdentifierList> ")" => TypeExpr::Enum(ids),
+    "procedure" <params:Parameters?> => TypeExpr::Procedure { params },
+    "function" <params:Parameters?> ":" <rt:TypeName> => TypeExpr::Function { params, return_type: rt },
 };
 
 FieldList: (Vec<VarDecl>, Option<VariantPart>) = {
@@ -456,16 +477,23 @@ CaseElseOpt: Option<Stmt> = {
 };
 
 ProcedureCall: Stmt = {
-    <name:ProcName> => Stmt::ProcedureCall { name, args: None },
-    <name:ProcName> "(" <args:ExprList?> ")" => Stmt::ProcedureCall { name, args },
-};
-
-ProcName: String = {
-    "write" => "write".to_string(),
-    "writeln" => "writeln".to_string(),
-    "read" => "read".to_string(),
-    "readln" => "readln".to_string(),
-    <id:"identifier"> => id,
+    <name:BuiltinProc> => Stmt::ProcedureCall { name, args: None },
+    <name:BuiltinProc> "(" <args:ExprList?> ")" => Stmt::ProcedureCall { name, args },
+    
+    <id:"identifier"> => Stmt::ProcedureCall { name: id, args: None },
+    <v:Variable> "(" <args:ExprList?> ")" => {
+        match v {
+            Variable::Id(id) => Stmt::ProcedureCall { name: id, args },
+            Variable::MemberAccess { record, field } => {
+                let mut new_args = vec![*record];
+                if let Some(mut a) = args {
+                    new_args.append(&mut a);
+                }
+                Stmt::ProcedureCall { name: field, args: Some(new_args) }
+            },
+            _ => panic!("Invalid procedure call target"),
+        }
+    },
 };
 
 VariableList: Vec<Expr> = {
@@ -512,14 +540,36 @@ PrimaryExpr: Expr = {
     <b:"boolean_lit"> => Expr::Boolean(b),
     "nil" => Expr::Nil,
     "[" <els:ElementList?> "]" => Expr::Set(els.unwrap_or_default()),
+    
+    // Function calls and UFCS (Method calls desugared to function calls)
+    <name:BuiltinFunc> "(" <args:ExprList?> ")" => Expr::FunctionCall { name, args },
+    <v:Variable> "(" <args:ExprList?> ")" => {
+        match v {
+            Variable::Id(id) => Expr::FunctionCall { name: id, args },
+            Variable::MemberAccess { record, field } => {
+                let mut new_args = vec![*record];
+                if let Some(mut a) = args {
+                    new_args.append(&mut a);
+                }
+                Expr::FunctionCall { name: field, args: Some(new_args) }
+            },
+            _ => panic!("Invalid function call target"),
+        }
+    },
+    
     <v:Variable> => Expr::Variable(Box::new(v)),
-    <name:FuncName> "(" <args:ExprList?> ")" => Expr::FunctionCall { name, args },
     "(" <e:Expr> ")" => e,
 };
 
-FuncName: String = {
+BuiltinFunc: String = {
     "Chr" => "Chr".to_string(),
-    <id:"identifier"> => id,
+};
+
+BuiltinProc: String = {
+    "write" => "write".to_string(),
+    "writeln" => "writeln".to_string(),
+    "read" => "read".to_string(),
+    "readln" => "readln".to_string(),
 };
 
 ElementList: Vec<Element> = {
