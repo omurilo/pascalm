@@ -35,8 +35,9 @@ TARGET="pascalm"
 WARNING_LOG="${BUILD_DIR}/warnings.log"
 FILE="${FILE:-$TEST_DIR/complex_parameters/test.pascalm}" # Um teste padrão que deve existir
 
-SRC_DIRS="parser ast semantic-analyzer symbol-table code-generation"
-MAIN_SRCS="main.c context.c logger.c"
+SRC_DIRS="parser ast semantic-analyzer symbol-table code-generation stdlib utils"
+MAIN_SRCS="main.c"
+HEADERS=$(for d in $SRC_DIRS; do echo -n "-I$d "; done)
 
 # ===========================
 # Cores
@@ -51,7 +52,7 @@ COLOR_CYAN='\033[0;36m'
 # ===========================
 # Flags de Compilação
 # ===========================
-CFLAGS="-Wall -Wextra"
+CFLAGS="-Wall -Wextra $HEADERS -I."
 BFLAGS="-d" # Flags do Bison
 PASCALM_FLAGS="-f $FILE"
 
@@ -74,7 +75,7 @@ fi
 # Controle de Verbosidade
 # ===========================
 # Silencia a saída ou a exibe, dependendo de SHOW_WARNINGS
-if [ "$SHOW_WARNINGS" = "1" or "$DEBUG" = "1" ]; then
+if [ "$SHOW_WARNINGS" = "1" ] || [ "$DEBUG" = "1" ]; then
     REDIRECT_CMD=""
 else
     # A mágica do 'eval' é necessária para que a string de redirecionamento funcione corretamente

@@ -10,7 +10,7 @@ BUILD_DIR?= build
 
 MAKEFLAGS += -s
 
-SRC_DIRS = parser ast semantic-analyzer symbol-table code-generation
+SRC_DIRS = parser ast semantic-analyzer symbol-table code-generation utils
 
 PASCAL_FILES = $(wildcard $(TEST_DIR)/*.pascalm)
 C_GEN        = $(patsubst $(TEST_DIR)/%.pascalm,$(OUT_DIR)/%.c,$(PASCAL_FILES))
@@ -19,7 +19,9 @@ BINARIES     = $(patsubst $(TEST_DIR)/%.pascalm,$(OUT_DIR)/%,$(PASCAL_FILES))
 PARSER_OUTPUTS = parser/parser.tab.c parser/parser.tab.h parser/lex.yy.c
 
 PARSER_SRCS  = parser/parser.tab.c parser/lex.yy.c parser/utils.c
-SRCS         = $(wildcard $(addsuffix /*.c, $(SRC_DIRS))) main.c context.c logger.c $(PARSER_SRCS)
+SRCS         = $(wildcard $(addsuffix /*.c, $(SRC_DIRS))) main.c $(PARSER_SRCS)
+SRCS_H       = $(wildcard $(addsuffix /*.h, $(SRC_DIRS)))
+HEADERS	     = $(addprefix -I,$(SRC_DIRS:%=%))
 OBJS         = $(SRCS:%.c=$(BUILD_DIR)/%.o)
 
 TARGET = pascalm
@@ -45,7 +47,7 @@ COLOR_CYAN  = \033[0;36m
 # ===========================
 PASCALM_FLAGS = -f $(FILE)
 
-CFLAGS = -Wall -Wextra
+CFLAGS = -Wall -Wextra $(HEADERS)
 
 ifeq ($(DEBUG),1)
 	CFLAGS += -g -fsanitize=address -fsanitize=undefined -DDEBUG
