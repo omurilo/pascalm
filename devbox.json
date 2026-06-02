@@ -4,7 +4,10 @@
     "flex@latest",
     "bison@latest",
     "gdb@latest",
-    "llvm_18"
+    "llvm_18",
+    "zstd@latest",
+    "zlib@latest",
+    "libxml2@latest"
   ],
   "shell": {
     "init_hook": [
