@@ -1,20 +1,51 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <string.h>
 /* socket.h and http.h are emitted before this file by the PascalM compiler */
+
+static int append_formatted(char *buffer, size_t buffer_size, size_t *offset, const char *format, ...) {
+    if (*offset >= buffer_size) return -1;
+
+    va_list args;
+    va_start(args, format);
+    int written = vsnprintf(buffer + *offset, buffer_size - *offset, format, args);
+    va_end(args);
+
+    if (written < 0 || (size_t)written >= (buffer_size - *offset)) {
+        return -1;
+    }
+
+    *offset += (size_t)written;
+    return 0;
+}
 
 int http_send_request(Socket *s, const char *method, const char *path, HttpHeader *headers, const char *body) {
     size_t body_len = body ? strlen(body) : 0;
     size_t req_size = 1024 + (MAX_HEADERS * 300) + body_len;
     char *request = malloc(req_size);
     if (!request) return -1;
-    size_t offset = snprintf(request, req_size, "%s %s HTTP/1.1\r\n", method, path);
+    size_t offset = 0;
+    if (append_formatted(request, req_size, &offset, "%s %s HTTP/1.1\r\n", method, path) < 0) {
+        free(request);
+        return -1;
+    }
     for (int i = 0; i < MAX_HEADERS; i++) {
         if (headers[i].key[0] == '\0') break;
-        offset += snprintf(request + offset, req_size - offset, "%s: %s\r\n", headers[i].key, headers[i].value);
+        if (append_formatted(request, req_size, &offset, "%s: %s\r\n", headers[i].key, headers[i].value) < 0) {
+            free(request);
+            return -1;
+        }
     }
-    offset += snprintf(request + offset, req_size - offset, "Content-Length: %zu\r\n\r\n", body_len);
+    if (append_formatted(request, req_size, &offset, "Content-Length: %zu\r\n\r\n", body_len) < 0) {
+        free(request);
+        return -1;
+    }
     if (body && body_len > 0) {
+        if (offset + body_len > req_size) {
+            free(request);
+            return -1;
+        }
         memcpy(request + offset, body, body_len);
         offset += body_len;
     }
@@ -84,13 +115,27 @@ int http_send_response(Socket *s, HttpResponse *res) {
     size_t resp_size = 1024 + (MAX_HEADERS * 300) + body_len;
     char *response = malloc(resp_size);
     if (!response) return -1;
-    size_t offset = snprintf(response, resp_size, "HTTP/1.1 %d %s\r\n", res->status_code, res->status_text);
+    size_t offset = 0;
+    if (append_formatted(response, resp_size, &offset, "HTTP/1.1 %d %s\r\n", res->status_code, res->status_text) < 0) {
+        free(response);
+        return -1;
+    }
     for (int i = 0; i < MAX_HEADERS; i++) {
         if (res->headers[i].key[0] == '\0') break;
-        offset += snprintf(response + offset, resp_size - offset, "%s: %s\r\n", res->headers[i].key, res->headers[i].value);
+        if (append_formatted(response, resp_size, &offset, "%s: %s\r\n", res->headers[i].key, res->headers[i].value) < 0) {
+            free(response);
+            return -1;
+        }
     }
-    offset += snprintf(response + offset, resp_size - offset, "Content-Length: %zu\r\n\r\n", body_len);
+    if (append_formatted(response, resp_size, &offset, "Content-Length: %zu\r\n\r\n", body_len) < 0) {
+        free(response);
+        return -1;
+    }
     if (res->body && body_len > 0) {
+        if (offset + body_len > resp_size) {
+            free(response);
+            return -1;
+        }
         memcpy(response + offset, res->body, body_len);
         offset += body_len;
     }
