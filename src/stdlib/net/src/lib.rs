@@ -1,5 +1,5 @@
 use axum::{
-    routing::{get, post},
+    routing::{get, post, put},
     Router,
 };
 use std::ffi::{CStr, CString};
@@ -70,7 +70,33 @@ pub unsafe extern "C" fn HttpPost(url_ptr: *const c_char, body_ptr: *const c_cha
 }
 
 #[no_mangle]
-pub extern "C" fn HttpJson(resp: HttpResponse) -> *const c_char {
+pub unsafe extern "C" fn HttpPut(url_ptr: *const c_char, body_ptr: *const c_char) -> HttpResponse {
+    let url = unsafe { CStr::from_ptr(url_ptr) }
+        .to_str()
+        .unwrap()
+        .to_string();
+    let body = unsafe { CStr::from_ptr(body_ptr) }
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    println!("HttpPut: {}", url);
+    let resp = get_runtime().block_on(async move {
+        reqwest::Client::new()
+            .post(url)
+            .body(body)
+            .send()
+            .await
+            .expect("Request failed")
+    });
+
+    HttpResponse {
+        inner_ptr: Box::into_raw(Box::new(resp)) as *mut std::ffi::c_void,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ToJson(resp: HttpResponse) -> *const c_char {
     if resp.inner_ptr.is_null() {
         return std::ptr::null();
     }
@@ -147,6 +173,20 @@ pub unsafe extern "C" fn HttpRoute(
             axum_router.route(
                 &path_str,
                 post(move || async move {
+                    println!("Request received: POST {}", p);
+                    let result_ptr = handler();
+                    if result_ptr.is_null() {
+                        return String::new();
+                    }
+                    CStr::from_ptr(result_ptr).to_string_lossy().into_owned()
+                }),
+            )
+        }
+        "put" => {
+            let p = path_str.clone();
+            axum_router.route(
+                &path_str,
+                put(move || async move {
                     println!("Request received: POST {}", p);
                     let result_ptr = handler();
                     if result_ptr.is_null() {
