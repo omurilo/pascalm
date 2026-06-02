@@ -1,12 +1,11 @@
 program http_test;
-uses net;
+uses Net, Json;
 var
   resp: HttpResponse;
   json_data: string;
 begin
   resp := HttpGet('https://httpbin.org/ip');
   
-  { Look at this beauty: UFCS in action! }
-  json_data := resp.HttpJson();
-  writeln('JSON: ', json_data);
+  json_data := resp.ToJson();
+  writeln('JSON: ', json_data.JsonParse());
 end.

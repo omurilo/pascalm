@@ -16,6 +16,10 @@ pub enum Type {
     },
     Pointer(Box<Type>),
     Set(Box<Type>),
+    Subrange {
+        start: i64,
+        end: i64,
+    },
     Enum(Vec<String>),
     Procedure,
     Function(Box<Type>),
@@ -30,6 +34,8 @@ pub struct TypedProgram {
 
 #[derive(Debug, Clone)]
 pub struct TypedBlock {
+    pub labels: Vec<i64>,
+    pub constants: Vec<(String, TypedExpr)>,
     pub variables: Vec<(String, Type)>,
     pub procedures: Vec<TypedProcFunc>,
     pub statements: Vec<TypedStmt>,

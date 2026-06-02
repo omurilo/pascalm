@@ -1,5 +1,5 @@
 program server_test;
-uses net;
+uses Net;
 
 var
   listener: HttpListener;
@@ -16,11 +16,9 @@ begin
   listener := HttpListen(8080);
   router := NewHttpRouter();
   
-  { Mapeamos o caminho /pascal para a nossa funcao Pascal }
   router := router.HttpRoute('/pascal', 'GET', MyHandler);
   
   writeln('Servidor pronto! Acesse http://localhost:8080/pascal');
   
-  { Inicia o loop infinito do servidor }
   HttpServe(listener, router);
 end.

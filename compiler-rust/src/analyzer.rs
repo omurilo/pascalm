@@ -10,44 +10,6 @@ pub struct SemanticAnalyzer {
 }
 
 impl SemanticAnalyzer {
-    // ... setup_builtins etc ...
-    
-    fn convert_type(&self, te: &TypeExpr) -> typed::Type {
-        match te {
-            TypeExpr::Simple(name) => match name.to_lowercase().as_str() {
-                "integer" => typed::Type::Integer,
-                "real" => typed::Type::Real,
-                "boolean" => typed::Type::Boolean,
-                "char" => typed::Type::Char,
-                "string" => typed::Type::String,
-                _ => {
-                    if let Some(SymbolKind::Type { type_expr }) = self.symbol_table.lookup(name) {
-                        self.convert_type(type_expr)
-                    } else {
-                        typed::Type::Void // Error case
-                    }
-                }
-            }
-            TypeExpr::Array { element_type, .. } => typed::Type::Array {
-                element_type: Box::new(self.convert_type(element_type)),
-                size: 100, // Placeholder
-            },
-            TypeExpr::Record { fields, .. } => {
-                let mut typed_fields = Vec::new();
-                for f in fields {
-                    let ft = self.convert_type(&f.type_expr);
-                    for id in &f.ids {
-                        typed_fields.push((id.clone(), ft.clone()));
-                    }
-                }
-                typed::Type::Record { fields: typed_fields }
-            }
-            TypeExpr::Pointer(inner) => typed::Type::Pointer(Box::new(self.convert_type(inner))),
-            TypeExpr::Set(inner) => typed::Type::Set(Box::new(self.convert_type(inner))),
-            TypeExpr::Enum(ids) => typed::Type::Enum(ids.clone()),
-            _ => typed::Type::Void,
-        }
-    }
     pub fn new() -> Self {
         let mut analyzer = Self {
             symbol_table: SymbolTable::new(),
@@ -101,539 +63,335 @@ impl SemanticAnalyzer {
         });
     }
 
-    pub fn analyze_program(&mut self, program: &Program) -> Result<(), String> {
+    pub fn analyze_program(&mut self, program: &Program) -> Result<typed::TypedProgram, String> {
         self.import_uses(&program.uses)?;
-        self.analyze_block(&program.block)
+        let typed_block = self.analyze_block(&program.block)?;
+        Ok(typed::TypedProgram {
+            name: program.name.clone(),
+            block: typed_block,
+        })
     }
 
     pub fn analyze_unit(&mut self, unit: &Unit) -> Result<HashMap<String, SymbolKind>, String> {
-        // Analysis of Interface
         self.import_uses(&unit.interface.uses)?;
-        
-        if let Some(constants) = &unit.interface.constants {
-            for c in constants {
-                let inferred_type = self.get_expr_type(&c.value)?;
-                self.symbol_table.insert(c.name.clone(), SymbolKind::Constant { 
-                    type_expr: inferred_type,
-                    value: format!("{:?}", c.value) 
-                })?;
-            }
-        }
-        if let Some(types) = &unit.interface.types {
-            for t in types {
-                self.symbol_table.insert(t.name.clone(), SymbolKind::Type { type_expr: t.type_expr.clone() })?;
-            }
-        }
-        if let Some(variables) = &unit.interface.variables {
-            for v in variables {
-                for id in &v.ids {
-                    self.symbol_table.insert(id.clone(), SymbolKind::Variable { type_expr: v.type_expr.clone() })?;
-                }
-            }
-        }
         if let Some(headers) = &unit.interface.headers {
             for h in headers {
                 match h {
-                    ProcFuncDecl::Procedure { name, params, .. } => {
-                        self.symbol_table.insert(name.clone(), SymbolKind::Procedure { params: params.clone().unwrap_or_default() })?;
-                    }
-                    ProcFuncDecl::Function { name, params, return_type, .. } => {
-                        self.symbol_table.insert(name.clone(), SymbolKind::Function { 
-                            params: params.clone().unwrap_or_default(), 
-                            return_type: return_type.clone() 
-                        })?;
-                    }
+                    ProcFuncDecl::Procedure { name, params, .. } => { self.symbol_table.insert(name.clone(), SymbolKind::Procedure { params: params.clone().unwrap_or_default() })?; }
+                    ProcFuncDecl::Function { name, params, return_type, .. } => { self.symbol_table.insert(name.clone(), SymbolKind::Function { params: params.clone().unwrap_or_default(), return_type: return_type.clone() })?; }
                 }
             }
         }
-
+        let _ = self.analyze_block_internal(&unit.interface.constants, &unit.interface.types, &unit.interface.variables, &None, &[]);
         let interface_symbols = self.symbol_table.global_scope();
-
-        // Analysis of Implementation
         self.import_uses(&unit.implementation.uses)?;
-        
-        if let Some(constants) = &unit.implementation.constants {
-            for c in constants {
-                let inferred_type = self.get_expr_type(&c.value)?;
-                self.symbol_table.insert(c.name.clone(), SymbolKind::Constant { 
-                    type_expr: inferred_type,
-                    value: format!("{:?}", c.value) 
-                })?;
-            }
-        }
-        if let Some(types) = &unit.implementation.types {
-            for t in types {
-                self.symbol_table.insert(t.name.clone(), SymbolKind::Type { type_expr: t.type_expr.clone() })?;
-            }
-        }
-        if let Some(variables) = &unit.implementation.variables {
-            for v in variables {
-                for id in &v.ids {
-                    self.symbol_table.insert(id.clone(), SymbolKind::Variable { type_expr: v.type_expr.clone() })?;
-                }
-            }
-        }
-        if let Some(bodies) = &unit.implementation.bodies {
-            for b in bodies {
-                match b {
-                    ProcFuncDecl::Procedure { name: _, params, block_or_forward } => {
-                        if let BlockOrForward::Block(block) = block_or_forward {
-                            self.symbol_table.enter_scope();
-                            self.add_params_to_scope(params)?;
-                            self.analyze_block(block)?;
-                            self.symbol_table.exit_scope();
-                        }
-                    }
-                    ProcFuncDecl::Function { name, params, return_type, block_or_forward } => {
-                        if let BlockOrForward::Block(block) = block_or_forward {
-                            self.symbol_table.enter_scope();
-                            self.add_params_to_scope(params)?;
-                            self.symbol_table.insert(name.clone(), SymbolKind::Variable { 
-                                type_expr: TypeExpr::Simple(return_type.clone()) 
-                            })?;
-                            self.analyze_block(block)?;
-                            self.symbol_table.exit_scope();
-                        }
-                    }
-                }
-            }
-        }
-
-        if let Some(init) = &unit.initialization {
-            for stmt in init { self.analyze_stmt(stmt)?; }
-        }
-        
+        let _ = self.analyze_block_internal(&unit.implementation.constants, &unit.implementation.types, &unit.implementation.variables, &unit.implementation.bodies, &[]);
+        if let Some(init) = &unit.initialization { for stmt in init { self.analyze_stmt(stmt)?; } }
         Ok(interface_symbols)
     }
 
-    fn import_uses(&mut self, uses: &Option<Vec<String>>) -> Result<(), String> {
-        if let Some(units) = uses {
-            for unit_name in units {
-                let unit_lower = unit_name.to_lowercase();
-                if let Some(interface) = self.external_interfaces.get(&unit_lower).cloned() {
-                    for (name, kind) in interface {
-                        let _ = self.symbol_table.insert(name, kind);
-                    }
-                } else {
-                    return Err(format!("Unit '{}' not found in dependencies", unit_name));
-                }
-            }
-        }
-        Ok(())
+    fn analyze_block(&mut self, block: &Block) -> Result<typed::TypedBlock, String> {
+        self.analyze_block_internal(&block.constants, &block.types, &block.variables, &block.procedures_functions, &block.statements)
     }
 
-    fn analyze_block(&mut self, block: &Block) -> Result<(), String> {
-        let old_labels = std::mem::replace(&mut self.current_block_labels, block.labels.clone().unwrap_or_default());
-        
-        if let Some(constants) = &block.constants {
-            for c in constants {
-                let inferred_type = self.get_expr_type(&c.value)?;
-                self.symbol_table.insert(c.name.clone(), SymbolKind::Constant { 
-                    type_expr: inferred_type,
-                    value: format!("{:?}", c.value) 
-                })?;
+    fn analyze_block_internal(
+        &mut self,
+        constants: &Option<Vec<ConstDecl>>,
+        types: &Option<Vec<TypeDecl>>,
+        variables: &Option<Vec<VarDecl>>,
+        procedures: &Option<Vec<ProcFuncDecl>>,
+        statements: &[Stmt]
+    ) -> Result<typed::TypedBlock, String> {
+        let old_labels = self.current_block_labels.clone();
+        let mut typed_constants = Vec::new();
+        if let Some(consts) = constants {
+            for c in consts {
+                let typed_val = self.analyze_expr(&c.value)?; 
+                self.symbol_table.insert(c.name.clone(), SymbolKind::Constant { type_expr: self.convert_to_legacy_type(&typed_val.ty), value: format!("{:?}", c.value) })?;
+                typed_constants.push((c.name.clone(), typed_val));
             }
         }
-        if let Some(types) = &block.types {
-            for t in types {
-                self.symbol_table.insert(t.name.clone(), SymbolKind::Type { 
-                    type_expr: t.type_expr.clone() 
-                })?;
-                // Register enum members as constants
+        if let Some(t_decls) = types {
+            for t in t_decls {
+                self.symbol_table.insert(t.name.clone(), SymbolKind::Type { type_expr: t.type_expr.clone() })?;
                 if let TypeExpr::Enum(ids) = &t.type_expr {
-                    for (i, id) in ids.iter().enumerate() {
-                        self.symbol_table.insert(id.clone(), SymbolKind::Constant {
-                            type_expr: TypeExpr::Simple(t.name.clone()),
-                            value: i.to_string(),
-                        })?;
+                    for (i, id) in ids.iter().enumerate() { 
+                        self.symbol_table.insert(id.clone(), SymbolKind::Constant { type_expr: TypeExpr::Simple(t.name.clone()), value: i.to_string() })?;
+                        typed_constants.push((id.clone(), typed::TypedExpr { ty: typed::Type::Integer, kind: typed::TypedExprKind::Integer(i as i64) }));
                     }
                 }
             }
         }
-        if let Some(variables) = &block.variables {
-            for v in variables {
-                for id in &v.ids {
-                    self.symbol_table.insert(id.clone(), SymbolKind::Variable { type_expr: v.type_expr.clone() })?;
-                }
+        let mut typed_vars = Vec::new();
+        if let Some(vars) = variables {
+            for v in vars {
+                let ty = self.convert_type(&v.type_expr);
+                for id in &v.ids { self.symbol_table.insert(id.clone(), SymbolKind::Variable { type_expr: v.type_expr.clone() })?; typed_vars.push((id.clone(), ty.clone())); }
             }
         }
-        if let Some(procs) = &block.procedures_functions {
-            // First pass: register all proc/func headers
+        let mut typed_procs = Vec::new();
+        if let Some(procs) = procedures {
             for p in procs {
                 match p {
-                    ProcFuncDecl::Procedure { name, params, .. } => {
-                        if self.symbol_table.lookup(name).is_none() {
-                            self.symbol_table.insert(name.clone(), SymbolKind::Procedure { params: params.clone().unwrap_or_default() })?;
-                        }
-                    }
-                    ProcFuncDecl::Function { name, params, return_type, .. } => {
-                        if self.symbol_table.lookup(name).is_none() {
-                            self.symbol_table.insert(name.clone(), SymbolKind::Function { 
-                                params: params.clone().unwrap_or_default(), 
-                                return_type: return_type.clone() 
-                            })?;
-                        }
-                    }
+                    ProcFuncDecl::Procedure { name, params, .. } => { if self.symbol_table.lookup(name).is_none() { self.symbol_table.insert(name.clone(), SymbolKind::Procedure { params: params.clone().unwrap_or_default() })?; } }
+                    ProcFuncDecl::Function { name, params, return_type, .. } => { if self.symbol_table.lookup(name).is_none() { self.symbol_table.insert(name.clone(), SymbolKind::Function { params: params.clone().unwrap_or_default(), return_type: return_type.clone() })?; } }
                 }
             }
-            // Second pass: analyze bodies
             for p in procs {
                 match p {
-                    ProcFuncDecl::Procedure { params, block_or_forward, .. } => {
-                        if let BlockOrForward::Block(b) = block_or_forward {
-                            self.symbol_table.enter_scope();
-                            self.add_params_to_scope(params)?;
-                            self.analyze_block(b)?;
-                            self.symbol_table.exit_scope();
+                    ProcFuncDecl::Procedure { name, params, block_or_forward } => {
+                        let mut typed_params = Vec::new();
+                        if let Some(params_vec) = params {
+                             for param in params_vec {
+                                 match param {
+                                     Param::Variable { ids, type_name, is_var } => {
+                                         let ty = self.convert_type(&TypeExpr::Simple(type_name.clone()));
+                                         for id in ids { typed_params.push((id.clone(), ty.clone(), *is_var)); }
+                                     },
+                                     Param::Procedure { id, .. } => { typed_params.push((id.clone(), typed::Type::Procedure, false)); }
+                                     Param::Function { id, return_type, .. } => { typed_params.push((id.clone(), typed::Type::Function(Box::new(self.convert_type(&TypeExpr::Simple(return_type.clone())))), false)); }
+                                 }
+                             }
                         }
+                        let body = if let BlockOrForward::Block(b) = block_or_forward { self.symbol_table.enter_scope(); self.add_params_to_scope(params)?; let tb = self.analyze_block(b)?; self.symbol_table.exit_scope(); Some(tb) } else { None };
+                        typed_procs.push(typed::TypedProcFunc { name: name.clone(), params: typed_params, return_type: typed::Type::Void, body });
                     }
                     ProcFuncDecl::Function { name, params, return_type, block_or_forward } => {
-                        if let BlockOrForward::Block(b) = block_or_forward {
-                            self.symbol_table.enter_scope();
-                            self.add_params_to_scope(params)?;
-                            // Allow assigning to function name for return value
-                            self.symbol_table.insert(name.clone(), SymbolKind::Variable { 
-                                type_expr: TypeExpr::Simple(return_type.clone()) 
-                            })?;
-                            self.analyze_block(b)?;
-                            self.symbol_table.exit_scope();
+                        let mut typed_params = Vec::new();
+                        if let Some(params_vec) = params {
+                             for param in params_vec {
+                                 match param {
+                                     Param::Variable { ids, type_name, is_var } => {
+                                         let ty = self.convert_type(&TypeExpr::Simple(type_name.clone()));
+                                         for id in ids { typed_params.push((id.clone(), ty.clone(), *is_var)); }
+                                     },
+                                     Param::Procedure { id, .. } => { typed_params.push((id.clone(), typed::Type::Procedure, false)); }
+                                     Param::Function { id, return_type, .. } => { typed_params.push((id.clone(), typed::Type::Function(Box::new(self.convert_type(&TypeExpr::Simple(return_type.clone())))), false)); }
+                                 }
+                             }
                         }
+                        let body = if let BlockOrForward::Block(b) = block_or_forward { self.symbol_table.enter_scope(); self.add_params_to_scope(params)?; self.symbol_table.insert(name.clone(), SymbolKind::Variable { type_expr: TypeExpr::Simple(return_type.clone()) })?; let tb = self.analyze_block(b)?; self.symbol_table.exit_scope(); Some(tb) } else { None };
+                        typed_procs.push(typed::TypedProcFunc { name: name.clone(), params: typed_params, return_type: self.convert_type(&TypeExpr::Simple(return_type.clone())), body });
                     }
                 }
             }
         }
-        for stmt in &block.statements {
-            self.analyze_stmt(stmt)?;
-        }
-        
+        let mut typed_stmts = Vec::new();
+        for stmt in statements { typed_stmts.push(self.analyze_stmt(stmt)?); }
         self.current_block_labels = old_labels;
-        Ok(())
+        Ok(typed::TypedBlock { labels: self.current_block_labels.clone(), constants: typed_constants, variables: typed_vars, procedures: typed_procs, statements: typed_stmts })
     }
 
-    fn add_params_to_scope(&mut self, params: &Option<Vec<Param>>) -> Result<(), String> {
-        if let Some(params) = params {
-            for p in params {
-                match p {
-                    Param::Variable { ids, type_name, .. } => {
-                        for id in ids {
-                            self.symbol_table.insert(id.clone(), SymbolKind::Variable { type_expr: TypeExpr::Simple(type_name.clone()) })?;
-                        }
-                    }
-                    Param::Procedure { id, params } => {
-                        self.symbol_table.insert(id.clone(), SymbolKind::Procedure { params: params.clone().unwrap_or_default() })?;
-                    }
-                    Param::Function { id, params, return_type } => {
-                        self.symbol_table.insert(id.clone(), SymbolKind::Function { 
-                            params: params.clone().unwrap_or_default(), 
-                            return_type: return_type.clone() 
-                        })?;
-                    }
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn add_record_fields_to_scope(&mut self, fields: &[VarDecl], variant_part: Option<&VariantPart>) -> Result<(), String> {
-        for f in fields {
-            for id in &f.ids {
-                self.symbol_table.insert(id.clone(), SymbolKind::Variable { type_expr: f.type_expr.clone() })?;
-            }
-        }
-        if let Some(vp) = variant_part {
-            if let Some(tag) = &vp.tag_field {
-                self.symbol_table.insert(tag.clone(), SymbolKind::Variable { type_expr: TypeExpr::Simple(vp.tag_type.clone()) })?;
-            }
-            for variant in &vp.variants {
-                self.add_record_fields_to_scope(&variant.fields, variant.nested_variant.as_deref())?;
-            }
-        }
-        Ok(())
-    }
-
-    fn analyze_stmt(&mut self, stmt: &Stmt) -> Result<(), String> {
+    fn analyze_stmt(&mut self, stmt: &Stmt) -> Result<typed::TypedStmt, String> {
         match stmt {
-            Stmt::Compound(stmts) => {
-                for s in stmts { self.analyze_stmt(s)?; }
-            }
+            Stmt::Compound(stmts) => { let mut typed_stmts = Vec::new(); for s in stmts { typed_stmts.push(self.analyze_stmt(s)?); } Ok(typed::TypedStmt::Compound(typed_stmts)) }
             Stmt::Assignment { target, value } => {
-                let target_type = self.get_expr_type(target)?;
-                let value_type = self.get_expr_type(value)?;
-                if !self.is_compatible(&target_type, &value_type) {
-                    return Err(format!("Incompatible types in assignment: target={:?}, value={:?}", target_type, value_type));
-                }
+                let typed_target = self.analyze_expr(target)?;
+                let typed_value = self.analyze_expr(value)?;
+                Ok(typed::TypedStmt::Assignment { target: typed_target, value: typed_value })
             }
             Stmt::If { condition, then_stmt, else_stmt } => {
-                let cond_type = self.get_expr_type(condition)?;
-                if !self.is_boolean(&cond_type) { return Err(format!("If condition must be boolean, found {:?}", cond_type)); }
-                self.analyze_stmt(then_stmt)?;
-                if let Some(e) = else_stmt { self.analyze_stmt(e)?; }
+                let typed_cond = self.analyze_expr(condition)?;
+                let typed_then = self.analyze_stmt(then_stmt)?;
+                let typed_else = if let Some(e) = else_stmt { Some(Box::new(self.analyze_stmt(e)?)) } else { None };
+                Ok(typed::TypedStmt::If { condition: typed_cond, then_stmt: Box::new(typed_then), else_stmt: typed_else })
             }
             Stmt::While { condition, body } => {
-                let cond_type = self.get_expr_type(condition)?;
-                if !self.is_boolean(&cond_type) { return Err(format!("While condition must be boolean, found {:?}", cond_type)); }
-                self.analyze_stmt(body)?;
+                let typed_cond = self.analyze_expr(condition)?;
+                let typed_body = self.analyze_stmt(body)?;
+                Ok(typed::TypedStmt::While { condition: typed_cond, body: Box::new(typed_body) })
             }
             Stmt::Repeat { body, until } => {
-                for s in body { self.analyze_stmt(s)?; }
-                let until_type = self.get_expr_type(until)?;
-                if !self.is_boolean(&until_type) { return Err(format!("Repeat until condition must be boolean, found {:?}", until_type)); }
+                let mut typed_body = Vec::new();
+                for s in body { typed_body.push(self.analyze_stmt(s)?); }
+                let typed_until = self.analyze_expr(until)?;
+                Ok(typed::TypedStmt::Repeat { body: typed_body, until: typed_until })
             }
-            Stmt::For { id, start, end, body, .. } => {
-                let id_type = self.get_variable_type(&Variable::Id(id.clone()))?;
-                let start_type = self.get_expr_type(start)?;
-                let end_type = self.get_expr_type(end)?;
-                if !self.is_integer(&id_type) || !self.is_integer(&start_type) || !self.is_integer(&end_type) {
-                    return Err("For loop bounds and variable must be integer".to_string());
-                }
-                self.analyze_stmt(body)?;
+            Stmt::For { id, start, up, end, body } => {
+                let typed_start = self.analyze_expr(start)?;
+                let typed_end = self.analyze_expr(end)?;
+                let typed_body = self.analyze_stmt(body)?;
+                Ok(typed::TypedStmt::For { id: id.clone(), start: typed_start, up: *up, end: typed_end, body: Box::new(typed_body) })
             }
             Stmt::ProcedureCall { name, args } => {
-                match self.symbol_table.lookup(name) {
-                    Some(SymbolKind::Procedure { .. }) | Some(SymbolKind::Function { .. }) | Some(SymbolKind::Variable { .. }) => {
-                        if let Some(args) = args {
-                            for arg in args { self.get_expr_type(arg)?; }
-                        }
-                    }
-                    _ => return Err(format!("Procedure '{}' not declared or invalid", name)),
-                }
-            }
-            Stmt::Labeled(_, s) => self.analyze_stmt(s)?,
-            Stmt::Goto(l) => {
-                if !self.current_block_labels.contains(l) {
-                    return Err(format!("Label {} not declared in this block", l));
-                }
-            }
-            Stmt::Case { expr, items, else_stmt } => {
-                self.get_expr_type(expr)?;
-                for item in items {
-                    for label in &item.labels { self.get_expr_type(label)?; }
-                    self.analyze_stmt(&item.stmt)?;
-                }
-                if let Some(e) = else_stmt { self.analyze_stmt(e)?; }
+                let mut typed_args = Vec::new();
+                if let Some(args_vec) = args { for arg in args_vec { typed_args.push(self.analyze_expr(arg)?); } }
+                Ok(typed::TypedStmt::ProcedureCall { name: name.clone(), args: typed_args })
             }
             Stmt::With { ids, body } => {
                 self.symbol_table.enter_scope();
+                let mut typed_objects = Vec::new();
                 for id_expr in ids {
-                    let te = self.get_expr_type(id_expr)?;
-                    let resolved = self.resolve_type(&te)?;
-                    if let TypeExpr::Record { fields, variant_part } = resolved {
-                        self.add_record_fields_to_scope(&fields, variant_part.as_ref())?;
+                    let typed_obj = self.analyze_expr(id_expr)?;
+                    typed_objects.push(typed_obj.clone());
+                    if let typed::Type::Record { fields } = &typed_obj.ty {
+                        for (f_n, f_t) in fields { self.symbol_table.insert(f_n.clone(), SymbolKind::Variable { type_expr: self.convert_to_legacy_type(f_t) })?; }
                     }
                 }
-                self.analyze_stmt(body)?;
+                let typed_body = self.analyze_stmt(body)?;
                 self.symbol_table.exit_scope();
+                Ok(typed::TypedStmt::With { objects: typed_objects, body: Box::new(typed_body) })
             }
-            _ => {} 
+            Stmt::Goto(l) => Ok(typed::TypedStmt::Goto(*l)),
+            Stmt::Labeled(l, s) => { let typed_s = self.analyze_stmt(s)?; Ok(typed::TypedStmt::Labeled(*l, Box::new(typed_s))) }
+            Stmt::Case { expr, items, else_stmt } => {
+                let typed_expr = self.analyze_expr(expr)?;
+                let mut typed_items = Vec::new();
+                for item in items {
+                    let mut typed_labels = Vec::new();
+                    for l in &item.labels { typed_labels.push(self.analyze_expr(l)?); }
+                    let typed_s = self.analyze_stmt(&item.stmt)?;
+                    typed_items.push(typed::TypedCaseItem { labels: typed_labels, stmt: typed_s });
+                }
+                let typed_else = if let Some(e) = else_stmt { Some(Box::new(self.analyze_stmt(e)?)) } else { None };
+                Ok(typed::TypedStmt::Case { expr: typed_expr, items: typed_items, else_stmt: typed_else })
+            }
+            Stmt::Empty => Ok(typed::TypedStmt::Empty),
+        }
+    }
+
+    fn analyze_expr(&mut self, expr: &Expr) -> Result<typed::TypedExpr, String> {
+        match expr {
+            Expr::Integer(n) => Ok(typed::TypedExpr { ty: typed::Type::Integer, kind: typed::TypedExprKind::Integer(*n) }),
+            Expr::Real(n) => Ok(typed::TypedExpr { ty: typed::Type::Real, kind: typed::TypedExprKind::Real(*n) }),
+            Expr::Boolean(b) => Ok(typed::TypedExpr { ty: typed::Type::Boolean, kind: typed::TypedExprKind::Boolean(*b) }),
+            Expr::Char(c) => Ok(typed::TypedExpr { ty: typed::Type::Char, kind: typed::TypedExprKind::Char(*c) }),
+            Expr::String(s) => Ok(typed::TypedExpr { ty: typed::Type::String, kind: typed::TypedExprKind::String(s.clone()) }),
+            Expr::Variable(v) => {
+                let typed_var = self.analyze_variable(v)?;
+                let ty = self.get_typed_variable_type(&typed_var);
+                Ok(typed::TypedExpr { ty, kind: typed::TypedExprKind::Variable(typed_var) })
+            }
+            Expr::Binary { op, left, right } => {
+                let l = self.analyze_expr(left)?;
+                let r = self.analyze_expr(right)?;
+                let ty = self.resolve_binop_type(&l.ty, &r.ty, op)?;
+                Ok(typed::TypedExpr { ty, kind: typed::TypedExprKind::Binary { op: op.clone(), left: Box::new(l), right: Box::new(r) } })
+            }
+            Expr::Unary { op, expr } => {
+                let e = self.analyze_expr(expr)?;
+                Ok(typed::TypedExpr { ty: e.ty.clone(), kind: typed::TypedExprKind::Unary { op: op.clone(), expr: Box::new(e) } })
+            }
+            Expr::FunctionCall { name, args } => {
+                let mut typed_args = Vec::new();
+                if let Some(args_vec) = args { for arg in args_vec { typed_args.push(self.analyze_expr(arg)?); } }
+                let ret_ty = if let Some(kind) = self.symbol_table.lookup(name) {
+                    match kind {
+                        SymbolKind::Function { return_type, .. } => self.convert_type(&TypeExpr::Simple(return_type.clone())),
+                        SymbolKind::Variable { type_expr } => {
+                             match self.convert_type(type_expr) { typed::Type::Function(r) => *r, _ => typed::Type::Integer }
+                        },
+                        _ => typed::Type::Integer,
+                    }
+                } else { typed::Type::Integer };
+                Ok(typed::TypedExpr { ty: ret_ty, kind: typed::TypedExprKind::FunctionCall { name: name.clone(), args: typed_args } })
+            }
+            Expr::Set(els) => {
+                let mut typed_els = Vec::new();
+                for el in els { match el { Element::Single(e) => typed_els.push(typed::TypedElement::Single(self.analyze_expr(e)?)), Element::Range(s, e) => typed_els.push(typed::TypedElement::Range(self.analyze_expr(s)?, self.analyze_expr(e)?)) } }
+                Ok(typed::TypedExpr { ty: typed::Type::Set(Box::new(typed::Type::Void)), kind: typed::TypedExprKind::Set(typed_els) })
+            }
+            Expr::Nil => Ok(typed::TypedExpr { ty: typed::Type::Pointer(Box::new(typed::Type::Void)), kind: typed::TypedExprKind::Nil }),
+            _ => Err(format!("TypedExpr not implemented: {:?}", expr)),
+        }
+    }
+
+    fn analyze_variable(&mut self, var: &Variable) -> Result<typed::TypedVariable, String> {
+        match var {
+            Variable::Id(id) => Ok(typed::TypedVariable::Id(id.clone())),
+            Variable::MemberAccess { record, field } => Ok(typed::TypedVariable::MemberAccess { record: Box::new(self.analyze_expr(record)?), field: field.clone() }),
+            Variable::ArrayAccess { array, indices } => Ok(typed::TypedVariable::ArrayAccess { array: Box::new(self.analyze_expr(array)?), index: Box::new(self.analyze_expr(&indices[0])?) }),
+            Variable::PointerDeref(p) => Ok(typed::TypedVariable::PointerDeref(Box::new(self.analyze_expr(p)?))),
+        }
+    }
+
+    fn get_typed_variable_type(&self, var: &typed::TypedVariable) -> typed::Type {
+        match var {
+            typed::TypedVariable::Id(id) => {
+                if let Some(kind) = self.symbol_table.lookup(id) {
+                    match kind {
+                        SymbolKind::Variable { type_expr } => self.convert_type(type_expr),
+                        SymbolKind::Constant { type_expr, .. } => self.convert_type(type_expr),
+                        SymbolKind::Function { return_type, .. } => self.convert_type(&TypeExpr::Simple(return_type.clone())),
+                        _ => typed::Type::Void,
+                    }
+                } else { typed::Type::Void }
+            }
+            typed::TypedVariable::MemberAccess { record, field } => { if let typed::Type::Record { fields } = &record.ty { for (f, ty) in fields { if f == field { return ty.clone(); } } } typed::Type::Void }
+            typed::TypedVariable::ArrayAccess { array, .. } => { if let typed::Type::Array { element_type, .. } = &array.ty { *element_type.clone() } else { typed::Type::Void } }
+            typed::TypedVariable::PointerDeref(p) => { if let typed::Type::Pointer(inner) = &p.ty { *inner.clone() } else { typed::Type::Void } }
+        }
+    }
+
+    fn resolve_binop_type(&self, lt: &typed::Type, rt: &typed::Type, op: &BinOp) -> Result<typed::Type, String> {
+        match op {
+            BinOp::Add => { if *lt == typed::Type::String || *rt == typed::Type::String || *lt == typed::Type::Char || *rt == typed::Type::Char { return Ok(typed::Type::String); } if *lt == typed::Type::Real || *rt == typed::Type::Real { Ok(typed::Type::Real) } else { Ok(typed::Type::Integer) } },
+            BinOp::Sub | BinOp::Mul => { if *lt == typed::Type::Real || *rt == typed::Type::Real { Ok(typed::Type::Real) } else { Ok(typed::Type::Integer) } }
+            BinOp::FloatDiv => Ok(typed::Type::Real),
+            BinOp::Div | BinOp::Mod => Ok(typed::Type::Integer),
+            _ => Ok(typed::Type::Boolean),
+        }
+    }
+
+    fn convert_type(&self, te: &TypeExpr) -> typed::Type {
+        match te {
+            TypeExpr::Simple(name) => match name.to_lowercase().as_str() {
+                "integer" => typed::Type::Integer, "real" => typed::Type::Real, "boolean" => typed::Type::Boolean, "char" => typed::Type::Char, "string" => typed::Type::String,
+                _ => { if let Some(SymbolKind::Type { type_expr }) = self.symbol_table.lookup(name) { self.convert_type(type_expr) } else if name.starts_with("function:") { typed::Type::Function(Box::new(self.convert_type(&TypeExpr::Simple(name["function:".len()..].to_string())))) } else { typed::Type::Integer } }
+            },
+            TypeExpr::Array { element_type, .. } => typed::Type::Array { element_type: Box::new(self.convert_type(element_type)), size: 100 },
+            TypeExpr::Record { fields, variant_part } => {
+                let mut f_vec = Vec::new();
+                for f in fields {
+                    let ft = self.convert_type(&f.type_expr);
+                    for id in &f.ids { f_vec.push((id.clone(), ft.clone())); }
+                }
+                if let Some(vp) = variant_part {
+                    if let Some(tag) = &vp.tag_field {
+                        f_vec.push((tag.clone(), self.convert_type(&TypeExpr::Simple(vp.tag_type.clone()))));
+                    }
+                    for v in &vp.variants {
+                        for f in &v.fields {
+                            let ft = self.convert_type(&f.type_expr);
+                            for id in &f.ids {
+                                if !f_vec.iter().any(|(n, _)| n == id) {
+                                    f_vec.push((id.clone(), ft.clone()));
+                                }
+                            }
+                        }
+                    }
+                }
+                typed::Type::Record { fields: f_vec }
+            }
+            TypeExpr::Pointer(inner) => typed::Type::Pointer(Box::new(self.convert_type(inner))),
+            TypeExpr::Set(inner) => typed::Type::Set(Box::new(self.convert_type(inner))),
+            TypeExpr::Enum(ids) => typed::Type::Enum(ids.clone()),
+            TypeExpr::Subrange { .. } => typed::Type::Integer,
+            TypeExpr::File(inner) => typed::Type::Pointer(Box::new(self.convert_type(inner))),
+            _ => typed::Type::Void,
+        }
+    }
+
+    fn convert_to_legacy_type(&self, ty: &typed::Type) -> TypeExpr {
+        match ty { typed::Type::Integer => TypeExpr::Simple("integer".to_string()), typed::Type::Real => TypeExpr::Simple("real".to_string()), typed::Type::Boolean => TypeExpr::Simple("boolean".to_string()), typed::Type::Char => TypeExpr::Simple("char".to_string()), typed::Type::String => TypeExpr::Simple("string".to_string()), _ => TypeExpr::Simple("unknown".to_string()) }
+    }
+
+    fn import_uses(&mut self, uses: &Option<Vec<String>>) -> Result<(), String> { if let Some(units) = uses { for u_name in units { if let Some(interface) = self.external_interfaces.get(&u_name.to_lowercase()).cloned() { for (name, kind) in interface { let _ = self.symbol_table.insert(name, kind); } } } } Ok(()) }
+
+    fn add_params_to_scope(&mut self, params: &Option<Vec<Param>>) -> Result<(), String> {
+        if let Some(params_vec) = params {
+            for p in params_vec {
+                match p {
+                    Param::Variable { ids, type_name, .. } => { for id in ids { self.symbol_table.insert(id.clone(), SymbolKind::Variable { type_expr: TypeExpr::Simple(type_name.clone()) })?; } }
+                    Param::Procedure { id, params } => { self.symbol_table.insert(id.clone(), SymbolKind::Procedure { params: params.clone().unwrap_or_default() })?; }
+                    Param::Function { id, params, return_type } => { self.symbol_table.insert(id.clone(), SymbolKind::Function { params: params.clone().unwrap_or_default(), return_type: return_type.clone() })?; }
+                }
+            }
         }
         Ok(())
     }
 
-    fn get_expr_type(&self, expr: &Expr) -> Result<TypeExpr, String> {
-        match expr {
-            Expr::Integer(_) => Ok(TypeExpr::Simple("integer".to_string())),
-            Expr::Real(_) => Ok(TypeExpr::Simple("real".to_string())),
-            Expr::Char(_) => Ok(TypeExpr::Simple("char".to_string())),
-            Expr::String(_) => Ok(TypeExpr::Simple("string".to_string())),
-            Expr::Boolean(_) => Ok(TypeExpr::Simple("boolean".to_string())),
-            Expr::Variable(v) => {
-                match self.get_variable_type(&**v) {
-                    Ok(t) => Ok(t),
-                    Err(e) => {
-                        // Allow procedure/function names as "variables" for passing as parameters
-                        if let Variable::Id(id) = &**v {
-                            match self.symbol_table.lookup(id) {
-                                Some(SymbolKind::Procedure { .. }) => Ok(TypeExpr::Simple("procedure".to_string())),
-                                Some(SymbolKind::Function { return_type, .. }) => Ok(TypeExpr::Simple(return_type.clone())),
-                                _ => Err(e),
-                            }
-                        } else {
-                            Err(e)
-                        }
-                    }
-                }
-            }
-            Expr::Binary { op, left, right } => {
-                let lt = self.get_expr_type(left)?;
-                let rt = self.get_expr_type(right)?;
-                self.resolve_binop_type(op, &lt, &rt)
-            }
-            Expr::Unary { op, expr } => {
-                let t = self.get_expr_type(expr)?;
-                match op {
-                    UnaryOp::Not => if self.is_boolean(&t) { Ok(t) } else { Err("NOT requires boolean".to_string()) }
-                    _ => if self.is_numeric(&t) { Ok(t) } else { Err("Unary +/- requires numeric".to_string()) }
-                }
-            }
-            Expr::FunctionCall { name, .. } => {
-                match self.symbol_table.lookup(name) {
-                    Some(SymbolKind::Function { return_type, .. }) => Ok(TypeExpr::Simple(return_type.clone())),
-                    Some(SymbolKind::Variable { .. }) => Ok(TypeExpr::Simple("integer".to_string())), // Recursion
-                    _ => Err(format!("Function '{}' not declared", name)),
-                }
-            }
-            Expr::Set(_) => Ok(TypeExpr::Simple("SET".to_string())),
-            Expr::Range(s, e) => {
-                let _st = self.get_expr_type(s)?;
-                let _et = self.get_expr_type(e)?;
-                Ok(TypeExpr::Subrange { start: *s.clone(), end: *e.clone() })
-            }
-            _ => Ok(TypeExpr::Simple("unknown".to_string())),
-        }
-    }
-
-    fn find_field_in_record(&self, fields: &[VarDecl], variant_part: Option<&VariantPart>, field: &str) -> Option<TypeExpr> {
-        for f in fields {
-            if f.ids.contains(&field.to_string()) { return Some(f.type_expr.clone()); }
-        }
-        if let Some(vp) = variant_part {
-            if let Some(tag) = &vp.tag_field {
-                if tag == field { return Some(TypeExpr::Simple(vp.tag_type.clone())); }
-            }
-            for variant in &vp.variants {
-                if let Some(t) = self.find_field_in_record(&variant.fields, variant.nested_variant.as_deref(), field) {
-                    return Some(t);
-                }
-            }
-        }
-        None
-    }
-
-    fn get_variable_type(&self, var: &Variable) -> Result<TypeExpr, String> {
-        match var {
-            Variable::Id(id) => {
-                match self.symbol_table.lookup(id) {
-                    Some(SymbolKind::Variable { type_expr }) => Ok(type_expr.clone()),
-                    Some(SymbolKind::Constant { type_expr, .. }) => Ok(type_expr.clone()),
-                    Some(SymbolKind::Function { return_type, .. }) => Ok(TypeExpr::Simple(return_type.clone())),
-                    _ => Err(format!("Variable '{}' not declared", id)),
-                }
-            }
-            Variable::MemberAccess { record, field } => {
-                let te = self.get_expr_type(record)?;
-                let resolved = self.resolve_type(&te)?;
-                if let TypeExpr::Record { fields, variant_part } = resolved {
-                    if let Some(t) = self.find_field_in_record(&fields, variant_part.as_ref(), field) {
-                        Ok(t)
-                    } else {
-                        Err(format!("Field '{}' not found in record", field))
-                    }
-                } else {
-                    Err("Member access on non-record".to_string())
-                }
-            }
-            Variable::ArrayAccess { array, .. } => {
-                let te = self.get_expr_type(array)?;
-                let resolved = self.resolve_type(&te)?;
-                if let TypeExpr::Array { element_type, .. } = resolved {
-                    Ok(*element_type.clone())
-                } else {
-                    Err("Array access on non-array".to_string())
-                }
-            }
-            Variable::PointerDeref(p) => {
-                let te = self.get_expr_type(p)?;
-                let resolved = self.resolve_type(&te)?;
-                if let TypeExpr::Pointer(inner) = resolved {
-                    Ok(*inner.clone())
-                } else {
-                    Err("Deref on non-pointer".to_string())
-                }
-            }
-        }
-    }
-
-    fn resolve_type(&self, te: &TypeExpr) -> Result<TypeExpr, String> {
-        match te {
-            TypeExpr::Simple(name) => {
-                match name.as_str() {
-                    "integer" | "real" | "boolean" | "char" | "string" => Ok(te.clone()),
-                    _ => {
-                        if let Some(SymbolKind::Type { type_expr }) = self.symbol_table.lookup(name) {
-                            match type_expr {
-                                TypeExpr::Simple(inner_name) if inner_name == name => Ok(te.clone()),
-                                _ => self.resolve_type(type_expr),
-                            }
-                        } else { Ok(te.clone()) }
-                    }
-                }
-            }
-            _ => Ok(te.clone()),
-        }
-    }
-
-    fn resolve_binop_type(&self, op: &BinOp, lt: &TypeExpr, rt: &TypeExpr) -> Result<TypeExpr, String> {
-        let lt_name = self.get_type_name(lt)?;
-        let rt_name = self.get_type_name(rt)?;
-
-        let resolved_lt = self.resolve_type(lt).unwrap_or(lt.clone());
-        let resolved_rt = self.resolve_type(rt).unwrap_or(rt.clone());
-        let is_set_op = matches!(resolved_lt, TypeExpr::Set(_)) || matches!(resolved_rt, TypeExpr::Set(_)) || lt_name == "SET" || rt_name == "SET";
-
-        match op {
-            BinOp::Add => {
-                if is_set_op { return Ok(TypeExpr::Simple("SET".to_string())); }
-                if (lt_name == "string" || lt_name == "char") && (rt_name == "string" || rt_name == "char") {
-                    return Ok(TypeExpr::Simple("string".to_string()));
-                }
-                if lt_name == "integer" && rt_name == "integer" { Ok(TypeExpr::Simple("integer".to_string())) }
-                else { Ok(TypeExpr::Simple("real".to_string())) }
-            }
-            BinOp::Sub | BinOp::Mul => {
-                if is_set_op { return Ok(TypeExpr::Simple("SET".to_string())); }
-                if lt_name == "integer" && rt_name == "integer" { Ok(TypeExpr::Simple("integer".to_string())) }
-                else { Ok(TypeExpr::Simple("real".to_string())) }
-            }
-            BinOp::Div | BinOp::Mod => {
-                if lt_name == "integer" && rt_name == "integer" { Ok(TypeExpr::Simple("integer".to_string())) }
-                else { Ok(TypeExpr::Simple("real".to_string())) }
-            }
-            BinOp::FloatDiv => Ok(TypeExpr::Simple("real".to_string())),
-            BinOp::And | BinOp::Or => Ok(TypeExpr::Simple("boolean".to_string())),
-            _ => Ok(TypeExpr::Simple("boolean".to_string())),
-        }
-    }
-
-    fn get_type_name(&self, te: &TypeExpr) -> Result<String, String> {
-        let resolved = self.resolve_type(te)?;
-        match resolved {
-            TypeExpr::Simple(name) => Ok(name),
-            _ => Ok("complex".to_string()),
-        }
-    }
-
-    fn is_compatible(&self, target: &TypeExpr, source: &TypeExpr) -> bool {
-        let mut tn = self.get_type_name(target).unwrap_or_default();
-        let mut sn = self.get_type_name(source).unwrap_or_default();
-        
-        // Resolve underlying types for sets and others
-        let resolved_target = self.resolve_type(target).unwrap_or(target.clone());
-        let resolved_source = self.resolve_type(source).unwrap_or(source.clone());
-
-        if tn == sn { return true; }
-        if tn == "real" && sn == "integer" { return true; }
-        if tn == "string" && sn == "char" { return true; }
-        
-        // Enum compatibility: allow same named type
-        if let (TypeExpr::Enum(_), _) = (&resolved_target, &resolved_source) {
-             if tn == sn { return true; }
-        }
-
-        if tn == "SET" || sn == "SET" || matches!(resolved_target, TypeExpr::Set(_)) || matches!(resolved_source, TypeExpr::Set(_)) {
-            match (&resolved_target, &resolved_source) {
-                (TypeExpr::Set(_), TypeExpr::Set(_)) => return true,
-                (TypeExpr::Set(_), TypeExpr::Simple(n)) if n == "SET" => return true,
-                (TypeExpr::Simple(n), TypeExpr::Set(_)) if n == "SET" => return true,
-                _ => {}
-            }
-        }
-        false
-    }
-
-    fn is_boolean(&self, te: &TypeExpr) -> bool { self.get_type_name(te).unwrap_or_default() == "boolean" }
-    fn is_integer(&self, te: &TypeExpr) -> bool { self.get_type_name(te).unwrap_or_default() == "integer" }
-    fn is_numeric(&self, te: &TypeExpr) -> bool { 
-        let n = self.get_type_name(te).unwrap_or_default();
-        n == "integer" || n == "real"
-    }
+    fn get_expr_type_legacy(&self, expr: &Expr) -> Result<TypeExpr, String> { match expr { Expr::Integer(_) => Ok(TypeExpr::Simple("integer".to_string())), Expr::Real(_) => Ok(TypeExpr::Simple("real".to_string())), _ => Ok(TypeExpr::Simple("unknown".to_string())) } }
+    fn is_boolean(&self, ty: &typed::Type) -> bool { *ty == typed::Type::Boolean }
+    fn is_compatible(&self, target: &typed::Type, source: &typed::Type) -> bool { if target == source { return true; } if *target == typed::Type::Real && *source == typed::Type::Integer { return true; } if *target == typed::Type::String && *source == typed::Type::Char { return true; } false }
 }

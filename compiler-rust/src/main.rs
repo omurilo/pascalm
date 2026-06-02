@@ -55,20 +55,23 @@ fn main() {
                 match unit {
                     CompilationUnit::Program(p) => {
                         let mut analyzer = analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
-                        if let Err(e) = analyzer.analyze_program(p) {
-                            eprintln!("Semantic error in program {}: {}", name, e);
-                            std::process::exit(1);
+                        match analyzer.analyze_program(p) {
+                            Ok(typed_ast) => {
+                                let mut codegen = codegen::CodeGen::with_interfaces(&context, &p.name, module_interfaces.clone());
+                                if let Err(e) = codegen.gen_program(typed_ast) {
+                                    eprintln!("Codegen error in program {}: {}", name, e);
+                                    std::process::exit(1);
+                                }
+                                
+                                let ir_path = format!("{}.ll", p.name);
+                                codegen.module.print_to_file(&ir_path).expect("Failed to write LLVM IR");
+                                generated_ir_files.push(ir_path);
+                            }
+                            Err(e) => {
+                                eprintln!("Semantic error in program {}: {}", name, e);
+                                std::process::exit(1);
+                            }
                         }
-                        
-                        let mut codegen = codegen::CodeGen::with_interfaces(&context, &p.name, module_interfaces.clone());
-                        if let Err(e) = codegen.gen_program(p) {
-                            eprintln!("Codegen error in program {}: {}", name, e);
-                            std::process::exit(1);
-                        }
-                        
-                        let ir_path = format!("{}.ll", p.name);
-                        codegen.module.print_to_file(&ir_path).expect("Failed to write LLVM IR");
-                        generated_ir_files.push(ir_path);
                     }
                     CompilationUnit::Unit(u) => {
                         let mut analyzer = analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());

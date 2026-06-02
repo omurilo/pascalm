@@ -1,4 +1,4 @@
-unit net;
+unit Net;
 interface
   type 
     HttpResponse = record
@@ -18,7 +18,7 @@ interface
 
   function HttpGet(url: string): HttpResponse;
   function HttpPost(url: string; body: string): HttpResponse;
-  function HttpJson(resp: HttpResponse): string;
+  function ToJson(resp: HttpResponse): string;
   
   function HttpListen(port: integer): HttpListener;
   function NewHttpRouter: HttpRouter;
@@ -28,7 +28,7 @@ interface
 implementation
   function HttpGet(url: string): HttpResponse; external;
   function HttpPost(url: string; body: string): HttpResponse; external;
-  function HttpJson(resp: HttpResponse): string; external;
+  function ToJson(resp: HttpResponse): string; external;
   
   function HttpListen(port: integer): HttpListener; external;
   function NewHttpRouter: HttpRouter; external;
