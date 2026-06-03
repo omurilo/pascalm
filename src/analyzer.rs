@@ -1,12 +1,26 @@
 use crate::ast::*;
-use crate::symbol_table::{SymbolKind, SymbolTable};
+use crate::symbol_table::{SymbolId, SymbolKind, SymbolTable};
 use crate::typed_ast as typed;
 use std::collections::HashMap;
 
+/// A semantic error tied to a source span, surfaced as an LSP diagnostic.
+#[derive(Debug, Clone)]
+pub struct Diagnostic {
+    pub span: Span,
+    pub message: String,
+}
+
+#[derive(Debug)]
 pub struct SemanticAnalyzer {
-    symbol_table: SymbolTable,
+    pub symbol_table: SymbolTable,
     current_block_labels: Vec<i64>,
     external_interfaces: HashMap<String, HashMap<String, SymbolKind>>,
+    /// Semantic errors collected during analysis (consumed by the LSP).
+    pub diagnostics: Vec<Diagnostic>,
+    /// Definition sites: where each symbol is declared.
+    pub definitions: Vec<(Span, SymbolId)>,
+    /// Reference sites: where each symbol is used.
+    pub references: Vec<(Span, SymbolId)>,
 }
 
 impl SemanticAnalyzer {
@@ -15,6 +29,9 @@ impl SemanticAnalyzer {
             symbol_table: SymbolTable::new(),
             current_block_labels: Vec::new(),
             external_interfaces: HashMap::new(),
+            diagnostics: Vec::new(),
+            definitions: Vec::new(),
+            references: Vec::new(),
         };
         analyzer.setup_builtins();
         analyzer
@@ -26,6 +43,23 @@ impl SemanticAnalyzer {
         analyzer
     }
 
+    /// Insert a declaration and record its definition span for the LSP.
+    fn define(&mut self, name: String, kind: SymbolKind, span: Span) -> Result<SymbolId, String> {
+        let id = self.symbol_table.insert(name, kind, span)?;
+        self.definitions.push((span, id));
+        Ok(id)
+    }
+
+    /// Record a use-site reference to `name`, if it resolves to a known symbol.
+    fn record_reference(&mut self, name: &str, span: Span) {
+        if span == Span::default() {
+            return;
+        }
+        if let Some(id) = self.symbol_table.lookup_id(name) {
+            self.references.push((span, id));
+        }
+    }
+
     fn setup_builtins(&mut self) {
         let builtins = ["integer", "real", "boolean", "char", "string"];
         for t in builtins {
@@ -34,6 +68,7 @@ impl SemanticAnalyzer {
                 SymbolKind::Type {
                     type_expr: TypeExpr::Simple(t.to_string()),
                 },
+                Span::default(),
             );
         }
         let builtin_procs = ["write", "writeln", "read", "readln"];
@@ -44,6 +79,7 @@ impl SemanticAnalyzer {
                     params: Vec::new(),
                     external_name: None,
                 },
+                Span::default(),
             );
         }
         let _ = self.symbol_table.insert(
@@ -52,6 +88,7 @@ impl SemanticAnalyzer {
                 type_expr: TypeExpr::Simple("integer".to_string()),
                 value: i64::MAX.to_string(),
             },
+            Span::default(),
         );
         // Note: runtime intrinsics such as Sqrt, Halt and RuntimeInit are NOT
         // hardcoded here. They are provided by the `system` unit, which every
@@ -79,6 +116,7 @@ impl SemanticAnalyzer {
                 match h {
                     ProcFuncDecl::Procedure {
                         name,
+                        name_span,
                         params,
                         block_or_forward,
                     } => {
@@ -86,16 +124,18 @@ impl SemanticAnalyzer {
                             BlockOrForward::External(n) => n.clone(),
                             _ => None,
                         };
-                        self.symbol_table.insert(
+                        self.define(
                             name.clone(),
                             SymbolKind::Procedure {
                                 params: params.clone().unwrap_or_default(),
                                 external_name,
                             },
+                            *name_span,
                         )?;
                     }
                     ProcFuncDecl::Function {
                         name,
+                        name_span,
                         params,
                         return_type,
                         block_or_forward,
@@ -104,13 +144,14 @@ impl SemanticAnalyzer {
                             BlockOrForward::External(n) => n.clone(),
                             _ => None,
                         };
-                        self.symbol_table.insert(
+                        self.define(
                             name.clone(),
                             SymbolKind::Function {
                                 params: params.clone().unwrap_or_default(),
                                 return_type: return_type.clone(),
                                 external_name,
                             },
+                            *name_span,
                         )?;
                     }
                 }
@@ -189,32 +230,32 @@ impl SemanticAnalyzer {
         if let Some(consts) = constants {
             for c in consts {
                 let typed_val = self.analyze_expr(&c.value)?;
-                self.symbol_table.insert(
-                    c.name.clone(),
-                    SymbolKind::Constant {
-                        type_expr: self.convert_to_legacy_type(&typed_val.ty),
-                        value: format!("{:?}", c.value),
-                    },
-                )?;
+                let const_kind = SymbolKind::Constant {
+                    type_expr: self.convert_to_legacy_type(&typed_val.ty),
+                    value: format!("{:?}", c.value),
+                };
+                self.define(c.name.clone(), const_kind, c.name_span)?;
                 typed_constants.push((c.name.clone(), typed_val));
             }
         }
         if let Some(t_decls) = types {
             for t in t_decls {
-                self.symbol_table.insert(
+                self.define(
                     t.name.clone(),
                     SymbolKind::Type {
                         type_expr: t.type_expr.clone(),
                     },
+                    t.name_span,
                 )?;
                 if let TypeExpr::Enum(ids) = &t.type_expr {
                     for (i, id) in ids.iter().enumerate() {
-                        self.symbol_table.insert(
+                        self.define(
                             id.clone(),
                             SymbolKind::Constant {
                                 type_expr: TypeExpr::Simple(t.name.clone()),
                                 value: i.to_string(),
                             },
+                            Span::default(),
                         )?;
                         typed_constants.push((
                             id.clone(),
@@ -231,12 +272,14 @@ impl SemanticAnalyzer {
         if let Some(vars) = variables {
             for v in vars {
                 let ty = self.convert_type(&v.type_expr);
-                for id in &v.ids {
-                    self.symbol_table.insert(
+                for (i, id) in v.ids.iter().enumerate() {
+                    let span = v.id_spans.get(i).copied().unwrap_or_default();
+                    self.define(
                         id.clone(),
                         SymbolKind::Variable {
                             type_expr: v.type_expr.clone(),
                         },
+                        span,
                     )?;
                     typed_vars.push((id.clone(), ty.clone()));
                 }
@@ -248,6 +291,7 @@ impl SemanticAnalyzer {
                 match p {
                     ProcFuncDecl::Procedure {
                         name,
+                        name_span,
                         params,
                         block_or_forward,
                     } => {
@@ -256,17 +300,19 @@ impl SemanticAnalyzer {
                                 BlockOrForward::External(n) => n.clone(),
                                 _ => None,
                             };
-                            self.symbol_table.insert(
+                            self.define(
                                 name.clone(),
                                 SymbolKind::Procedure {
                                     params: params.clone().unwrap_or_default(),
                                     external_name,
                                 },
+                                *name_span,
                             )?;
                         }
                     }
                     ProcFuncDecl::Function {
                         name,
+                        name_span,
                         params,
                         return_type,
                         block_or_forward,
@@ -276,13 +322,14 @@ impl SemanticAnalyzer {
                                 BlockOrForward::External(n) => n.clone(),
                                 _ => None,
                             };
-                            self.symbol_table.insert(
+                            self.define(
                                 name.clone(),
                                 SymbolKind::Function {
                                     params: params.clone().unwrap_or_default(),
                                     return_type: return_type.clone(),
                                     external_name,
                                 },
+                                *name_span,
                             )?;
                         }
                     }
@@ -294,6 +341,7 @@ impl SemanticAnalyzer {
                         name,
                         params,
                         block_or_forward,
+                        ..
                     } => {
                         let mut typed_params = Vec::new();
                         if let Some(params_vec) = params {
@@ -303,6 +351,7 @@ impl SemanticAnalyzer {
                                         ids,
                                         type_name,
                                         is_var,
+                                        ..
                                     } => {
                                         let ty =
                                             self.convert_type(&TypeExpr::Simple(type_name.clone()));
@@ -357,6 +406,7 @@ impl SemanticAnalyzer {
                         params,
                         return_type,
                         block_or_forward,
+                        ..
                     } => {
                         let mut typed_params = Vec::new();
                         if let Some(params_vec) = params {
@@ -366,6 +416,7 @@ impl SemanticAnalyzer {
                                         ids,
                                         type_name,
                                         is_var,
+                                        ..
                                     } => {
                                         let ty =
                                             self.convert_type(&TypeExpr::Simple(type_name.clone()));
@@ -402,6 +453,7 @@ impl SemanticAnalyzer {
                                 SymbolKind::Variable {
                                     type_expr: TypeExpr::Simple(return_type.clone()),
                                 },
+                                Span::default(),
                             )?;
                             let tb = self.analyze_block(b)?;
                             self.symbol_table.exit_scope();
@@ -494,11 +546,13 @@ impl SemanticAnalyzer {
             }
             Stmt::For {
                 id,
+                id_span,
                 start,
                 up,
                 end,
                 body,
             } => {
+                self.record_reference(id, *id_span);
                 let typed_start = self.analyze_expr(start)?;
                 let typed_end = self.analyze_expr(end)?;
                 let typed_body = self.analyze_stmt(body)?;
@@ -510,7 +564,12 @@ impl SemanticAnalyzer {
                     body: Box::new(typed_body),
                 })
             }
-            Stmt::ProcedureCall { name, args } => {
+            Stmt::ProcedureCall {
+                name,
+                name_span,
+                args,
+            } => {
+                self.record_reference(name, *name_span);
                 let mut typed_args = Vec::new();
                 if let Some(args_vec) = args {
                     for arg in args_vec {
@@ -529,13 +588,19 @@ impl SemanticAnalyzer {
                     let typed_obj = self.analyze_expr(id_expr)?;
                     typed_objects.push(typed_obj.clone());
                     if let typed::Type::Record { fields } = &typed_obj.ty {
-                        for (f_n, f_t) in fields {
-                            self.symbol_table.insert(
-                                f_n.clone(),
-                                SymbolKind::Variable {
-                                    type_expr: self.convert_to_legacy_type(f_t),
-                                },
-                            )?;
+                        let field_defs: Vec<(String, SymbolKind)> = fields
+                            .iter()
+                            .map(|(f_n, f_t)| {
+                                (
+                                    f_n.clone(),
+                                    SymbolKind::Variable {
+                                        type_expr: self.convert_to_legacy_type(f_t),
+                                    },
+                                )
+                            })
+                            .collect();
+                        for (f_n, kind) in field_defs {
+                            self.symbol_table.insert(f_n, kind, Span::default())?;
                         }
                     }
                 }
@@ -637,7 +702,12 @@ impl SemanticAnalyzer {
                     },
                 })
             }
-            Expr::FunctionCall { name, args } => {
+            Expr::FunctionCall {
+                name,
+                name_span,
+                args,
+            } => {
+                self.record_reference(name, *name_span);
                 let mut typed_args = Vec::new();
                 if let Some(args_vec) = args {
                     for arg in args_vec {
@@ -694,7 +764,10 @@ impl SemanticAnalyzer {
 
     fn analyze_variable(&mut self, var: &Variable) -> Result<typed::TypedVariable, String> {
         match var {
-            Variable::Id(id) => Ok(typed::TypedVariable::Id(id.clone())),
+            Variable::Id(id, span) => {
+                self.record_reference(id, *span);
+                Ok(typed::TypedVariable::Id(id.clone()))
+            }
             Variable::MemberAccess { record, field } => Ok(typed::TypedVariable::MemberAccess {
                 record: Box::new(self.analyze_expr(record)?),
                 field: field.clone(),
@@ -914,7 +987,7 @@ impl SemanticAnalyzer {
                     .cloned()
                 {
                     for (name, kind) in interface {
-                        let _ = self.symbol_table.insert(name, kind);
+                        let _ = self.symbol_table.insert(name, kind, Span::default());
                     }
                 }
             }
@@ -926,37 +999,51 @@ impl SemanticAnalyzer {
         if let Some(params_vec) = params {
             for p in params_vec {
                 match p {
-                    Param::Variable { ids, type_name, .. } => {
-                        for id in ids {
-                            self.symbol_table.insert(
+                    Param::Variable {
+                        ids,
+                        id_spans,
+                        type_name,
+                        ..
+                    } => {
+                        for (i, id) in ids.iter().enumerate() {
+                            let span = id_spans.get(i).copied().unwrap_or_default();
+                            self.define(
                                 id.clone(),
                                 SymbolKind::Variable {
                                     type_expr: TypeExpr::Simple(type_name.clone()),
                                 },
+                                span,
                             )?;
                         }
                     }
-                    Param::Procedure { id, params } => {
-                        self.symbol_table.insert(
+                    Param::Procedure {
+                        id,
+                        id_span,
+                        params,
+                    } => {
+                        self.define(
                             id.clone(),
                             SymbolKind::Procedure {
                                 params: params.clone().unwrap_or_default(),
                                 external_name: None,
                             },
+                            *id_span,
                         )?;
                     }
                     Param::Function {
                         id,
+                        id_span,
                         params,
                         return_type,
                     } => {
-                        self.symbol_table.insert(
+                        self.define(
                             id.clone(),
                             SymbolKind::Function {
                                 params: params.clone().unwrap_or_default(),
                                 return_type: return_type.clone(),
                                 external_name: None,
                             },
+                            *id_span,
                         )?;
                     }
                 }

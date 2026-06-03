@@ -1,3 +1,17 @@
+/// A source byte range, used by the language server to map AST identifiers
+/// back to their location in the original text (go-to-definition, hover).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum CompilationUnit {
     Program(Program),
@@ -51,18 +65,22 @@ pub struct Block {
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstDecl {
     pub name: String,
+    pub name_span: Span,
     pub value: Expr,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeDecl {
     pub name: String,
+    pub name_span: Span,
     pub type_expr: TypeExpr,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarDecl {
     pub ids: Vec<String>,
+    /// Source span of each identifier in `ids`, in the same order.
+    pub id_spans: Vec<Span>,
     pub type_expr: TypeExpr,
 }
 
@@ -70,11 +88,13 @@ pub struct VarDecl {
 pub enum ProcFuncDecl {
     Procedure {
         name: String,
+        name_span: Span,
         params: Option<Vec<Param>>,
         block_or_forward: BlockOrForward,
     },
     Function {
         name: String,
+        name_span: Span,
         params: Option<Vec<Param>>,
         return_type: String,
         block_or_forward: BlockOrForward,
@@ -93,14 +113,17 @@ pub enum Param {
     Variable {
         is_var: bool,
         ids: Vec<String>,
+        id_spans: Vec<Span>,
         type_name: String,
     },
     Procedure {
         id: String,
+        id_span: Span,
         params: Option<Vec<Param>>,
     },
     Function {
         id: String,
+        id_span: Span,
         params: Option<Vec<Param>>,
         return_type: String,
     },
@@ -171,6 +194,7 @@ pub enum Stmt {
     },
     For {
         id: String,
+        id_span: Span,
         start: Expr,
         up: bool, // true for 'to', false for 'downto'
         end: Expr,
@@ -184,6 +208,7 @@ pub enum Stmt {
     Goto(i64),
     ProcedureCall {
         name: String,
+        name_span: Span,
         args: Option<Vec<Expr>>,
     },
     With {
@@ -220,6 +245,7 @@ pub enum Expr {
     Variable(Box<Variable>),
     FunctionCall {
         name: String,
+        name_span: Span,
         args: Option<Vec<Expr>>,
     },
     Set(Vec<Element>),
@@ -227,7 +253,7 @@ pub enum Expr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Variable {
-    Id(String),
+    Id(String, Span),
     MemberAccess {
         record: Box<Expr>,
         field: String,
