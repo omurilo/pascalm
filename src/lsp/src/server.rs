@@ -1,13 +1,15 @@
+use std::fmt::Debug;
+use std::ops::Deref;
+
 use crop::Rope;
 use dashmap::DashMap;
-use pascalm::{}
+use lalrpop_util::ParseError;
 use log::debug;
-use serde_json::Value;
-use tower_lsp::lsp_types::*;
+use pascalm::lexer::{self, Token};
+use pascalm::{parser, CompilationUnit, SemanticAnalyzer};
 use tower_lsp::jsonrpc::Result;
-use tower_lsp::{
-    Client, LanguageServer, LspService, Server
-};
+use tower_lsp::lsp_types::*;
+use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 struct TextDocumentChange<'a> {
     uri: String,
@@ -15,120 +17,539 @@ struct TextDocumentChange<'a> {
 }
 
 #[derive(Debug)]
+struct AnalysisResult {
+    ast: CompilationUnit,
+    analyzer: SemanticAnalyzer,
+}
+
+#[derive(Debug)]
 struct Backend {
     client: Client,
     document_map: DashMap<String, Rope>,
-    semanticast_map: DashMap<String, Rope>,
+    semanticast_map: DashMap<String, AnalysisResult>,
 }
 
 impl Backend {
-    fn new(client: tower_lsp::Client) -> Self {
-        Self {
-            client,
-            documents: DashMap::new(),
+    fn find_symbol_at_offset(
+        &self,
+        analyzer: &SemanticAnalyzer,
+        offset: usize,
+    ) -> Option<pascalm::symbol_table::SymbolId> {
+        // Search in references first (most common case: clicking on a use)
+        for (span, id) in &analyzer.references {
+            if offset >= span.start && offset <= span.end {
+                return Some(*id);
+            }
         }
+        // Search in definitions
+        for (span, id) in &analyzer.definitions {
+            if offset >= span.start && offset <= span.end {
+                return Some(*id);
+            }
+        }
+        None
     }
 
+    // fn get_references(
+    //     &self,
+    //     uri: String,
+    //     position: Position,
+    //     include_self: bool,
+    // ) -> Option<Vec<Location>> {
+    //     let rope = self.document_map.get(&uri)?;
+    //     let compilation_result = self.semanticast_map.get(&uri)?;
+    //     let offset = position_to_offset(position, &rope)?;
+    //     let symbol_id = compilation_result.semantic.get_symbol_at(offset)?;
+    //
+    //     let mut references = Vec::new();
+    //     let uri = Url::parse(&uri).unwrap_or_else(|_| Url::from_directory_path(&uri).unwrap());
+    //     if include_self {
+    //         // Include the symbol definition itself
+    //         let symbol_span = compilation_result.semantic.get_symbol_span(symbol_id);
+    //         let start = offset_to_position(symbol_span.start as usize, &rope)?;
+    //         let end = offset_to_position(symbol_span.end as usize, &rope)?;
+    //         references.push(Location::new(uri.clone(), Range::new(start, end)));
+    //     }
+    //     // Find the reference at the current position
+    //     let ref_ids = compilation_result.semantic.get_symbol_references(symbol_id);
+    //
+    //     references.extend(ref_ids.iter().filter_map(|ref_id| {
+    //         let span = compilation_result.semantic.reference_spans[*ref_id];
+    //         let start = offset_to_position(span.start as usize, &rope)?;
+    //         let end = offset_to_position(span.end as usize, &rope)?;
+    //         Some(Location::new(uri.clone(), Range::new(start, end)))
+    //     }));
+    //     Some(references)
+    // }
+
+    // fn get_rename_edit(
+    //     &self,
+    //     uri: String,
+    //     position: Position,
+    //     new_name: String,
+    // ) -> Option<WorkspaceEdit> {
+    //     let all_reference = self.get_references(uri.clone(), position, true)?;
+    //
+    //     let edits = all_reference
+    //         .into_iter()
+    //         .map(|item| TextEdit {
+    //             range: item.range,
+    //             new_text: new_name.clone(),
+    //         })
+    //         .collect::<Vec<_>>();
+    //
+    //     // Create workspace edit with the text edits
+    //     let parsed_uri =
+    //         Url::parse(&uri).unwrap_or_else(|_| Url::from_directory_path(&uri).unwrap());
+    //     let mut edit_map = std::collections::HashMap::new();
+    //     edit_map.insert(parsed_uri, edits);
+    //
+    //     Some(WorkspaceEdit::new(edit_map))
+    // }
+
+    // fn get_struct_id_from_field(
+    //     &self,
+    //     field_expr: &l_lang::ExprField,
+    //     semantic_result: &CompileResult,
+    // ) -> Option<SymbolId> {
+    //     let mut access_arr = vec![];
+    //     let mut cur = field_expr.object.as_ref()?;
+    //     loop {
+    //         match cur.as_ref() {
+    //             l_lang::Expr::Field(field_expr) => {
+    //                 access_arr.push(field_expr.field.as_ref()?.name.clone());
+    //                 cur = field_expr.object.as_ref()?;
+    //             }
+    //             l_lang::Expr::Name(_name_expr) => {
+    //                 break;
+    //             }
+    //             _ => {
+    //                 return None;
+    //             }
+    //         }
+    //     }
+    //     access_arr.reverse();
+    //
+    //     let reference_id = semantic_result
+    //         .semantic
+    //         .get_reference_at(field_expr.object.as_ref()?.span().start as usize)?;
+    //     let symbol_id = semantic_result.semantic.references[reference_id]?;
+    //     let ty_info = semantic_result.semantic.get_symbol_type(symbol_id)?;
+    //     let Type::Struct(mut struct_id) = ty_info.ty else {
+    //         return None;
+    //     };
+    //
+    //     for field_name in access_arr {
+    //         let struct_def = semantic_result.semantic.structs.get(&struct_id)?;
+    //         let field = struct_def.fields.iter().find(|f| f.name == field_name)?;
+    //         let Type::Struct(next_struct_id) = field.ty else {
+    //             return None;
+    //         };
+    //         struct_id = next_struct_id;
+    //     }
+    //     Some(struct_id)
+    // }
+    //
+    // fn get_completion(&self, params: CompletionParams) -> Option<Vec<CompletionItem>> {
+    //     let text_doc_position = params.text_document_position;
+    //     let uri = text_doc_position.text_document.uri.to_string();
+    //     let semantic_result = self.semanticast_map.get(&uri)?;
+    //     let rope = self.document_map.get(&uri)?;
+    //     let offset = position_to_offset(text_doc_position.position, &rope)?;
+    //
+    //     let mut items = Vec::new();
+    //
+    //     // Try to find the AST node at the current position
+    //     if let Some(nearest_node) =
+    //         find_node_at_offset(semantic_result.program.file(), offset as u32)
+    //     {
+    //         match nearest_node {
+    //             // Field access completion: suggest available fields/members
+    //             AstNode::ExprField(field_expr) => {
+    //                 let struct_id = self.get_struct_id_from_field(field_expr, &semantic_result)?;
+    //                 let struct_def = semantic_result.semantic.structs.get(&struct_id)?;
+    //                 struct_def.fields.iter().for_each(|field| {
+    //                     items.push(CompletionItem {
+    //                         label: field.name.clone(),
+    //                         kind: Some(CompletionItemKind::FIELD),
+    //                         detail: Some(format!(
+    //                             ": {}",
+    //                             field.ty.format_literal_type(&semantic_result.semantic)
+    //                         )),
+    //                         insert_text: Some(field.name.clone()),
+    //                         ..Default::default()
+    //                     });
+    //                 });
+    //             }
+    //             _ => {
+    //                 // Default: suggest all available symbols
+    //                 let bindings = &semantic_result.semantic.bindings;
+    //                 bindings
+    //                     .iter_enumerated()
+    //                     .for_each(|(symbol_id, type_info)| {
+    //                         let symbol_kind = semantic_result.semantic.get_symbol_kind(symbol_id);
+    //                         let span = semantic_result.semantic.get_symbol_span(symbol_id);
+    //
+    //                         let name_slice =
+    //                             rope.byte_slice(span.start as usize..span.end as usize);
+    //                         if let Ok(name) = std::str::from_utf8(
+    //                             name_slice.bytes().collect::<Vec<_>>().as_slice(),
+    //                         ) {
+    //                             let (kind, detail) = match symbol_kind {
+    //                                 l_lang::SymbolKind::Variable => (
+    //                                     Some(CompletionItemKind::VARIABLE),
+    //                                     Some(format!(
+    //                                         ": {}",
+    //                                         type_info
+    //                                             .ty
+    //                                             .format_literal_type(&semantic_result.semantic)
+    //                                     )),
+    //                                 ),
+    //                                 l_lang::SymbolKind::Function => {
+    //                                     (Some(CompletionItemKind::FUNCTION), None)
+    //                                 }
+    //                                 l_lang::SymbolKind::Struct => {
+    //                                     (Some(CompletionItemKind::STRUCT), None)
+    //                                 }
+    //                                 _ => (None, None),
+    //                             };
+    //
+    //                             items.push(CompletionItem {
+    //                                 label: name.to_string(),
+    //                                 kind,
+    //                                 detail,
+    //                                 insert_text: Some(name.to_string()),
+    //                                 ..Default::default()
+    //                             });
+    //                         }
+    //                     });
+    //             }
+    //         }
+    //     } else {
+    //         // No node found, suggest all available symbols
+    //         let bindings = &semantic_result.semantic.bindings;
+    //         bindings
+    //             .iter_enumerated()
+    //             .for_each(|(symbol_id, type_info)| {
+    //                 let symbol_kind = semantic_result.semantic.get_symbol_kind(symbol_id);
+    //                 let span = semantic_result.semantic.get_symbol_span(symbol_id);
+    //
+    //                 let name_slice = rope.byte_slice(span.start as usize..span.end as usize);
+    //                 if let Ok(name) =
+    //                     std::str::from_utf8(name_slice.bytes().collect::<Vec<_>>().as_slice())
+    //                 {
+    //                     let (kind, detail) = match symbol_kind {
+    //                         l_lang::SymbolKind::Variable => (
+    //                             Some(CompletionItemKind::VARIABLE),
+    //                             Some(format!(
+    //                                 ": {}",
+    //                                 type_info.ty.format_literal_type(&semantic_result.semantic)
+    //                             )),
+    //                         ),
+    //                         l_lang::SymbolKind::Function => {
+    //                             (Some(CompletionItemKind::FUNCTION), None)
+    //                         }
+    //                         l_lang::SymbolKind::Struct => (Some(CompletionItemKind::STRUCT), None),
+    //                         _ => (None, None),
+    //                     };
+    //
+    //                     items.push(CompletionItem {
+    //                         label: name.to_string(),
+    //                         kind,
+    //                         detail,
+    //                         insert_text: Some(name.to_string()),
+    //                         ..Default::default()
+    //                     });
+    //                 }
+    //             });
+    //     }
+    //     Some(items)
+    // }
+
     async fn on_change(&self, item: TextDocumentChange<'_>) {
-        let rope = Rope::from(item.text);
-        let compile_result = compile(item.text);
-        let mut diagnostics = compile_result
-            .diagnostics
-            .iter()
-            .flat_map(|d| {
-                d.labels.iter().filter_map(|label| {
-                    let start = offset_to_position(label.range.start, &rope)?;
-                    let end = offset_to_position(label.range.end, &rope)?;
-                    let diag = Diagnostic {
-                        range: Range::new(start, end),
-                        severity: None,
-                        code: None,
-                        code_description: None,
-                        source: None,
-                        message: format!("{:?}", d.message),
-                        related_information: None,
-                        tags: None,
-                        data: None,
-                    };
-                    Some(diag)
-                })
-            })
-            .collect::<Vec<_>>();
-        compile_result.semantic.errors.iter().for_each(|sem_err| {
-            let span = sem_err.span;
-            let start = offset_to_position(span.start as usize, &rope);
-            let end = offset_to_position(span.end as usize, &rope);
-            if let (Some(start), Some(end)) = (start, end) {
-                let diag = Diagnostic {
-                    range: Range::new(start, end),
-                    severity: None,
-                    code: None,
-                    code_description: None,
-                    source: None,
-                    message: sem_err.message.to_string(),
-                    related_information: None,
-                    tags: None,
-                    data: None,
-                };
-                diagnostics.push(diag);
+        let lexer = lexer::Lexer::new(item.text);
+        let parser = parser::CompilationUnitParser::new();
+
+        let mut diagnostics = Vec::new();
+
+        match parser.parse(lexer) {
+            Ok(unit) => {
+                let (diags, analyzer) = get_diagnostics(item.text, &unit);
+                diagnostics.extend(diags);
+
+                self.semanticast_map.insert(
+                    item.uri.clone(),
+                    AnalysisResult {
+                        ast: unit,
+                        analyzer,
+                    },
+                );
             }
-        });
+            Err(e) => {
+                let lsp_diag = lalrpop_error_to_diagnostic(item.text, e);
+                diagnostics.push(lsp_diag);
+            }
+        };
 
         let uri =
             Url::parse(&item.uri).unwrap_or_else(|_| Url::from_directory_path(&item.uri).unwrap());
         self.client
             .publish_diagnostics(uri, diagnostics, None)
             .await;
-        self.semanticast_map
-            .insert(item.uri.clone(), compile_result);
+
+        let rope = Rope::from(item.text);
         self.document_map.insert(item.uri.clone(), rope);
     }
 
-    fn get_definition(&self, params: GotoDefinitionParams) -> Option<GotoDefinitionResponse> {
-        let uri = params
-            .text_document_position_params
-            .text_document
-            .uri
-            .to_string();
-        let position = params.text_document_position_params.position;
+    // fn build_semantic_tokens(&self, uri: &str) -> Option<Vec<SemanticToken>> {
+    //     let semantic_result = self.semanticast_map.get(uri)?;
+    //     let rope = self.document_map.get(uri)?;
+    //
+    //     // Collect all tokens from symbols and references
+    //     // Token type indices correspond to LEGEND_TYPE order:
+    //     // 0: FUNCTION, 1: VARIABLE, 2: PARAMETER, 3: STRUCT, 4: PROPERTY (field)
+    //     let mut incomplete_tokens: Vec<(usize, usize, u32)> = Vec::new(); // (start, length, token_type)
+    //
+    //     // Add symbol definitions
+    //     for (symbol_id, span) in semantic_result.semantic.symbol_spans.iter_enumerated() {
+    //         let kind = semantic_result.semantic.get_symbol_kind(symbol_id);
+    //         let token_type = match kind {
+    //             SymbolKind::Function => 0,  // FUNCTION
+    //             SymbolKind::Variable => 1,  // VARIABLE
+    //             SymbolKind::Parameter => 2, // PARAMETER
+    //             SymbolKind::Struct => 3,    // STRUCT
+    //             SymbolKind::Field => 4,     // PROPERTY
+    //         };
+    //         incomplete_tokens.push((
+    //             span.start as usize,
+    //             (span.end - span.start) as usize,
+    //             token_type,
+    //         ));
+    //     }
+    //
+    //     // Add references (they reference symbols, so use the symbol's kind)
+    //     for (ref_id, span) in semantic_result.semantic.reference_spans.iter_enumerated() {
+    //         if let Some(symbol_id) = semantic_result.semantic.references[ref_id] {
+    //             let kind = semantic_result.semantic.get_symbol_kind(symbol_id);
+    //             let token_type = match kind {
+    //                 SymbolKind::Function => 0,  // FUNCTION
+    //                 SymbolKind::Variable => 1,  // VARIABLE
+    //                 SymbolKind::Parameter => 2, // PARAMETER
+    //                 SymbolKind::Struct => 3,    // STRUCT
+    //                 SymbolKind::Field => 4,     // PROPERTY
+    //             };
+    //             incomplete_tokens.push((
+    //                 span.start as usize,
+    //                 (span.end - span.start) as usize,
+    //                 token_type,
+    //             ));
+    //         }
+    //     }
+    //
+    //     // Sort by start position
+    //     incomplete_tokens.sort_by(|a, b| a.0.cmp(&b.0));
+    //
+    //     // Convert to LSP SemanticToken format with delta encoding
+    //     let mut pre_line: u32 = 0;
+    //     let mut pre_start: u32 = 0;
+    //
+    //     let semantic_tokens = incomplete_tokens
+    //         .iter()
+    //         .map(|(start, length, token_type)| {
+    //             // Convert byte offset to line and character
+    //             let line = rope.line_of_byte(*start) as u32;
+    //             let line_start_byte = rope.byte_of_line(line as usize);
+    //             let char_offset = *start - line_start_byte;
+    //
+    //             let delta_line = line - pre_line;
+    //             let delta_start = if delta_line == 0 {
+    //                 char_offset as u32 - pre_start
+    //             } else {
+    //                 char_offset as u32
+    //             };
+    //
+    //             let token = SemanticToken {
+    //                 delta_line,
+    //                 delta_start,
+    //                 length: *length as u32,
+    //                 token_type: *token_type,
+    //                 token_modifiers_bitset: 0,
+    //             };
+    //
+    //             pre_line = line;
+    //             pre_start = char_offset as u32;
+    //
+    //             token
+    //         })
+    //         .collect::<Vec<_>>();
+    //
+    //     Some(semantic_tokens)
+    // }
+    //
+    // fn build_semantic_tokens_range(&self, uri: &str, range: Range) -> Option<Vec<SemanticToken>> {
+    //     let semantic_result = self.semanticast_map.get(uri)?;
+    //     let rope = self.document_map.get(uri)?;
+    //
+    //     // Convert range to byte offsets
+    //     let start_offset = position_to_offset(range.start, &rope)?;
+    //     let end_offset = position_to_offset(range.end, &rope)?;
+    //
+    //     // Collect all tokens from symbols and references within the range
+    //     let mut incomplete_tokens: Vec<(usize, usize, u32)> = Vec::new();
+    //
+    //     // Add symbol definitions within range
+    //     for (symbol_id, span) in semantic_result.semantic.symbol_spans.iter_enumerated() {
+    //         let token_start = span.start as usize;
+    //         if token_start >= start_offset && token_start < end_offset {
+    //             let kind = semantic_result.semantic.get_symbol_kind(symbol_id);
+    //             let token_type = match kind {
+    //                 SymbolKind::Function => 0,
+    //                 SymbolKind::Variable => 1,
+    //                 SymbolKind::Parameter => 2,
+    //                 SymbolKind::Struct => 3,
+    //                 SymbolKind::Field => 4,
+    //             };
+    //             incomplete_tokens.push((token_start, (span.end - span.start) as usize, token_type));
+    //         }
+    //     }
+    //
+    //     // Add references within range
+    //     for (ref_id, span) in semantic_result.semantic.reference_spans.iter_enumerated() {
+    //         let token_start = span.start as usize;
+    //         if token_start >= start_offset && token_start < end_offset {
+    //             if let Some(symbol_id) = semantic_result.semantic.references[ref_id] {
+    //                 let kind = semantic_result.semantic.get_symbol_kind(symbol_id);
+    //                 let token_type = match kind {
+    //                     SymbolKind::Function => 0,
+    //                     SymbolKind::Variable => 1,
+    //                     SymbolKind::Parameter => 2,
+    //                     SymbolKind::Struct => 3,
+    //                     SymbolKind::Field => 4,
+    //                 };
+    //                 incomplete_tokens.push((
+    //                     token_start,
+    //                     (span.end - span.start) as usize,
+    //                     token_type,
+    //                 ));
+    //             }
+    //         }
+    //     }
+    //
+    //     // Sort by start position
+    //     incomplete_tokens.sort_by(|a, b| a.0.cmp(&b.0));
+    //
+    //     // Convert to LSP SemanticToken format with delta encoding
+    //     let mut pre_line: u32 = 0;
+    //     let mut pre_start: u32 = 0;
+    //
+    //     let semantic_tokens = incomplete_tokens
+    //         .iter()
+    //         .map(|(start, length, token_type)| {
+    //             let line = rope.line_of_byte(*start) as u32;
+    //             let line_start_byte = rope.byte_of_line(line as usize);
+    //             let char_offset = *start - line_start_byte;
+    //
+    //             let delta_line = line - pre_line;
+    //             let delta_start = if delta_line == 0 {
+    //                 char_offset as u32 - pre_start
+    //             } else {
+    //                 char_offset as u32
+    //             };
+    //
+    //             let token = SemanticToken {
+    //                 delta_line,
+    //                 delta_start,
+    //                 length: *length as u32,
+    //                 token_type: *token_type,
+    //                 token_modifiers_bitset: 0,
+    //             };
+    //
+    //             pre_line = line;
+    //             pre_start = char_offset as u32;
+    //
+    //             token
+    //         })
+    //         .collect::<Vec<_>>();
+    //
+    //     Some(semantic_tokens)
+    // }
+}
 
-        let rope = self.document_map.get(&uri)?;
+fn lalrpop_error_to_diagnostic(text: &str, err: ParseError<usize, Token, String>) -> Diagnostic {
+    let (start, end, message) = match err {
+        ParseError::InvalidToken { location } => {
+            (location, location + 1, "Invalid token".to_string())
+        }
+        ParseError::UnrecognizedEof { location, expected } => (
+            location,
+            location,
+            format!("Unrecognized EOF, expected: {}", expected.join(", ")),
+        ),
+        ParseError::UnrecognizedToken {
+            token: (start, token, end),
+            expected,
+        } => (
+            start,
+            end,
+            format!(
+                "Unrecognized token {:?}, expected: {}",
+                token,
+                expected.join(", ")
+            ),
+        ),
+        ParseError::ExtraToken {
+            token: (start, token, end),
+        } => (start, end, format!("Extra token {:?}", token)),
+        ParseError::User { error } => (0, 0, format!("User error: {}", error)),
+    };
 
-        let compilation_result = self.semanticast_map.get(&uri)?;
-        let offset = position_to_offset(position, &rope)?;
-        if let Some(interval) = compilation_result
-            .semantic
-            .span_to_symbol
-            .find(offset, offset + 1)
-            .next()
-        {
-            let start = offset_to_position(interval.start, &rope)?;
-            let end = offset_to_position(interval.stop, &rope)?;
-            let location = Location::new(
-                params.text_document_position_params.text_document.uri,
-                Range::new(start, end),
-            );
-            return Some(GotoDefinitionResponse::Scalar(location));
-        };
-        let ref_id = compilation_result
-            .semantic
-            .span_to_reference
-            .find(offset, offset + 1)
-            .next()?
-            .val;
-        let symbol_id = compilation_result.semantic.references[ref_id]?;
-        let symbol_span = compilation_result.semantic.get_symbol_span(symbol_id);
-        let start = offset_to_position(symbol_span.start as usize, &rope)?;
-        let end = offset_to_position(symbol_span.end as usize, &rope)?;
-        let location = Location::new(
-            params.text_document_position_params.text_document.uri,
-            Range::new(start, end),
-        );
+    let rope = Rope::from(text);
+    let start_pos = offset_to_position(start, &rope).unwrap();
+    let end_pos = offset_to_position(end, &rope).unwrap();
 
-        Some(GotoDefinitionResponse::Scalar(location))
+    Diagnostic {
+        range: Range::new(start_pos, end_pos),
+        severity: Some(DiagnosticSeverity::ERROR),
+        message,
+        source: Some("pascalm".to_string()),
+        ..Default::default()
+    }
+}
+
+pub fn get_diagnostics(
+    text: &str,
+    compilation_unit: &CompilationUnit,
+) -> (Vec<Diagnostic>, SemanticAnalyzer) {
+    let mut all_diagnostics = Vec::new();
+    let mut analyzer = SemanticAnalyzer::new();
+
+    match &compilation_unit {
+        CompilationUnit::Program(p) => {
+            let _ = analyzer.analyze_program(p);
+        }
+        CompilationUnit::Unit(u) => {
+            let _ = analyzer.analyze_unit(u);
+        }
     }
 
-    fn offset_to_position(offset: usize, rope: &Rope) -> Option<Position> {
+    let rope = Rope::from(text);
+
+    for diag in &analyzer.diagnostics {
+        let start = offset_to_position(diag.span.start, &rope).unwrap();
+        let end = offset_to_position(diag.span.end, &rope).unwrap();
+        all_diagnostics.push(Diagnostic {
+            range: Range::new(start, end),
+            severity: Some(DiagnosticSeverity::ERROR),
+            source: Some("pascalm".to_string()),
+            message: diag.message.clone(),
+            ..Default::default()
+        });
+    }
+
+    (all_diagnostics, analyzer)
+}
+
+fn offset_to_position(offset: usize, rope: &Rope) -> Option<Position> {
     if offset > rope.byte_len() {
         return None;
     }
@@ -145,15 +566,14 @@ fn position_to_offset(position: Position, rope: &Rope) -> Option<usize> {
     let line_byte_offset = rope.byte_of_line(position.line as usize);
     Some(line_byte_offset + position.character as usize)
 }
-}
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                document_formatting_provider: Some(OneOf::Left(true)),
-                inlay_hint_provider: Some(OneOf::Left(true)),
+                document_formatting_provider: Some(OneOf::Left(false)), //verificar para adicionar true
+                inlay_hint_provider: Some(OneOf::Left(false)), // verificar para adicionar true
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
                         open_close: Some(true),
@@ -179,40 +599,10 @@ impl LanguageServer for Backend {
                     }),
                     file_operations: None,
                 }),
-                semantic_tokens_provider: Some(
-                    SemanticTokensServerCapabilities::SemanticTokensRegistrationOptions(
-                        SemanticTokensRegistrationOptions {
-                            text_document_registration_options: {
-                                TextDocumentRegistrationOptions {
-                                    document_selector: Some(vec![DocumentFilter {
-                                        language: Some("l".to_string()),
-                                        scheme: Some("file".to_string()),
-                                        pattern: None,
-                                    }]),
-                                }
-                            },
-                            semantic_tokens_options: SemanticTokensOptions {
-                                work_done_progress_options: WorkDoneProgressOptions::default(),
-                                legend: SemanticTokensLegend {
-                                    token_types: vec![
-                                        SemanticTokenType::FUNCTION,
-                                        SemanticTokenType::VARIABLE,
-                                        SemanticTokenType::PARAMETER,
-                                        SemanticTokenType::STRUCT,
-                                        SemanticTokenType::PROPERTY,
-                                    ],
-                                    token_modifiers: vec![],
-                                },
-                                range: Some(true),
-                                full: Some(SemanticTokensFullOptions::Bool(true)),
-                            },
-                            static_registration_options: StaticRegistrationOptions::default(),
-                        },
-                    ),
-                ),
+                semantic_tokens_provider: None,
                 definition_provider: Some(OneOf::Left(true)),
-                references_provider: Some(OneOf::Left(true)),
-                rename_provider: Some(OneOf::Left(true)),
+                references_provider: Some(OneOf::Left(false)),
+                rename_provider: Some(OneOf::Left(false)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -238,7 +628,6 @@ impl LanguageServer for Backend {
             text: &params.text_document.text,
         })
         .await;
-        debug!("file opened!");
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
@@ -263,14 +652,26 @@ impl LanguageServer for Backend {
 
         debug!("file saved");
 
-        if let Some(text) = self.document_map.get(&uri) {
-            // Check grammar and get diagnostics
-            // let diagnostics = self.check_grammar(&params.text_document.uri, &text).await;
+        if let Some(text_rope) = self.document_map.get(&uri) {
+            let text = text_rope.deref().to_string();
+            let lexer = lexer::Lexer::new(&text);
+            let parser = parser::CompilationUnitParser::new();
 
-            // Publish diagnostics back to the client
-            // self.client
-            //     .publish_diagnostics(params.text_document.uri, diagnostics, None)
-            //     .await;
+            if let Ok(unit) = parser.parse(lexer) {
+                let (diagnostics, analyzer) = get_diagnostics(&text, &unit);
+
+                self.client
+                    .publish_diagnostics(params.text_document.uri, diagnostics, None)
+                    .await;
+
+                self.semanticast_map.insert(
+                    uri.clone(),
+                    AnalysisResult {
+                        ast: unit,
+                        analyzer,
+                    },
+                );
+            }
         }
     }
 
@@ -278,45 +679,33 @@ impl LanguageServer for Backend {
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
-        let definition = self.get_definition(params);
-        Ok(definition)
-    }
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .to_string();
+        let position = params.text_document_position_params.position;
 
-    async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {
-        let uri = params.text_document_position.text_document.uri.to_string();
-        let position = params.text_document_position.position;
-        let references = self.get_references(uri, position, params.context.include_declaration);
-        Ok(references)
-    }
-
-    async fn semantic_tokens_full(
-        &self,
-        params: SemanticTokensParams,
-    ) -> Result<Option<SemanticTokensResult>> {
-        let uri = params.text_document.uri.to_string();
-        let semantic_tokens = self.build_semantic_tokens(&uri);
-        if let Some(tokens) = semantic_tokens {
-            return Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
-                result_id: None,
-                data: tokens,
-            })));
+        if let (Some(rope), Some(result)) =
+            (self.document_map.get(&uri), self.semanticast_map.get(&uri))
+        {
+            if let Some(offset) = position_to_offset(position, &rope) {
+                if let Some(symbol_id) = self.find_symbol_at_offset(&result.analyzer, offset) {
+                    // Find where this symbol is defined
+                    for (span, id) in &result.analyzer.definitions {
+                        if *id == symbol_id {
+                            let start = offset_to_position(span.start, &rope).unwrap();
+                            let end = offset_to_position(span.end, &rope).unwrap();
+                            return Ok(Some(GotoDefinitionResponse::Scalar(Location::new(
+                                params.text_document_position_params.text_document.uri,
+                                Range::new(start, end),
+                            ))));
+                        }
+                    }
+                }
+            }
         }
         Ok(None)
-    }
-
-    async fn semantic_tokens_range(
-        &self,
-        params: SemanticTokensRangeParams,
-    ) -> Result<Option<SemanticTokensRangeResult>> {
-        let uri = params.text_document.uri.to_string();
-        let range = params.range;
-        let semantic_tokens = self.build_semantic_tokens_range(&uri, range);
-        Ok(semantic_tokens.map(|data| {
-            SemanticTokensRangeResult::Tokens(SemanticTokens {
-                result_id: None,
-                data,
-            })
-        }))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -327,72 +716,46 @@ impl LanguageServer for Backend {
             .to_string();
         let position = params.text_document_position_params.position;
 
-        let rope = self.document_map.get(&uri);
-        let compilation_result = self.semanticast_map.get(&uri);
-
-        let hover = (|| -> Option<Hover> {
-            let rope = rope.as_deref()?;
-            let compilation_result = compilation_result.as_deref()?;
-            let offset = position_to_offset(position, rope)?;
-            let symbol_id = compilation_result.semantic.get_symbol_at(offset)?;
-
-            let symbol_kind = compilation_result.semantic.get_symbol_kind(symbol_id);
-            let type_info = &compilation_result.semantic.bindings[symbol_id];
-            let span = compilation_result.semantic.get_symbol_span(symbol_id);
-            let name = rope
-                .byte_slice(span.start as usize..span.end as usize)
-                .to_string();
-
-            let content = match symbol_kind {
-                SymbolKind::Function => format!("```l\nfn {name}\n```"),
-                SymbolKind::Struct => format!("```l\nstruct {name}\n```"),
-                _ => {
-                    let type_str = type_info
-                        .ty
-                        .format_literal_type(&compilation_result.semantic);
-                    match symbol_kind {
-                        SymbolKind::Variable => format!("```l\nlet {name}: {type_str}\n```"),
-                        SymbolKind::Parameter => format!("```l\n{name}: {type_str}\n```"),
-                        SymbolKind::Field => format!("```l\n{name}: {type_str}\n```"),
-                        _ => return None,
+        if let (Some(rope), Some(result)) =
+            (self.document_map.get(&uri), self.semanticast_map.get(&uri))
+        {
+            if let Some(offset) = position_to_offset(position, &rope) {
+                if let Some(symbol_id) = self.find_symbol_at_offset(&result.analyzer, offset) {
+                    if let Some(symbol_info) =
+                        result.analyzer.symbol_table.all_symbols.get(symbol_id)
+                    {
+                        let content = format!(
+                            "```pascal\n{} : {}\n```",
+                            symbol_info.name, symbol_info.kind
+                        );
+                        return Ok(Some(Hover {
+                            contents: HoverContents::Markup(MarkupContent {
+                                kind: MarkupKind::Markdown,
+                                value: content,
+                            }),
+                            range: None,
+                        }));
                     }
                 }
-            };
-
-            Some(Hover {
-                contents: HoverContents::Markup(MarkupContent {
-                    kind: MarkupKind::Markdown,
-                    value: content,
-                }),
-                range: None,
-            })
-        })();
-
-        Ok(hover)
+            }
+        }
+        Ok(None)
     }
 
-    async fn inlay_hint(
-        &self,
-        params: tower_lsp::lsp_types::InlayHintParams,
-    ) -> Result<Option<Vec<InlayHint>>> {
-        Ok(self.build_inlay_hints(params.text_document.uri.as_ref()))
+    async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        Ok(None)
     }
 
-    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        let completions = self.get_completion(params);
-        Ok(completions.map(CompletionResponse::Array))
+    async fn rename(&self, _params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        Ok(None)
     }
 
-    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-        let uri = params.text_document_position.text_document.uri.to_string();
-        let position = params.text_document_position.position;
-        let new_name = params.new_name;
-        let workspace_edit = self.get_rename_edit(uri, position, new_name);
-        Ok(workspace_edit)
+    async fn references(&self, _params: ReferenceParams) -> Result<Option<Vec<Location>>> {
+        Ok(None)
     }
 
-    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
-        Ok(self.format_text(params))
+    async fn formatting(&self, _params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        Ok(None)
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
@@ -424,4 +787,3 @@ async fn main() {
 
     Server::new(stdin, stdout, socket).serve(service).await;
 }
-

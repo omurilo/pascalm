@@ -1,4 +1,4 @@
-use crate::ast::{BinOp, UnaryOp};
+use crate::ast::{BinOp, UnaryOp, Span};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -24,16 +24,19 @@ pub enum Type {
     Procedure,
     Function(Box<Type>),
     Void,
+    Error,
 }
 
 #[derive(Debug, Clone)]
 pub struct TypedProgram {
     pub name: String,
+    pub uses: Vec<String>,
     pub block: TypedBlock,
 }
 
 #[derive(Debug, Clone)]
 pub struct TypedBlock {
+    pub span: Span,
     pub labels: Vec<i64>,
     pub constants: Vec<(String, TypedExpr)>,
     pub variables: Vec<(String, Type)>,
@@ -43,6 +46,7 @@ pub struct TypedBlock {
 
 #[derive(Debug, Clone)]
 pub struct TypedProcFunc {
+    pub span: Span,
     pub name: String,
     pub params: Vec<(String, Type, bool)>, // name, type, is_var
     pub return_type: Type,
@@ -50,7 +54,13 @@ pub struct TypedProcFunc {
 }
 
 #[derive(Debug, Clone)]
-pub enum TypedStmt {
+pub struct TypedStmt {
+    pub kind: TypedStmtKind,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub enum TypedStmtKind {
     Assignment { target: TypedExpr, value: TypedExpr },
     If { condition: TypedExpr, then_stmt: Box<TypedStmt>, else_stmt: Option<Box<TypedStmt>> },
     While { condition: TypedExpr, body: Box<TypedStmt> },
@@ -67,6 +77,7 @@ pub enum TypedStmt {
 
 #[derive(Debug, Clone)]
 pub struct TypedCaseItem {
+    pub span: Span,
     pub labels: Vec<TypedExpr>,
     pub stmt: TypedStmt,
 }
@@ -75,6 +86,7 @@ pub struct TypedCaseItem {
 pub struct TypedExpr {
     pub ty: Type,
     pub kind: TypedExprKind,
+    pub span: Span,
 }
 
 #[derive(Debug, Clone)]

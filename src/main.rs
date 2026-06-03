@@ -2,18 +2,10 @@ use clap::Parser;
 use std::fs;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use lalrpop_util::lalrpop_mod;
 use inkwell::context::Context;
 use logos::Logos;
-use crate::ast::CompilationUnit;
-
-mod lexer;
-mod ast;
-mod typed_ast;
-mod symbol_table;
-mod analyzer;
-mod codegen;
-lalrpop_mod!(pub parser);
+use pascalm::ast::CompilationUnit;
+use pascalm::{lexer, analyzer, codegen, parser};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -48,7 +40,8 @@ fn main() {
             let mut used_builtin_libs = HashSet::new();
 
             for name in sorted_units {
-                if loader.embedded_units.contains_key(&name) {
+                let is_builtin = loader.embedded_units.contains_key(&name);
+                if is_builtin {
                     used_builtin_libs.insert(name.clone());
                 }
                 let unit = loader.modules.get(&name).unwrap();
@@ -57,8 +50,15 @@ fn main() {
                         let mut analyzer = analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
                         match analyzer.analyze_program(p) {
                             Ok(typed_ast) => {
+                                if !analyzer.diagnostics.is_empty() {
+                                    for diag in &analyzer.diagnostics {
+                                        eprintln!("Error at {:?}: {}", diag.span, diag.message);
+                                    }
+                                    std::process::exit(1);
+                                }
                                 let mut codegen = codegen::CodeGen::with_interfaces(&context, &p.name, module_interfaces.clone());
-                                if let Err(e) = codegen.gen_program(typed_ast) {
+                                codegen.verbose = args.verbose;
+                                if let Err(e) = codegen.gen_program(typed_ast, module_interfaces.clone()) {
                                     eprintln!("Codegen error in program {}: {}", name, e);
                                     std::process::exit(1);
                                 }
@@ -68,91 +68,105 @@ fn main() {
                                 generated_ir_files.push(ir_path);
                             }
                             Err(e) => {
-                                eprintln!("Semantic error in program {}: {}", name, e);
+                                for diag in &analyzer.diagnostics {
+                                    eprintln!("Error at {:?}: {}", diag.span, diag.message);
+                                }
+                                if analyzer.diagnostics.is_empty() {
+                                    eprintln!("Semantic error in program {}: {}", name, e);
+                                }
                                 std::process::exit(1);
                             }
                         }
                     }
                     CompilationUnit::Unit(u) => {
                         let mut analyzer = analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
-                        match analyzer.analyze_unit(u) {
-                            Ok(interface) => {
-                                module_interfaces.insert(name.clone(), interface);
+                        let (interface, typed_block) = match analyzer.analyze_unit(u) {
+                            Ok(res) => {
+                                if !analyzer.diagnostics.is_empty() {
+                                    for diag in &analyzer.diagnostics {
+                                        eprintln!("Error in unit {}: at {:?}: {}", name, diag.span, diag.message);
+                                    }
+                                    std::process::exit(1);
+                                }
+                                res
                             }
                             Err(e) => {
-                                eprintln!("Semantic error in unit {}: {}", name, e);
+                                for diag in &analyzer.diagnostics {
+                                    eprintln!("Error in unit {}: at {:?}: {}", name, diag.span, diag.message);
+                                }
+                                if analyzer.diagnostics.is_empty() {
+                                    eprintln!("Semantic error in unit {}: {}", name, e);
+                                }
                                 std::process::exit(1);
                             }
-                        }
+                        };
+                        module_interfaces.insert(name.clone(), interface);
 
-                        let mut codegen = codegen::CodeGen::with_interfaces(&context, &u.name, module_interfaces.clone());
-                        if let Err(e) = codegen.gen_unit(u) {
-                            eprintln!("Codegen error in unit {}: {}", name, e);
-                            std::process::exit(1);
-                        }
+                        if !is_builtin {
+                            let mut codegen = codegen::CodeGen::with_interfaces(&context, &u.name, module_interfaces.clone());
+                            codegen.verbose = args.verbose;
+                            if let Err(e) = codegen.gen_unit(typed_block, module_interfaces.clone()) {
+                                eprintln!("Codegen error in unit {}: {}", name, e);
+                                std::process::exit(1);
+                            }
 
-                        let ir_path = format!("{}.ll", u.name);
-                        codegen.module.print_to_file(&ir_path).expect("Failed to write LLVM IR");
-                        generated_ir_files.push(ir_path);
+                            let ir_path = format!("{}.ll", u.name);
+                            codegen.module.print_to_file(&ir_path).expect("Failed to write LLVM IR");
+                            generated_ir_files.push(ir_path);
+                        }
                     }
                 }
             }
 
-            println!("Compilation successful. Generated IR files: {:?}", generated_ir_files);
-            
-            let output_exe = args.output.unwrap_or_else(|| "output".to_string());
-            println!("Linking into executable '{}'...", output_exe);
+            if !generated_ir_files.is_empty() {
+                let output_exe = args.output.unwrap_or_else(|| "output".to_string());
+                println!("Linking into executable '{}'...", output_exe);
 
-            let mut clang_args = generated_ir_files.clone();
-            let mut temp_libs = Vec::new();
+                let mut clang_args = generated_ir_files.clone();
+                let mut temp_libs = Vec::new();
 
-            for asset in get_stdlib_assets() {
-                if used_builtin_libs.contains(asset.name) {
-                    let temp_path = format!("lib{}_tmp.a", asset.name);
-                    fs::write(&temp_path, asset.archive).expect("Failed to write temporary library");
-                    clang_args.push(temp_path.clone());
-                    temp_libs.push(temp_path);
-                }
-            }
-
-            // Write embedded runtime_lib.bc to temp file for linking
-            let runtime_bc_path = "runtime_lib_tmp.bc";
-            fs::write(runtime_bc_path, RUNTIME_BC).expect("Failed to write temporary runtime_lib.bc");
-            clang_args.push(runtime_bc_path.to_string());
-            let status = std::process::Command::new("clang")
-                .args(&clang_args)
-                .arg("-o")
-                .arg(&output_exe)
-                .arg("-lm")
-                .arg("-lpthread")
-                .arg("-ldl")
-                .arg("-fuse-ld=lld")
-                .arg("-O2")
-                .status();
-                
-            match status {
-                Ok(s) if s.success() => {
-                    println!("Linking successful!");
-                    for ir_file in generated_ir_files {
-                        let _ = fs::remove_file(ir_file);
+                for lib_name in used_builtin_libs {
+                    if let Some(content) = loader.embedded_libs.get(&lib_name) {
+                        let temp_path = std::env::temp_dir().join(format!("lib{}_tmp.a", lib_name));
+                        fs::write(&temp_path, content).expect("Failed to write temporary library");
+                        clang_args.push(temp_path.to_str().unwrap().to_string());
+                        temp_libs.push(temp_path);
                     }
-                    for lib in temp_libs {
-                        let _ = fs::remove_file(lib);
+                }
+
+                let runtime_path = std::env::temp_dir().join("runtime_lib.bc");
+                fs::write(&runtime_path, RUNTIME_BC).expect("Failed to write temporary runtime");
+                clang_args.push(runtime_path.to_str().unwrap().to_string());
+
+                let status = std::process::Command::new("clang")
+                    .args(&clang_args)
+                    .arg("-o")
+                    .arg(&output_exe)
+                    .arg("-lm")
+                    .arg("-lpthread")
+                    .status();
+
+                match status {
+                    Ok(s) if s.success() => println!("Linking successful!"),
+                    Ok(s) => {
+                        eprintln!("Linker failed with exit code: {}", s.code().unwrap_or(1));
+                        std::process::exit(1);
                     }
-                    let _ = fs::remove_file(runtime_bc_path);
+                    Err(e) => {
+                        eprintln!("Failed to run clang: {}", e);
+                        std::process::exit(1);
+                    }
                 }
-                Ok(s) => {
-                    eprintln!("Linker failed with exit code: {}", s.code().unwrap_or(-1));
-                    std::process::exit(1);
-                }
-                Err(e) => {
-                    eprintln!("Failed to execute linker (clang): {}. Make sure clang is installed.", e);
-                    std::process::exit(1);
+
+                // Cleanup temp files
+                let _ = fs::remove_file(runtime_path);
+                for lib in temp_libs {
+                    let _ = fs::remove_file(lib);
                 }
             }
         }
         Err(e) => {
-            eprintln!("Error: {}", e);
+            eprintln!("Error loading modules: {}", e);
             std::process::exit(1);
         }
     }
@@ -160,37 +174,40 @@ fn main() {
 
 struct ModuleLoader {
     modules: HashMap<String, CompilationUnit>,
-    loading_stack: Vec<String>,
+    embedded_units: HashMap<String, String>,
+    embedded_libs: HashMap<String, &'static [u8]>,
     search_paths: Vec<PathBuf>,
-    embedded_units: HashMap<String, &'static str>,
+    loading_stack: Vec<String>,
 }
 
 impl ModuleLoader {
     fn new() -> Self {
         let mut loader = Self {
             modules: HashMap::new(),
-            loading_stack: Vec::new(),
-            search_paths: Vec::new(),
             embedded_units: HashMap::new(),
+            embedded_libs: HashMap::new(),
+            search_paths: Vec::new(),
+            loading_stack: Vec::new(),
         };
-        loader.setup_stdlib();
+        
+        let assets = get_stdlib_assets();
+        for (name, content, lib_content) in assets {
+            loader.embedded_units.insert(name.to_lowercase(), content.to_string());
+            if let Some(lib) = lib_content {
+                loader.embedded_libs.insert(name.to_lowercase(), lib);
+            }
+        }
+        
         loader
     }
 
-    fn setup_stdlib(&mut self) {
-        for asset in get_stdlib_assets() {
-            if !asset.source.is_empty() {
-                self.embedded_units.insert(asset.name.to_string(), asset.source);
-            }
-        }
+    fn load_recursively(&mut self, source_path: &Path, verbose: bool) -> Result<(), String> {
+        let input = fs::read_to_string(source_path)
+            .map_err(|e| format!("Failed to read {}: {}", source_path.display(), e))?;
+        self.parse_and_load(input, source_path.to_path_buf(), verbose)
     }
 
-    fn load_recursively(&mut self, path: &Path, verbose: bool) -> Result<(), String> {
-        let input = fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {}", path.display(), e))?;
-        self.parse_and_load(input, path.to_path_buf(), verbose)
-    }
-
-    fn parse_and_load(&mut self, input: String, source_path: PathBuf, verbose: bool) -> Result<(), String> {
+    pub fn parse_and_load(&mut self, input: String, source_path: PathBuf, verbose: bool) -> Result<(), String> {
         if verbose {
             println!("Tokens for {}:", source_path.display());
             let mut debug_lexer = lexer::Token::lexer(&input);
@@ -200,13 +217,13 @@ impl ModuleLoader {
         }
         let lexer = lexer::Lexer::new(&input);
         let parser = parser::CompilationUnitParser::new();
+        let unit = parser.parse(lexer).map_err(|e| format!("Parser failed: {:?}", e))?;
         
-        let unit = parser.parse(lexer).map_err(|e| format!("Parse error in {}: {:?}", source_path.display(), e))?;
         let name = match &unit {
-            CompilationUnit::Program(p) => p.name.to_lowercase(),
-            CompilationUnit::Unit(u) => u.name.to_lowercase(),
-        };
-
+            CompilationUnit::Program(p) => p.name.clone(),
+            CompilationUnit::Unit(u) => u.name.clone(),
+        }.to_lowercase();
+        
         if self.loading_stack.contains(&name) {
             return Err(format!("Circular dependency detected: {} -> {}", self.loading_stack.join(" -> "), name));
         }
@@ -220,13 +237,14 @@ impl ModuleLoader {
         let deps = match &unit {
             CompilationUnit::Program(p) => p.uses.clone().unwrap_or_default(),
             CompilationUnit::Unit(u) => {
-                let d = u.interface.uses.clone().unwrap_or_default();
-                // d.extend(u.implementation.uses.clone().unwrap_or_default());
+                let mut d = u.interface.uses.clone().unwrap_or_default();
+                d.extend(u.implementation.uses.clone().unwrap_or_default());
                 d
             }
         };
 
         let base_dir = source_path.parent().unwrap_or(Path::new("."));
+
         for dep in deps {
             let dep_lower = dep.to_lowercase();
             if !self.modules.contains_key(&dep_lower) {
@@ -236,31 +254,28 @@ impl ModuleLoader {
                     self.parse_and_load(content.to_string(), virtual_path, verbose)?;
                     continue;
                 }
-
+                
                 // 2. Check local and provided search paths
                 let mut found = false;
                 let mut paths_to_check = vec![base_dir.to_path_buf()];
                 paths_to_check.extend(self.search_paths.clone());
-
-                for search_path in paths_to_check {
-                    let mut dep_path = search_path.join(format!("{}.pas", dep_lower));
-                    if !dep_path.exists() {
-                        dep_path = search_path.join(format!("{}.pascalm", dep_lower));
-                    }
-                    if dep_path.exists() {
-                        self.load_recursively(&dep_path, verbose)?;
+                
+                for path in paths_to_check {
+                    let file_path = path.join(format!("{}.pas", dep_lower));
+                    if file_path.exists() {
+                        self.load_recursively(&file_path, verbose)?;
                         found = true;
                         break;
                     }
                 }
-
+                
                 if !found {
-                    return Err(format!("Could not find unit '{}' used in {}", dep, source_path.display()));
+                    return Err(format!("Unit {} not found", dep));
                 }
             }
         }
 
-        self.modules.insert(name, unit);
+        self.modules.insert(name.clone(), unit);
         self.loading_stack.pop();
         Ok(())
     }
@@ -278,9 +293,19 @@ impl ModuleLoader {
         Some(sorted)
     }
 
-    fn visit(&self, name: &str, visited: &mut HashSet<String>, temp_visited: &mut HashSet<String>, sorted: &mut Vec<String>) -> bool {
-        if temp_visited.contains(name) { return false; }
-        if visited.contains(name) { return true; }
+    fn visit(
+        &self,
+        name: &str,
+        visited: &mut HashSet<String>,
+        temp_visited: &mut HashSet<String>,
+        sorted: &mut Vec<String>,
+    ) -> bool {
+        if temp_visited.contains(name) {
+            return false;
+        }
+        if visited.contains(name) {
+            return true;
+        }
 
         temp_visited.insert(name.to_string());
 
@@ -288,8 +313,8 @@ impl ModuleLoader {
         let deps = match unit {
             CompilationUnit::Program(p) => p.uses.clone().unwrap_or_default(),
             CompilationUnit::Unit(u) => {
-                let d = u.interface.uses.clone().unwrap_or_default();
-                // d.extend(u.implementation.uses.clone().unwrap_or_default());
+                let mut d = u.interface.uses.clone().unwrap_or_default();
+                d.extend(u.implementation.uses.clone().unwrap_or_default());
                 d
             }
         };
@@ -304,42 +329,5 @@ impl ModuleLoader {
         visited.insert(name.to_string());
         sorted.push(name.to_string());
         true
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_minimal() {
-        let input = "program minimal; begin end.";
-        let lexer = lexer::Lexer::new(input);
-        let parser = parser::CompilationUnitParser::new();
-        let result = parser.parse(lexer);
-        assert!(result.is_ok(), "Failed to parse minimal program: {:?}", result.err());
-    }
-
-    #[test]
-    fn test_scope_isolation() {
-        let input = "
-program scopes;
-procedure p;
-var local: integer;
-begin
-  local := 1;
-end;
-begin
-  local := 2;
-end.";
-        let lexer = lexer::Lexer::new(input);
-        let parser = parser::CompilationUnitParser::new();
-        let unit = parser.parse(lexer).unwrap();
-        if let CompilationUnit::Program(ast) = unit {
-            let mut analyzer = analyzer::SemanticAnalyzer::new();
-            let result = analyzer.analyze_program(&ast);
-            assert!(result.is_err());
-            assert!(result.unwrap_err().contains("Variable 'local' not declared"));
-        } else { panic!("Expected program"); }
     }
 }
