@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - feat/lsp
     tags:
       - "v*.*.*"
   pull_request:
@@ -21,19 +22,49 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y flex gcc libfl-dev bison build-essential
+        sudo apt-get install -y \
+          build-essential \
+          wget \
+          gnupg \
+          lsb-release \
+          software-properties-common \
+          libzstd-dev \
+          libxml2-dev \
+          clang \
+          lld
+        
+        # Install LLVM 18
+        wget https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh 18
+        sudo apt-get install -y llvm-18-dev libpolly-18-dev
+
+    - name: Setup Rust
+      uses: actions-rust-lang/setup-rust-toolchain@v1
+      with:
+        toolchain: stable
+        components: rustfmt, clippy
 
     - name: Build the compiler
       run: |
-        cd src
-        make
-        # Confirma que o executável foi criado
-        ls -l pascalm 
+        export LLVM_SYS_180_PREFIX=/usr/lib/llvm-18
+        cargo build --release
 
-    - name: Run test suite
+    - name: Run unit tests
       run: |
-        cd ./src/tests
-        ./run_tests.sh ../pascalm
+        export LLVM_SYS_180_PREFIX=/usr/lib/llvm-18
+        cargo test
+
+    - name: Run integration tests
+      run: |
+        export LLVM_SYS_180_PREFIX=/usr/lib/llvm-18
+        cd src/tests
+        chmod +x run_tests.sh
+        ./run_tests.sh ../../target/release/pascalm
+
+    - name: Build LSP
+      run: |
+        cargo check --manifest-path src/lsp/Cargo.toml
 
     - name: Release
       uses: softprops/action-gh-release@v2
@@ -42,4 +73,4 @@ jobs:
         name: Release ${{ github.ref_name }}
         generate_release_notes: true
         files: |
-          ./src/pascalm
+          target/release/pascalm

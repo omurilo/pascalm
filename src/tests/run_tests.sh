@@ -4,6 +4,7 @@
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 NC='\033[0m' # Sem Cor
+YELLOW='\033[1;33m'
 
 # Argumento: caminho para o executável do compilador
 COMPILER=$1
@@ -21,9 +22,10 @@ log_failure() {
   local reason=$2
   local details=$3
   failed_tests=$((failed_tests + 1))
-  failure_log+="\n-[Fail] Test: ${test_name}\n"
+  failure_log+="\n${YELLOW}-[Fail] Test: ${test_name}${NC}\n"
   failure_log+="\t${RED}Reason:${NC} ${reason}\n"
   if [ -n "$details" ]; then
+    details=$(echo "$details" | sed 's/^/        /')
     failure_log+="\t${RED}Details:${NC}\n${details}\n"
   fi
 }
@@ -34,8 +36,8 @@ for test_dir in success/*/; do
     test_name=$(basename "$test_dir")
     echo -n "  [TEST] $test_name..."
     
-    # Compila o PascalM diretamente para um executável usando a nova CLI
-    $COMPILER --file "${test_dir}test.pascalm" --output "${test_dir}program" > /dev/null 2>&1
+    # Compila o PascalM diretamente para um executável
+    "$COMPILER" --file "${test_dir}test.pascalm" --output "${test_dir}program" > /dev/null 2>&1
     
     if [ ! -f "${test_dir}program" ]; then
         echo -e " ${RED}FAIL (Compile error)${NC}"
@@ -51,7 +53,6 @@ for test_dir in success/*/; do
     fi
     
     # Compara a saída real com a esperada (golden)
-    # Usamos -w para ignorar espaços em branco extras (como \r no Windows ou \n no final)
     if diff -w "${test_dir}actual.out" "${test_dir}output.golden" > /dev/null 2>&1; then
         echo -e " ${GREEN}PASS${NC}"
     else
@@ -61,7 +62,7 @@ for test_dir in success/*/; do
     fi
     
     # Cleanup
-    rm -f "${test_dir}program" "${test_dir}actual.out" *.ll
+    rm -f "${test_dir}program" "${test_dir}actual.out" *.ll *.bc
 done
 
 echo -e "\nRunning COMPILE_ERROR tests..."
@@ -71,11 +72,8 @@ for test_dir in compile_error/*/; do
     echo -n "  [TEST] $test_name..."
     
     # Tenta compilar e captura o erro
-    $COMPILER --file "${test_dir}test.pascalm" 2> "${test_dir}actual.err" > /dev/null
-    
-    if [ $? -ne 0 ]; then
-        # Verificamos se houve erro (saída não-zero)
-        # Como o formato do erro mudou com o LSP, vamos apenas verificar se não é vazio
+    if ! "$COMPILER" --file "${test_dir}test.pascalm" 2> "${test_dir}actual.err" > /dev/null; then
+         # Como o formato do erro mudou com o LSP, vamos apenas verificar se não é vazio
         if [ -s "${test_dir}actual.err" ]; then
              echo -e " ${GREEN}PASS${NC}"
         else
@@ -88,7 +86,7 @@ for test_dir in compile_error/*/; do
     fi
     
     # Cleanup
-    rm -f "${test_dir}actual.err" *.ll
+    rm -f "${test_dir}actual.err" *.ll *.bc
 done
 
 echo "-----------------------------------------------------"
