@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - feat/lsp
+      - feat/port_to_rust
     tags:
       - "v*.*.*"
   pull_request:
@@ -30,6 +30,7 @@ jobs:
           software-properties-common \
           libzstd-dev \
           libxml2-dev \
+          libtinfo-dev \
           clang \
           lld
         
@@ -61,10 +62,6 @@ jobs:
         cd src/tests
         chmod +x run_tests.sh
         ./run_tests.sh ../../target/release/pascalm
-
-    - name: Build LSP
-      run: |
-        cargo check --manifest-path src/lsp/Cargo.toml
 
     - name: Release
       uses: softprops/action-gh-release@v2

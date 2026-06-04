@@ -36,8 +36,24 @@ for test_dir in success/*/; do
     test_name=$(basename "$test_dir")
     echo -n "  [TEST] $test_name..."
     
+    # Encontra o arquivo de entrada
+    entry_file=""
+    if [ -f "${test_dir}test.pascalm" ]; then
+        entry_file="${test_dir}test.pascalm"
+    elif [ -f "${test_dir}main_prog.pas" ]; then
+        entry_file="${test_dir}main_prog.pas"
+    else
+        entry_file=$(ls "${test_dir}"*.pascalm "${test_dir}"*.pas 2>/dev/null | head -n 1)
+    fi
+
+    if [ -z "$entry_file" ]; then
+        echo -e " ${RED}FAIL (No entry file)${NC}"
+        log_failure "${test_name}" "No entry file found (.pascalm or .pas)." ""
+        continue
+    fi
+
     # Compila o PascalM diretamente para um executável
-    "$COMPILER" --file "${test_dir}test.pascalm" --output "${test_dir}program" > /dev/null 2>&1
+    "$COMPILER" --file "$entry_file" --output "${test_dir}program" > /dev/null 2>&1
     
     if [ ! -f "${test_dir}program" ]; then
         echo -e " ${RED}FAIL (Compile error)${NC}"

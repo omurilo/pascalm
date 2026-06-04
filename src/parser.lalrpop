@@ -60,6 +60,7 @@ extern {
         "uses" => Token::Uses,
         "initialization" => Token::Initialization,
         "external" => Token::External,
+        "name" => Token::Name,
 
         "+" => Token::Plus,
         "-" => Token::Minus,
@@ -90,10 +91,15 @@ extern {
         "char_code" => Token::CharCode(<char>),
         "int_lit" => Token::IntegerLiteral(<i64>),
         "real_lit" => Token::RealLiteral(<f64>),
-        "identifier" => Token::Identifier(<String>),
+         "identifier" => Token::Identifier(<String>),
         "string_lit" => Token::StringLiteral(<String>),
     }
 }
+
+Identifier: String = {
+    "identifier" => <>,
+    "name" => "name".to_string(),
+};
 
 pub CompilationUnit: CompilationUnit = {
     Program => CompilationUnit::Program(<>),
@@ -101,8 +107,7 @@ pub CompilationUnit: CompilationUnit = {
 };
 
 pub Program: Program = {
-    <l:@L> "program" <name:"identifier"> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." <r:@R> => Program {
-        span: Span::new(l, r),
+    "program" <name:Identifier> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." => Program {
         name,
         heading,
         uses,
@@ -111,12 +116,11 @@ pub Program: Program = {
 };
 
 pub Unit: Unit = {
-    <l:@L> "unit" <name:"identifier"> ";"
+    "unit" <name:Identifier> ";"
     "interface" <interface:InterfaceSection>
     "implementation" <implementation:ImplementationSection>
     <initialization:Initialization?>
-    "end" "." <r:@R> => Unit {
-        span: Span::new(l, r),
+    "end" "." => Unit {
         name,
         interface,
         implementation,
@@ -125,12 +129,11 @@ pub Unit: Unit = {
 };
 
 InterfaceSection: InterfaceSection = {
-    <l:@L> <uses:UsesClause?>
+    <uses:UsesClause?>
     <constants:(ConstDecl ";")?>
     <types:(TypeDecl ";")?>
     <variables:(VarDecl ";")?>
-    <headers:(ProcFuncHeaderList ";")?> <r:@R> => InterfaceSection {
-        span: Span::new(l, r),
+    <headers:(ProcFuncHeaderList ";")?> => InterfaceSection {
         uses,
         constants: constants.map(|(c, _)| c),
         types: types.map(|(t, _)| t),
@@ -140,12 +143,11 @@ InterfaceSection: InterfaceSection = {
 };
 
 ImplementationSection: ImplementationSection = {
-    <l:@L> <uses:UsesClause?>
+    <uses:UsesClause?>
     <constants:(ConstDecl ";")?>
     <types:(TypeDecl ";")?>
     <variables:(VarDecl ";")?>
-    <bodies:(ProcFuncDecl ";")?> <r:@R> => ImplementationSection {
-        span: Span::new(l, r),
+    <bodies:(ProcFuncDecl ";")?> => ImplementationSection {
         uses,
         constants: constants.map(|(c, _)| c),
         types: types.map(|(t, _)| t),
@@ -155,7 +157,7 @@ ImplementationSection: ImplementationSection = {
 };
 
 UsesClause: Vec<String> = {
-    "uses" <ids:IdentifierList> ";" => ids,
+    "uses" <ids:PathList> ";" => ids,
 };
 
 Initialization: Vec<Stmt> = {
@@ -168,22 +170,48 @@ HeadingOpt: Option<Vec<String>> = {
 };
 
 IdentifierList: Vec<String> = {
-    <id:"identifier"> => vec![id],
-    <mut list:IdentifierList> "," <id:"identifier"> => {
+    <id:Identifier> => vec![id],
+    <mut list:IdentifierList> "," <id:Identifier> => {
         list.push(id);
         list
     }
 };
 
+PathList: Vec<String> = {
+    <p:Path> => vec![p],
+    <mut list:PathList> "," <p:Path> => {
+        list.push(p);
+        list
+    }
+};
+
+Path: String = {
+    <is_absolute:"/"?> <segments:AbsoluteSegments> => {
+        let mut res = segments;
+        if is_absolute.is_some() {
+            res.insert(0, "".to_string());
+        }
+        res.join("/")
+      } 
+};
+
+AbsoluteSegments: Vec<String> = {
+    <head:Identifier> "/" <tail:AbsoluteSegments> => {
+        let mut res = vec![head];
+        res.extend(tail);
+        res
+    },
+    <s:Identifier> => vec![s],
+};
+
 Block: Block = {
-    <l:@L> <labels:(LabelDecl ";")?>
+    <labels:(LabelDecl ";")?>
     <constants:(ConstDecl ";")?>
     <types:(TypeDecl ";")?>
     <variables:(VarDecl ";")?>
     <procs:(ProcFuncDecl ";")?>
-    <stmts:CompoundStmtInner> <r:@R> => {
+    <stmts:CompoundStmtInner> => {
         Block {
-            span: Span::new(l, r),
             labels: labels.map(|(l, _)| l),
             constants: constants.map(|(c, _)| c),
             types: types.map(|(t, _)| t),
@@ -211,7 +239,7 @@ ConstDecl: Vec<ConstDecl> = {
 };
 
 ConstItem: ConstDecl = {
-    <l:@L> <id:"identifier"> "=" <val:Constant> <r:@R> => ConstDecl { span: Span::new(l, r), name: id, value: val },
+    <id:Identifier> "=" <val:Constant> => ConstDecl { name: id, value: val },
 };
 
 TypeDecl: Vec<TypeDecl> = {
@@ -223,7 +251,7 @@ TypeDecl: Vec<TypeDecl> = {
 };
 
 TypeItem: TypeDecl = {
-    <l:@L> <id:"identifier"> "=" <te:TypeExpr> <r:@R> => TypeDecl { span: Span::new(l, r), name: id, type_expr: te },
+    <id:Identifier> "=" <te:TypeExpr> => TypeDecl { name: id, type_expr: te },
 };
 
 VarDecl: Vec<VarDecl> = {
@@ -235,7 +263,7 @@ VarDecl: Vec<VarDecl> = {
 };
 
 VarItem: VarDecl = {
-    <l:@L> <ids:IdentifierList> ":" <te:TypeExpr> <r:@R> => VarDecl { span: Span::new(l, r), ids, type_expr: te },
+    <ids:IdentifierList> ":" <te:TypeExpr> => VarDecl { ids, type_expr: te },
 };
 
 ProcFuncHeaderList: Vec<ProcFuncDecl> = {
@@ -247,11 +275,11 @@ ProcFuncHeaderList: Vec<ProcFuncDecl> = {
 };
 
 ProcFuncHeader: ProcFuncDecl = {
-    <l:@L> "procedure" <name:"identifier"> <params:Parameters?> <r:@R> => {
-        ProcFuncDecl::Procedure { span: Span::new(l, r), name, params, block_or_forward: BlockOrForward::Forward }
+    "procedure" <name:Identifier> <params:Parameters?> => {
+        ProcFuncDecl::Procedure { name, params, block_or_forward: BlockOrForward::Forward }
     },
-    <l:@L> "function" <name:"identifier"> <params:Parameters?> ":" <rt:TypeName> <r:@R> => {
-        ProcFuncDecl::Function { span: Span::new(l, r), name, params, return_type: rt, block_or_forward: BlockOrForward::Forward }
+    "function" <name:Identifier> <params:Parameters?> ":" <rt:TypeName> => {
+        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: BlockOrForward::Forward }
     }
 };
 
@@ -264,17 +292,17 @@ ProcFuncDecl: Vec<ProcFuncDecl> = {
 };
 
 ProcOrFunc: ProcFuncDecl = {
-    <l:@L> "procedure" <name:"identifier"> <params:Parameters?> ";" <block:BlockOrExternal> <r:@R> => {
-        ProcFuncDecl::Procedure { span: Span::new(l, r), name, params, block_or_forward: block }
+    "procedure" <name:Identifier> <params:Parameters?> ";" <block:BlockOrExternal> => {
+        ProcFuncDecl::Procedure { name, params, block_or_forward: block }
     },
-    <l:@L> "function" <name:"identifier"> <params:Parameters?> ":" <rt:TypeName> ";" <block:BlockOrExternal> <r:@R> => {
-        ProcFuncDecl::Function { span: Span::new(l, r), name, params, return_type: rt, block_or_forward: block }
+    "function" <name:Identifier> <params:Parameters?> ":" <rt:TypeName> ";" <block:BlockOrExternal> => {
+        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: block }
     }
 };
 
 BlockOrExternal: BlockOrForward = {
     "forward" => BlockOrForward::Forward,
-    "external" => BlockOrForward::Forward, // Treat external as forward/empty for now
+    "external" <n:("name" <"string_lit">)?> => BlockOrForward::External(n),
     <b:Block> => BlockOrForward::Block(Box::new(b)),
 };
 
@@ -291,10 +319,10 @@ ParamList: Vec<Param> = {
 };
 
 ParamSection: Param = {
-    <l:@L> "var" <ids:IdentifierList> ":" <te:TypeExpr> <r:@R> => Spanned { span: Span::new(l, r), node: ParamKind::Variable { is_var: true, ids, type_expr: te } },
-    <l:@L> <ids:IdentifierList> ":" <te:TypeExpr> <r:@R> => Spanned { span: Span::new(l, r), node: ParamKind::Variable { is_var: false, ids, type_expr: te } },
-    <l:@L> "procedure" <id:"identifier"> <params:Parameters?> <r:@R> => Spanned { span: Span::new(l, r), node: ParamKind::Procedure { id, params } },
-    <l:@L> "function" <id:"identifier"> <params:Parameters?> ":" <tn:TypeName> <r:@R> => Spanned { span: Span::new(l, r), node: ParamKind::Function { id, params, return_type: tn } },
+    "var" <ids:IdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: true, ids, type_name: tn },
+    <ids:IdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: false, ids, type_name: tn },
+    "procedure" <id:Identifier> <params:Parameters?> => Param::Procedure { id, params },
+    "function" <id:Identifier> <params:Parameters?> ":" <tn:TypeName> => Param::Function { id, params, return_type: tn },
 };
 
 TypeName: String = {
@@ -303,58 +331,38 @@ TypeName: String = {
     "boolean" => "boolean".to_string(),
     "char" => "char".to_string(),
     "string" => "string".to_string(),
-    <id:"identifier"> => id,
+    <id:Identifier> => id,
 };
 
 Constant: Expr = {
-    <l:@L> <n:"int_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Integer(n) },
-    <l:@L> <n:"real_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Real(n) },
-    <l:@L> <c:"char_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Char(c) },
-    <l:@L> <c:"char_code"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Char(c) },
-    <l:@L> <s:"string_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::String(s) },
-    <l:@L> <b:"boolean_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Boolean(b) },
-    <l:@L> <id:"identifier"> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: ExprKind::Variable(Box::new(Spanned { span: Span::new(l, r), node: VariableKind::Id(id) })) 
-    },
-    <l:@L> "+" <id:"identifier"> <r:@R> => {
-        let span = Span::new(l, r);
-        let v = Spanned { span, node: VariableKind::Id(id) };
-        Spanned { span, node: ExprKind::Unary { op: UnaryOp::Plus, expr: Box::new(Spanned { span, node: ExprKind::Variable(Box::new(v)) }) } }
-    },
-    <l:@L> "-" <id:"identifier"> <r:@R> => {
-        let span = Span::new(l, r);
-        let v = Spanned { span, node: VariableKind::Id(id) };
-        Spanned { span, node: ExprKind::Unary { op: UnaryOp::Minus, expr: Box::new(Spanned { span, node: ExprKind::Variable(Box::new(v)) }) } }
-    },
+    <n:"int_lit"> => Expr::Integer(n),
+    <n:"real_lit"> => Expr::Real(n),
+    <c:"char_lit"> => Expr::Char(c),
+    <c:"char_code"> => Expr::Char(c),
+    <s:"string_lit"> => Expr::String(s),
+    <b:"boolean_lit"> => Expr::Boolean(b),
+    <id:Identifier> => Expr::Variable(Box::new(Variable::Id(id))),
+    "+" <id:Identifier> => Expr::Unary { op: UnaryOp::Plus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
+    "-" <id:Identifier> => Expr::Unary { op: UnaryOp::Minus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
 };
 
 TypeExpr: TypeExpr = {
-    <l:@L> <tn:TypeName> <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Simple(tn) },
-    <l:@L> "array" "[" <indices:TypeExprList> "]" "of" <et:TypeExpr> <r:@R> => Spanned {
-        span: Span::new(l, r),
-        node: TypeExprKind::Array {
-            indices,
-            element_type: Box::new(et),
-        }
+    <tn:TypeName> => TypeExpr::Simple(tn),
+    "array" "[" <indices:TypeExprList> "]" "of" <et:TypeExpr> => TypeExpr::Array {
+        indices,
+        element_type: Box::new(et),
     },
-    <l:@L> "record" <fl:FieldList> "end" <r:@R> => Spanned {
-        span: Span::new(l, r),
-        node: TypeExprKind::Record {
-            fields: fl.0,
-            variant_part: fl.1,
-        }
+    "record" <fl:FieldList> "end" => TypeExpr::Record {
+        fields: fl.0,
+        variant_part: fl.1,
     },
-    <l:@L> "^" <tn:TypeName> <r:@R> => Spanned {
-        span: Span::new(l, r),
-        node: TypeExprKind::Pointer(Box::new(Spanned { span: Span::new(l, r), node: TypeExprKind::Simple(tn) }))
-    },
-    <l:@L> "set" "of" <te:SimpleType> <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Set(Box::new(te)) },
-    <l:@L> "file" "of" <te:TypeExpr> <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::File(Box::new(te)) },
-    <l:@L> <start:Constant> ".." <end:Constant> <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Subrange { start, end } },
-    <l:@L> "(" <ids:IdentifierList> ")" <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Enum(ids) },
-    <l:@L> "procedure" <params:Parameters?> <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Procedure { params } },
-    <l:@L> "function" <params:Parameters?> ":" <rt:TypeName> <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Function { params, return_type: rt } },
+    "^" <tn:TypeName> => TypeExpr::Pointer(Box::new(TypeExpr::Simple(tn))),
+    "set" "of" <te:SimpleType> => TypeExpr::Set(Box::new(te)),
+    "file" "of" <te:TypeExpr> => TypeExpr::File(Box::new(te)),
+    <start:Constant> ".." <end:Constant> => TypeExpr::Subrange { start, end },
+    "(" <ids:IdentifierList> ")" => TypeExpr::Enum(ids),
+    "procedure" <params:Parameters?> => TypeExpr::Procedure { params },
+    "function" <params:Parameters?> ":" <rt:TypeName> => TypeExpr::Function { params, return_type: rt },
 };
 
 FieldList: (Vec<VarDecl>, Option<VariantPart>) = {
@@ -373,8 +381,7 @@ FixedPart: Vec<VarDecl> = {
 
 #[inline]
 VariantPart: VariantPart = {
-    <l:@L> "case" <tag:TagField> <tn:TypeName> "of" <variants:VariantList> <r:@R> => VariantPart {
-        span: Span::new(l, r),
+    "case" <tag:TagField> <tn:TypeName> "of" <variants:VariantList> => VariantPart {
         tag_field: tag,
         tag_type: tn,
         variants,
@@ -383,7 +390,7 @@ VariantPart: VariantPart = {
 
 #[inline]
 TagField: Option<String> = {
-    <id:"identifier"> ":" => Some(id),
+    <id:Identifier> ":" => Some(id),
     () => None,
 };
 
@@ -396,8 +403,7 @@ VariantList: Vec<Variant> = {
 };
 
 Variant: Variant = {
-    <l:@L> <labels:CaseLabelList> ":" "(" <fl:FieldList> ")" <r:@R> => Variant {
-        span: Span::new(l, r),
+    <labels:CaseLabelList> ":" "(" <fl:FieldList> ")" => Variant {
         labels,
         fields: fl.0,
         nested_variant: fl.1.map(Box::new),
@@ -405,9 +411,9 @@ Variant: Variant = {
 };
 
 SimpleType: TypeExpr = {
-    <l:@L> <tn:TypeName> <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Simple(tn) },
-    <l:@L> <start:Constant> ".." <end:Constant> <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Subrange { start, end } },
-    <l:@L> "(" <ids:IdentifierList> ")" <r:@R> => Spanned { span: Span::new(l, r), node: TypeExprKind::Enum(ids) },
+    <tn:TypeName> => TypeExpr::Simple(tn),
+    <start:Constant> ".." <end:Constant> => TypeExpr::Subrange { start, end },
+    "(" <ids:IdentifierList> ")" => TypeExpr::Enum(ids),
 };
 
 TypeExprList: Vec<TypeExpr> = {
@@ -419,7 +425,7 @@ TypeExprList: Vec<TypeExpr> = {
 };
 
 CompoundStmt: Stmt = {
-    <l:@L> "begin" <list:StmtList> "end" <r:@R> => Spanned { span: Span::new(l, r), node: StmtKind::Compound(list) },
+    "begin" <list:StmtList> "end" => Stmt::Compound(list),
 };
 
 CompoundStmtInner: Vec<Stmt> = {
@@ -436,7 +442,7 @@ StmtList: Vec<Stmt> = {
 
 OptionalStmt: Stmt = {
     Stmt => <>,
-    <l:@L> () <r:@R> => Spanned { span: Span::new(l, r), node: StmtKind::Empty },
+    () => Stmt::Empty,
 };
 
 Stmt: Stmt = {
@@ -445,75 +451,26 @@ Stmt: Stmt = {
 };
 
 MatchedStmt: Stmt = {
-    <l:@L> <target:Variable> ":=" <val:Expr> <r:@R> => {
-        let span = Span::new(l, r);
-        let target_span = target.span;
-        Spanned { 
-            span, 
-            node: StmtKind::Assignment { 
-                target: Spanned { span: target_span, node: ExprKind::Variable(Box::new(target)) }, 
-                value: val 
-            } 
-        }
-    },
-    <l:@L> "goto" <n:"int_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: StmtKind::Goto(n) },
+    <target:Variable> ":=" <val:Expr> => Stmt::Assignment { target: Expr::Variable(Box::new(target)), value: val },
+    "goto" <n:"int_lit"> => Stmt::Goto(n),
     CompoundStmt,
     ProcedureCall,
-    <l:@L> "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:MatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) } 
-    },
-    <l:@L> "while" <cond:Expr> "do" <body:MatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::While { condition: cond, body: Box::new(body) } 
-    },
-    <l:@L> "repeat" <body:StmtList> "until" <cond:Expr> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::Repeat { body, until: cond } 
-    },
-    <l:@L> "for" <id:"identifier"> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:MatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::For { id, start, up: to, end, body: Box::new(body) } 
-    },
-    <l:@L> "with" <ids:VariableList> "do" <body:MatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::With { ids, body: Box::new(body) } 
-    },
-    <l:@L> <lbl:"int_lit"> ":" <s:MatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::Labeled(lbl, Box::new(s)) 
-    },
-    <l:@L> "case" <expr:Expr> "of" <items:CaseList> <else_stmt:CaseElseOpt> "end" <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::Case { expr, items, else_stmt: else_stmt.map(Box::new) } 
-    },
+    "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:MatchedStmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) },
+    "while" <cond:Expr> "do" <body:MatchedStmt> => Stmt::While { condition: cond, body: Box::new(body) },
+    "repeat" <body:StmtList> "until" <cond:Expr> => Stmt::Repeat { body, until: cond },
+    "for" <id:Identifier> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:MatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
+    "with" <ids:VariableList> "do" <body:MatchedStmt> => Stmt::With { ids, body: Box::new(body) },
+    <l:"int_lit"> ":" <s:MatchedStmt> => Stmt::Labeled(l, Box::new(s)),
+    "case" <expr:Expr> "of" <items:CaseList> <else_stmt:CaseElseOpt> "end" => Stmt::Case { expr, items, else_stmt: else_stmt.map(Box::new) },
 };
 
 UnmatchedStmt: Stmt = {
-    <l:@L> "if" <cond:Expr> "then" <ts:Stmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::If { condition: cond, then_stmt: Box::new(ts), else_stmt: None } 
-    },
-    <l:@L> "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:UnmatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) } 
-    },
-    <l:@L> "while" <cond:Expr> "do" <body:UnmatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::While { condition: cond, body: Box::new(body) } 
-    },
-    <l:@L> "for" <id:"identifier"> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:UnmatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::For { id, start, up: to, end, body: Box::new(body) } 
-    },
-    <l:@L> "with" <ids:VariableList> "do" <body:UnmatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::With { ids, body: Box::new(body) } 
-    },
-    <l:@L> <lbl:"int_lit"> ":" <s:UnmatchedStmt> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: StmtKind::Labeled(lbl, Box::new(s)) 
-    },
+    "if" <cond:Expr> "then" <ts:Stmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: None },
+    "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:UnmatchedStmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) },
+    "while" <cond:Expr> "do" <body:UnmatchedStmt> => Stmt::While { condition: cond, body: Box::new(body) },
+    "for" <id:Identifier> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:UnmatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
+    "with" <ids:VariableList> "do" <body:UnmatchedStmt> => Stmt::With { ids, body: Box::new(body) },
+    <l:"int_lit"> ":" <s:UnmatchedStmt> => Stmt::Labeled(l, Box::new(s)),
 };
 
 ForTo: bool = {
@@ -530,7 +487,7 @@ CaseList: Vec<CaseItem> = {
 };
 
 CaseItem: CaseItem = {
-    <l:@L> <labels:CaseLabelList> ":" <stmt:Stmt> <r:@R> => CaseItem { span: Span::new(l, r), labels, stmt },
+    <labels:CaseLabelList> ":" <stmt:Stmt> => CaseItem { labels, stmt },
 };
 
 CaseLabelList: Vec<Expr> = {
@@ -543,10 +500,7 @@ CaseLabelList: Vec<Expr> = {
 
 CaseLabel: Expr = {
     <c:Constant> => c,
-    <l:@L> <c1:Constant> ".." <c2:Constant> <r:@R> => Spanned { 
-        span: Span::new(l, r), 
-        node: ExprKind::Range(Box::new(c1), Box::new(c2)) 
-    },
+    <c1:Constant> ".." <c2:Constant> => Expr::Range(Box::new(c1), Box::new(c2)),
 };
 
 CaseElseOpt: Option<Stmt> = {
@@ -556,20 +510,19 @@ CaseElseOpt: Option<Stmt> = {
 };
 
 ProcedureCall: Stmt = {
-    <l:@L> <name:BuiltinProc> <r:@R> => Spanned { span: Span::new(l, r), node: StmtKind::ProcedureCall { name, args: None } },
-    <l:@L> <name:BuiltinProc> "(" <args:ExprList?> ")" <r:@R> => Spanned { span: Span::new(l, r), node: StmtKind::ProcedureCall { name, args } },
+    <name:BuiltinProc> => Stmt::ProcedureCall { name, args: None },
+    <name:BuiltinProc> "(" <args:ExprList?> ")" => Stmt::ProcedureCall { name, args },
     
-    <l:@L> <id:"identifier"> <r:@R> => Spanned { span: Span::new(l, r), node: StmtKind::ProcedureCall { name: id, args: None } },
-    <l:@L> <v:Variable> "(" <args:ExprList?> ")" <r:@R> => {
-        let span = Span::new(l, r);
-        match v.node {
-            VariableKind::Id(id) => Spanned { span, node: StmtKind::ProcedureCall { name: id, args } },
-            VariableKind::MemberAccess { record, field } => {
+    <id:Identifier> => Stmt::ProcedureCall { name: id, args: None },
+    <v:Variable> "(" <args:ExprList?> ")" => {
+        match v {
+            Variable::Id(id) => Stmt::ProcedureCall { name: id, args },
+            Variable::MemberAccess { record, field } => {
                 let mut new_args = vec![*record];
                 if let Some(mut a) = args {
                     new_args.append(&mut a);
                 }
-                Spanned { span, node: StmtKind::ProcedureCall { name: field, args: Some(new_args) } }
+                Stmt::ProcedureCall { name: field, args: Some(new_args) }
             },
             _ => panic!("Invalid procedure call target"),
         }
@@ -577,13 +530,9 @@ ProcedureCall: Stmt = {
 };
 
 VariableList: Vec<Expr> = {
-    <v:Variable> => {
-        let span = v.span;
-        vec![Spanned { span, node: ExprKind::Variable(Box::new(v)) }]
-    },
+    <v:Variable> => vec![Expr::Variable(Box::new(v))],
     <mut list:VariableList> "," <v:Variable> => {
-        let span = v.span;
-        list.push(Spanned { span, node: ExprKind::Variable(Box::new(v)) });
+        list.push(Expr::Variable(Box::new(v)));
         list
     }
 };
@@ -592,60 +541,56 @@ Expr: Expr = {
     #[precedence(level="0")]
     PrimaryExpr,
     #[precedence(level="1")]
-    <l:@L> "not" <e:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Unary { op: UnaryOp::Not, expr: Box::new(e) } },
-    <l:@L> "+" <e:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Unary { op: UnaryOp::Plus, expr: Box::new(e) } },
-    <l:@L> "-" <e:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Unary { op: UnaryOp::Minus, expr: Box::new(e) } },
+    "not" <e:Expr> => Expr::Unary { op: UnaryOp::Not, expr: Box::new(e) },
+    "+" <e:Expr> => Expr::Unary { op: UnaryOp::Plus, expr: Box::new(e) },
+    "-" <e:Expr> => Expr::Unary { op: UnaryOp::Minus, expr: Box::new(e) },
     #[precedence(level="2")] #[assoc(side="left")]
-    <l:@L> <l_exp:Expr> "*" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Mul, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "/" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::FloatDiv, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "div" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Div, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "mod" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Mod, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "and" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::And, left: Box::new(l_exp), right: Box::new(r_exp) } },
+    <l:Expr> "*" <r:Expr> => Expr::Binary { op: BinOp::Mul, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "/" <r:Expr> => Expr::Binary { op: BinOp::FloatDiv, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "div" <r:Expr> => Expr::Binary { op: BinOp::Div, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "mod" <r:Expr> => Expr::Binary { op: BinOp::Mod, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "and" <r:Expr> => Expr::Binary { op: BinOp::And, left: Box::new(l), right: Box::new(r) },
     #[precedence(level="3")] #[assoc(side="left")]
-    <l:@L> <l_exp:Expr> "+" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Add, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "-" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Sub, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "or" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Or, left: Box::new(l_exp), right: Box::new(r_exp) } },
+    <l:Expr> "+" <r:Expr> => Expr::Binary { op: BinOp::Add, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "-" <r:Expr> => Expr::Binary { op: BinOp::Sub, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "or" <r:Expr> => Expr::Binary { op: BinOp::Or, left: Box::new(l), right: Box::new(r) },
     #[precedence(level="4")] #[assoc(side="left")]
-    <l:@L> <l_exp:Expr> "=" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Eq, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "<>" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Neq, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "<" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Lt, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "<=" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Lte, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> ">" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Gt, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> ">=" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::Gte, left: Box::new(l_exp), right: Box::new(r_exp) } },
-    <l:@L> <l_exp:Expr> "in" <r_exp:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Binary { op: BinOp::In, left: Box::new(l_exp), right: Box::new(r_exp) } },
+    <l:Expr> "=" <r:Expr> => Expr::Binary { op: BinOp::Eq, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "<>" <r:Expr> => Expr::Binary { op: BinOp::Neq, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "<" <r:Expr> => Expr::Binary { op: BinOp::Lt, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "<=" <r:Expr> => Expr::Binary { op: BinOp::Lte, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> ">" <r:Expr> => Expr::Binary { op: BinOp::Gt, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> ">=" <r:Expr> => Expr::Binary { op: BinOp::Gte, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "in" <r:Expr> => Expr::Binary { op: BinOp::In, left: Box::new(l), right: Box::new(r) },
 };
 
 PrimaryExpr: Expr = {
-    <l:@L> <n:"int_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Integer(n) },
-    <l:@L> <n:"real_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Real(n) },
-    <l:@L> <c:"char_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Char(c) },
-    <l:@L> <c:"char_code"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Char(c) },
-    <l:@L> <s:"string_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::String(s) },
-    <l:@L> <b:"boolean_lit"> <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Boolean(b) },
-    <l:@L> "nil" <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Nil },
-    <l:@L> "[" <els:ElementList?> "]" <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::Set(els.unwrap_or_default()) },
+    <n:"int_lit"> => Expr::Integer(n),
+    <n:"real_lit"> => Expr::Real(n),
+    <c:"char_lit"> => Expr::Char(c),
+    <c:"char_code"> => Expr::Char(c),
+    <s:"string_lit"> => Expr::String(s),
+    <b:"boolean_lit"> => Expr::Boolean(b),
+    "nil" => Expr::Nil,
+    "[" <els:ElementList?> "]" => Expr::Set(els.unwrap_or_default()),
     
     // Function calls and UFCS (Method calls desugared to function calls)
-    <l:@L> <name:BuiltinFunc> "(" <args:ExprList?> ")" <r:@R> => Spanned { span: Span::new(l, r), node: ExprKind::FunctionCall { name, args } },
-    <l:@L> <v:Variable> "(" <args:ExprList?> ")" <r:@R> => {
-        let span = Span::new(l, r);
-        match v.node {
-            VariableKind::Id(id) => Spanned { span, node: ExprKind::FunctionCall { name: id, args } },
-            VariableKind::MemberAccess { record, field } => {
+    <name:BuiltinFunc> "(" <args:ExprList?> ")" => Expr::FunctionCall { name, args },
+    <v:Variable> "(" <args:ExprList?> ")" => {
+        match v {
+            Variable::Id(id) => Expr::FunctionCall { name: id, args },
+            Variable::MemberAccess { record, field } => {
                 let mut new_args = vec![*record];
                 if let Some(mut a) = args {
                     new_args.append(&mut a);
                 }
-                Spanned { span, node: ExprKind::FunctionCall { name: field, args: Some(new_args) } }
+                Expr::FunctionCall { name: field, args: Some(new_args) }
             },
             _ => panic!("Invalid function call target"),
         }
     },
     
-    <v:Variable> => {
-        let span = v.span;
-        Spanned { span, node: ExprKind::Variable(Box::new(v)) }
-    },
+    <v:Variable> => Expr::Variable(Box::new(v)),
     "(" <e:Expr> ")" => e,
 };
 
@@ -669,42 +614,15 @@ ElementList: Vec<Element> = {
 };
 
 Element: Element = {
-    <l:@L> <e:Expr> ".." <e2:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ElementKind::Range(e, e2) },
-    <l:@L> <e:Expr> <r:@R> => Spanned { span: Span::new(l, r), node: ElementKind::Single(e) },
+    <e:Expr> ".." <e2:Expr> => Element::Range(e, e2),
+    <e:Expr> => Element::Single(e),
 };
 
 Variable: Variable = {
-    <l:@L> <id:"identifier"> <r:@R> => Spanned { span: Span::new(l, r), node: VariableKind::Id(id) },
-    <l:@L> <v:Variable> "." <f:"identifier"> <r:@R> => {
-        let span = Span::new(l, r);
-        let v_span = v.span;
-        Spanned { 
-            span, 
-            node: VariableKind::MemberAccess { 
-                record: Box::new(Spanned { span: v_span, node: ExprKind::Variable(Box::new(v)) }), 
-                field: f 
-            } 
-        }
-    },
-    <l:@L> <v:Variable> "[" <ids:ExprList> "]" <r:@R> => {
-        let span = Span::new(l, r);
-        let v_span = v.span;
-        Spanned { 
-            span, 
-            node: VariableKind::ArrayAccess { 
-                array: Box::new(Spanned { span: v_span, node: ExprKind::Variable(Box::new(v)) }), 
-                indices: ids 
-            } 
-        }
-    },
-    <l:@L> <v:Variable> "^" <r:@R> => {
-        let span = Span::new(l, r);
-        let v_span = v.span;
-        Spanned { 
-            span, 
-            node: VariableKind::PointerDeref(Box::new(Spanned { span: v_span, node: ExprKind::Variable(Box::new(v)) })) 
-        }
-    },
+    <id:Identifier> => Variable::Id(id),
+    <v:Variable> "." <f:Identifier> => Variable::MemberAccess { record: Box::new(Expr::Variable(Box::new(v))), field: f },
+    <v:Variable> "[" <ids:ExprList> "]" => Variable::ArrayAccess { array: Box::new(Expr::Variable(Box::new(v))), indices: ids },
+    <v:Variable> "^" => Variable::PointerDeref(Box::new(Expr::Variable(Box::new(v)))),
 };
 
 ExprList: Vec<Expr> = {

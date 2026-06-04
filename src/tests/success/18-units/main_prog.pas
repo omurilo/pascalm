@@ -1,5 +1,5 @@
 program main_prog;
-uses math_lib;
+uses math/math_lib;
 begin
-  writeln(add(10, 20));
+  writeln(Sqrt(100.0));
 end.

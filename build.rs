@@ -12,12 +12,18 @@ fn main() {
     let status = Command::new("rustc")
         .args(&[
             "src/runtime_lib.rs",
-            "--crate-type", "lib",
-            "--emit", "llvm-bc",
-            "-o", dest_path.to_str().unwrap(),
-            "-C", "opt-level=3",
-            "-C", "panic=abort",
-            "--edition", "2021",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "llvm-bc",
+            "-o",
+            dest_path.to_str().unwrap(),
+            "-C",
+            "opt-level=3",
+            "-C",
+            "panic=abort",
+            "--edition",
+            "2021",
         ])
         .status()
         .expect("Failed to run rustc to compile runtime");
@@ -43,24 +49,27 @@ fn main() {
                     let status = Command::new("cargo")
                         .args(&[
                             "build",
-                            "--manifest-path", cargo_toml.to_str().unwrap(),
+                            "--manifest-path",
+                            cargo_toml.to_str().unwrap(),
                             "--release",
                         ])
                         .status()
                         .expect("Failed to run cargo build for stdlib");
-                    
+
                     if status.success() {
                         // Recursively find the .a file in target
                         let output = Command::new("find")
                             .args(&[
                                 path.join("target").to_str().unwrap(),
-                                "-name", &format!("lib{}.a", lib_name),
+                                "-name",
+                                &format!("lib{}.a", lib_name),
                             ])
                             .output()
                             .expect("Failed to run find");
-                        
+
                         let stdout = String::from_utf8_lossy(&output.stdout);
-                        let artifact_path = stdout.lines()
+                        let artifact_path = stdout
+                            .lines()
                             .filter(|l| l.contains("release") && !l.contains("deps"))
                             .next()
                             .unwrap_or(stdout.trim().lines().next().unwrap_or(""));
@@ -78,10 +87,14 @@ fn main() {
                     let status = Command::new("rustc")
                         .args(&[
                             lib_rs.to_str().unwrap(),
-                            "--crate-type", "staticlib",
-                            "-o", dest_path.to_str().unwrap(),
-                            "-C", "opt-level=3",
-                            "--edition", "2021",
+                            "--crate-type",
+                            "staticlib",
+                            "-o",
+                            dest_path.to_str().unwrap(),
+                            "-C",
+                            "opt-level=3",
+                            "--edition",
+                            "2021",
                         ])
                         .status()
                         .expect("Failed to run rustc for stdlib");
@@ -97,22 +110,25 @@ fn main() {
     // Generate a helper file to include all libraries automatically
     let mut libs_rs = String::from("pub struct StdLibAsset {\n    pub name: &'static str,\n    pub source: &'static str,\n    pub archive: &'static [u8],\n}\n\n");
     libs_rs.push_str("pub fn get_stdlib_assets() -> Vec<StdLibAsset> {\n    vec![\n");
-    
+
     if stdlib_path.exists() {
         for entry in std::fs::read_dir(stdlib_path).unwrap() {
             let entry = entry.unwrap();
             let path = entry.path();
             if path.is_dir() {
                 let lib_name = path.file_name().unwrap().to_str().unwrap();
-                
+
                 // Find Pascal interface file
                 let mut pas_file = path.join(format!("{}.pas", lib_name));
                 if !pas_file.exists() {
                     pas_file = path.join(format!("{}.pascalm", lib_name));
                 }
-                
+
                 let source_include = if pas_file.exists() {
-                    format!("include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/{}\"))", pas_file.to_str().unwrap())
+                    format!(
+                        "include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/{}\"))",
+                        pas_file.to_str().unwrap()
+                    )
                 } else {
                     "\"\"".to_string()
                 };

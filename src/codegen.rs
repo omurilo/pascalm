@@ -12,7 +12,6 @@ pub struct CodeGen<'ctx> {
     pub context: &'ctx Context,
     pub module: Module<'ctx>,
     pub builder: Builder<'ctx>,
-    pub verbose: bool,
     variables: Vec<
         HashMap<
             String,
@@ -35,7 +34,6 @@ impl<'ctx> CodeGen<'ctx> {
             context,
             module: context.create_module(module_name),
             builder: context.create_builder(),
-            verbose: false,
             variables: vec![HashMap::new()],
             types: HashMap::new(),
             record_fields: HashMap::new(),
@@ -67,14 +65,12 @@ impl<'ctx> CodeGen<'ctx> {
             (
                 maxint.as_pointer_value(),
                 i64_t.as_basic_type_enum(),
-                TypeExpr {
-                    span: Span::default(),
-                    node: TypeExprKind::Simple("integer".to_string()),
-                },
+                TypeExpr::Simple("integer".to_string()),
             ),
         );
 
         let void_t = self.context.void_type();
+        let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
         let f64_t = self.context.f64_type();
         let i32_t = self.context.i32_type();
 
@@ -91,6 +87,16 @@ impl<'ctx> CodeGen<'ctx> {
         self.module.add_function(
             "pascal_halt",
             void_t.fn_type(&[i32_t.into()], false),
+            Some(inkwell::module::Linkage::External),
+        );
+        self.module.add_function(
+            "HttpGet",
+            void_t.fn_type(&[ptr_t.into()], false),
+            Some(inkwell::module::Linkage::External),
+        );
+        self.module.add_function(
+            "HttpJson",
+            void_t.fn_type(&[ptr_t.into()], false),
             Some(inkwell::module::Linkage::External),
         );
     }
@@ -130,20 +136,18 @@ impl<'ctx> CodeGen<'ctx> {
         inkwell::types::BasicTypeEnum<'ctx>,
         TypeExpr,
     )> {
+        let name_lower = name.to_lowercase();
         for s in self.variables.iter().rev() {
-            if let Some(v) = s.get(name) {
-                return Some(v);
+            for (v_name, v_val) in s {
+                if v_name.to_lowercase() == name_lower {
+                    return Some(v_val);
+                }
             }
         }
         None
     }
 
-    pub fn gen_program(
-        &mut self,
-        program: typed::TypedProgram,
-        module_interfaces: HashMap<String, HashMap<String, SymbolKind>>,
-    ) -> Result<(), String> {
-        self.external_interfaces = module_interfaces;
+    pub fn gen_program(&mut self, program: typed::TypedProgram) -> Result<(), String> {
         self.declare_external_interfaces();
         let i32_t = self.context.i32_type();
         let function = self
@@ -156,7 +160,7 @@ impl<'ctx> CodeGen<'ctx> {
         let void_t = self.context.void_type();
         for unit_name in &program.uses {
             let init_fn_name = format!("{}_init", unit_name.to_lowercase());
-            let init_fn = if let Some(f) = self.module.get_function(&init_fn_name) {
+            let init_fn = if let Some(f) = self.get_function_robust(&init_fn_name) {
                 f
             } else {
                 self.module.add_function(
@@ -177,12 +181,7 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    pub fn gen_unit(
-        &mut self,
-        block: typed::TypedBlock,
-        module_interfaces: HashMap<String, HashMap<String, SymbolKind>>,
-    ) -> Result<(), String> {
-        self.external_interfaces = module_interfaces;
+    pub fn gen_unit(&mut self, block: typed::TypedBlock) -> Result<(), String> {
         self.declare_external_interfaces();
         for p in &block.procedures {
             self.gen_typed_proc_func(p)?;
@@ -227,14 +226,23 @@ impl<'ctx> CodeGen<'ctx> {
         for (_, interface) in interfaces {
             for (name, kind) in interface {
                 match kind {
-                    SymbolKind::Procedure { params } => {
-                        self.declare_external_fn(&name, &params, None);
+                    SymbolKind::Procedure {
+                        params,
+                        external_name,
+                    } => {
+                        self.declare_external_fn(&name, &params, None, external_name.as_deref());
                     }
                     SymbolKind::Function {
                         params,
                         return_type,
+                        external_name,
                     } => {
-                        self.declare_external_fn(&name, &params, Some(&return_type));
+                        self.declare_external_fn(
+                            &name,
+                            &params,
+                            Some(&return_type),
+                            external_name.as_deref(),
+                        );
                     }
                     _ => {}
                 }
@@ -242,23 +250,28 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn declare_external_fn(&mut self, name: &str, params: &[Param], return_type: Option<&String>) {
-        println!("Declaring external function: {}", name);
-        if self.module.get_function(name).is_some() {
+    fn declare_external_fn(
+        &mut self,
+        name: &str,
+        params: &[Param],
+        return_type: Option<&String>,
+        external_name: Option<&str>,
+    ) {
+        let symbol_name = external_name.unwrap_or(name);
+        if self.module.get_function(symbol_name).is_some() {
             return;
         }
-
         let mut a_t = Vec::new();
         for p in params {
-            match &p.node {
-                ParamKind::Variable { ids, type_expr, .. } => {
-                    if let Ok(lt) = self.resolve_type(type_expr) {
+            match p {
+                Param::Variable { ids, type_name, .. } => {
+                    if let Ok(lt) = self.resolve_type(&TypeExpr::Simple(type_name.clone())) {
                         for _ in ids {
                             a_t.push(lt.into());
                         }
                     }
                 }
-                ParamKind::Procedure { .. } | ParamKind::Function { .. } => {
+                Param::Procedure { .. } | Param::Function { .. } => {
                     a_t.push(
                         self.context
                             .ptr_type(inkwell::AddressSpace::default())
@@ -267,87 +280,75 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
         }
-
         if let Some(ret_name) = return_type {
-            if let Ok(rt) = self.resolve_type(&TypeExpr {
-                span: Span::default(),
-                node: TypeExprKind::Simple(ret_name.clone()),
-            }) {
+            if let Ok(rt) = self.resolve_type(&TypeExpr::Simple(ret_name.clone())) {
                 let fn_t = match rt {
                     inkwell::types::BasicTypeEnum::IntType(t) => t.fn_type(&a_t, false),
                     inkwell::types::BasicTypeEnum::FloatType(t) => t.fn_type(&a_t, false),
                     inkwell::types::BasicTypeEnum::PointerType(t) => t.fn_type(&a_t, false),
                     _ => self.context.void_type().fn_type(&a_t, false),
                 };
-                self.module
-                    .add_function(name, fn_t, Some(inkwell::module::Linkage::External));
+                self.module.add_function(
+                    symbol_name,
+                    fn_t,
+                    Some(inkwell::module::Linkage::External),
+                );
             }
         } else {
             let fn_t = self.context.void_type().fn_type(&a_t, false);
             self.module
-                .add_function(name, fn_t, Some(inkwell::module::Linkage::External));
+                .add_function(symbol_name, fn_t, Some(inkwell::module::Linkage::External));
         }
     }
 
     fn get_function_robust(&mut self, name: &str) -> Option<FunctionValue<'ctx>> {
-        if self.verbose {
-            println!("Searching for function: {}", name);
-        }
         if let Some(f) = self.module.get_function(name) {
             return Some(f);
         }
-        // Try case-insensitive LLVM search
         let name_lower = name.to_lowercase();
-        let mut f_ptr = None;
         for f in self.module.get_functions() {
             if f.get_name().to_str().unwrap().to_lowercase() == name_lower {
-                f_ptr = Some(f);
-                break;
+                return Some(f);
             }
         }
-        if f_ptr.is_some() {
-            return f_ptr;
-        }
-
-        // Search in external interfaces
+        // Try searching in external interfaces and declare if found
         let interfaces = self.external_interfaces.clone();
-        if self.verbose {
-            println!(
-                "Searching in external interfaces (count: {})",
-                interfaces.len()
-            );
-        }
-        for (u_name, interface) in interfaces {
-            if self.verbose {
-                println!("Checking unit {}: symbols={:?}", u_name, interface.keys());
-            }
+        for (_, interface) in interfaces {
             for (sym_name, kind) in interface {
                 if sym_name.to_lowercase() == name_lower {
-                    if self.verbose {
-                        println!("Found match in unit {}: {}", u_name, sym_name);
-                    }
                     match kind {
-                        SymbolKind::Procedure { params } => {
-                            self.declare_external_fn(&sym_name, &params, None);
-                            return self.module.get_function(&sym_name);
+                        SymbolKind::Procedure {
+                            params,
+                            external_name,
+                        } => {
+                            self.declare_external_fn(
+                                &sym_name,
+                                &params,
+                                None,
+                                external_name.as_deref(),
+                            );
+                            return self
+                                .module
+                                .get_function(external_name.as_deref().unwrap_or(&sym_name));
                         }
                         SymbolKind::Function {
                             params,
                             return_type,
+                            external_name,
                         } => {
-                            self.declare_external_fn(&sym_name, &params, Some(&return_type));
-                            return self.module.get_function(&sym_name);
+                            self.declare_external_fn(
+                                &sym_name,
+                                &params,
+                                Some(&return_type),
+                                external_name.as_deref(),
+                            );
+                            return self
+                                .module
+                                .get_function(external_name.as_deref().unwrap_or(&sym_name));
                         }
                         _ => {}
                     }
                 }
-            }
-        }
-
-        // Final fallback: try to find again by lowercase if we declared it with a different name
-        for f in self.module.get_functions() {
-            if f.get_name().to_str().unwrap().to_lowercase() == name_lower {
-                return Some(f);
             }
         }
         None
@@ -368,24 +369,14 @@ impl<'ctx> CodeGen<'ctx> {
                     (
                         g.as_pointer_value(),
                         l_t,
-                        TypeExpr {
-                            span: Span::default(),
-                            node: TypeExprKind::Simple("unknown".to_string()),
-                        },
+                        TypeExpr::Simple("unknown".to_string()),
                     ),
                 );
             } else {
                 let ptr = self.create_entry_block_alloca(function, name, l_t);
                 self.variables.last_mut().unwrap().insert(
                     name.clone(),
-                    (
-                        ptr,
-                        l_t,
-                        TypeExpr {
-                            span: Span::default(),
-                            node: TypeExprKind::Simple("unknown".to_string()),
-                        },
-                    ),
+                    (ptr, l_t, TypeExpr::Simple("unknown".to_string())),
                 );
             }
         }
@@ -400,10 +391,7 @@ impl<'ctx> CodeGen<'ctx> {
                 (
                     g.as_pointer_value(),
                     val.get_type(),
-                    TypeExpr {
-                        span: Span::default(),
-                        node: TypeExprKind::Simple("unknown".to_string()),
-                    },
+                    TypeExpr::Simple("unknown".to_string()),
                 ),
             );
         }
@@ -435,7 +423,12 @@ impl<'ctx> CodeGen<'ctx> {
         let function = if let Some(f) = self.module.get_function(&decl.name) {
             f
         } else {
-            self.module.add_function(&decl.name, fn_t, None)
+            let symbol_name = decl.external_name.as_deref().unwrap_or(&decl.name);
+            let f = self.module.add_function(symbol_name, fn_t, None);
+            if decl.external_name.is_some() {
+                f.set_linkage(inkwell::module::Linkage::External);
+            }
+            f
         };
         if let Some(body) = &decl.body {
             let bb = self.context.append_basic_block(function, "entry");
@@ -449,28 +442,14 @@ impl<'ctx> CodeGen<'ctx> {
                 self.builder.build_store(ptr, val).unwrap();
                 self.variables.last_mut().unwrap().insert(
                     name.clone(),
-                    (
-                        ptr,
-                        pt,
-                        TypeExpr {
-                            span: Span::default(),
-                            node: TypeExprKind::Simple("unknown".to_string()),
-                        },
-                    ),
+                    (ptr, pt, TypeExpr::Simple("unknown".to_string())),
                 );
             }
             if decl.return_type != typed::Type::Void {
                 let ptr = self.create_entry_block_alloca(function, &decl.name, ret_t);
                 self.variables.last_mut().unwrap().insert(
                     decl.name.clone(),
-                    (
-                        ptr,
-                        ret_t,
-                        TypeExpr {
-                            span: Span::default(),
-                            node: TypeExprKind::Simple("unknown".to_string()),
-                        },
-                    ),
+                    (ptr, ret_t, TypeExpr::Simple("unknown".to_string())),
                 );
             }
             self.gen_typed_block(body, function)?;
@@ -502,18 +481,18 @@ impl<'ctx> CodeGen<'ctx> {
         stmt: &typed::TypedStmt,
         function: FunctionValue<'ctx>,
     ) -> Result<(), String> {
-        match &stmt.kind {
-            typed::TypedStmtKind::Compound(stmts) => {
+        match stmt {
+            typed::TypedStmt::Compound(stmts) => {
                 for s in stmts {
                     self.gen_typed_stmt(s, function)?;
                 }
             }
-            typed::TypedStmtKind::Assignment { target, value } => {
+            typed::TypedStmt::Assignment { target, value } => {
                 let val = self.gen_typed_expr(value)?;
                 let ptr = self.gen_typed_target_ptr(target)?;
                 self.builder.build_store(ptr, val).unwrap();
             }
-            typed::TypedStmtKind::If {
+            typed::TypedStmt::If {
                 condition,
                 then_stmt,
                 else_stmt,
@@ -551,7 +530,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 self.builder.position_at_end(merge_bb);
             }
-            typed::TypedStmtKind::While { condition, body } => {
+            typed::TypedStmt::While { condition, body } => {
                 let cond_bb = self.context.append_basic_block(function, "whilecond");
                 let body_bb = self.context.append_basic_block(function, "whilebody");
                 let end_bb = self.context.append_basic_block(function, "whileend");
@@ -566,7 +545,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.builder.build_unconditional_branch(cond_bb).unwrap();
                 self.builder.position_at_end(end_bb);
             }
-            typed::TypedStmtKind::Repeat { body, until } => {
+            typed::TypedStmt::Repeat { body, until } => {
                 let body_bb = self.context.append_basic_block(function, "repeatbody");
                 let end_bb = self.context.append_basic_block(function, "repeatend");
                 self.builder.build_unconditional_branch(body_bb).unwrap();
@@ -580,7 +559,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
                 self.builder.position_at_end(end_bb);
             }
-            typed::TypedStmtKind::For {
+            typed::TypedStmt::For {
                 id,
                 start,
                 up,
@@ -651,36 +630,89 @@ impl<'ctx> CodeGen<'ctx> {
                 self.builder.build_unconditional_branch(cond_bb).unwrap();
                 self.builder.position_at_end(end_bb);
             }
-            typed::TypedStmtKind::ProcedureCall { name, args } => {
-                if name == "write" || name == "writeln" {
+            typed::TypedStmt::ProcedureCall { name, args } => {
+                if name.to_lowercase() == "write" || name.to_lowercase() == "writeln" {
                     let printf = self.get_printf();
+                    let mut fmt = String::new();
+                    let mut llvm_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
+                        Vec::new();
+                    let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
+
                     for arg in args {
                         let val = self.gen_typed_expr(arg)?;
-                        let fmt = match &arg.ty {
-                            typed::Type::Integer => "%lld",
-                            typed::Type::Real => "%f",
-                            typed::Type::Char => "%c",
-                            typed::Type::String => "%s",
-                            typed::Type::Boolean => "%d",
-                            _ => "%p",
-                        };
-                        let fmt_val = self
-                            .builder
-                            .build_global_string_ptr(fmt, "fmt")
-                            .unwrap()
-                            .as_pointer_value();
-                        self.builder
-                            .build_call(printf, &[fmt_val.into(), val.into()], "printf")
-                            .unwrap();
+                        match arg.ty {
+                            typed::Type::Integer => {
+                                fmt.push_str("%lld");
+                                llvm_args.push(val.into());
+                            }
+                            typed::Type::Real => {
+                                fmt.push_str("%lf");
+                                llvm_args.push(val.into());
+                            }
+                            typed::Type::Boolean => {
+                                fmt.push_str("%s");
+                                let s = self
+                                    .builder
+                                    .build_select(
+                                        val.into_int_value(),
+                                        self.builder
+                                            .build_global_string_ptr("TRUE", "true")
+                                            .unwrap()
+                                            .as_pointer_value(),
+                                        self.builder
+                                            .build_global_string_ptr("FALSE", "false")
+                                            .unwrap()
+                                            .as_pointer_value(),
+                                        "boolstr",
+                                    )
+                                    .unwrap();
+                                llvm_args.push(s.into());
+                            }
+                            typed::Type::Char => {
+                                fmt.push_str("%c");
+                                llvm_args.push(val.into());
+                            }
+                            typed::Type::String => {
+                                fmt.push_str("%s");
+                                llvm_args.push(val.into());
+                            }
+                            _ => {
+                                fmt.push_str("%p");
+                                llvm_args.push(val.into());
+                            }
+                        }
                     }
-                    if name == "writeln" {
-                        let nl = self
+                    if name.to_lowercase() == "writeln" {
+                        fmt.push_str("\n");
+                    }
+                    let fmt_str = self
+                        .builder
+                        .build_global_string_ptr(&fmt, "fmt")
+                        .unwrap()
+                        .as_pointer_value();
+                    let mut final_args = vec![fmt_str.into()];
+                    final_args.extend(llvm_args);
+                    self.builder
+                        .build_call(printf, &final_args, "printf_call")
+                        .unwrap();
+                } else if name.to_lowercase() == "read" || name.to_lowercase() == "readln" {
+                    let scanf = self.get_scanf();
+                    for arg in args {
+                        let mut fmt = String::new();
+                        match arg.ty {
+                            typed::Type::Integer => fmt.push_str("%lld"),
+                            typed::Type::Real => fmt.push_str("%lf"),
+                            typed::Type::Char => fmt.push_str("%c"),
+                            _ => fmt.push_str("%s"),
+                        }
+                        let fmt_str = self
                             .builder
-                            .build_global_string_ptr("\n", "nl")
+                            .build_global_string_ptr(&fmt, "fmt")
                             .unwrap()
                             .as_pointer_value();
+                        let ptr = self.gen_typed_target_ptr(arg)?;
                         self.builder
-                            .build_call(printf, &[nl.into()], "printf")
+                            .build_call(scanf, &[fmt_str.into(), ptr.into()], "scanf_call")
                             .unwrap();
                     }
                 } else {
@@ -689,12 +721,12 @@ impl<'ctx> CodeGen<'ctx> {
                         l_a.push(self.gen_typed_expr(a)?.into());
                     }
                     let real_name = match name.as_str() {
-                        "read" | "readln" => name.as_str(),
+                        "RuntimeInit" => "pascal_runtime_init",
+                        "Halt" => "pascal_halt",
                         _ => name.as_str(),
                     };
-
-                    let call_res = if let Some(f_c) = self.get_function_robust(real_name) {
-                        Some(self.builder.build_call(f_c, &l_a, "call").unwrap())
+                    if let Some(f_c) = self.get_function_robust(real_name) {
+                        self.builder.build_call(f_c, &l_a, "call").unwrap();
                     } else if let Some((p, l_t, _)) = self.get_variable(name).cloned() {
                         let f_p = self
                             .builder
@@ -718,31 +750,17 @@ impl<'ctx> CodeGen<'ctx> {
                             a_t.push(b_v.get_type().into());
                         }
                         let fn_t = self.context.void_type().fn_type(&a_t, false);
-                        Some(
-                            self.builder
-                                .build_indirect_call(fn_t, f_p, &l_a, "call")
-                                .unwrap(),
-                        )
-                    } else {
-                        // Try to re-declare if it's an external interface procedure we missed
-                        self.declare_external_interfaces();
-                        if let Some(f_c) = self.module.get_function(real_name) {
-                            Some(self.builder.build_call(f_c, &l_a, "call").unwrap())
-                        } else {
-                            None
-                        }
-                    };
-
-                    if call_res.is_none() {
-                        return Err(format!("Procedure {} not found", name));
+                        self.builder
+                            .build_indirect_call(fn_t, f_p, &l_a, "call")
+                            .unwrap();
                     }
                 }
             }
-            typed::TypedStmtKind::Goto(l) => {
+            typed::TypedStmt::Goto(l) => {
                 let bb = self.get_or_create_label_bb(function, *l);
                 self.builder.build_unconditional_branch(bb).unwrap();
             }
-            typed::TypedStmtKind::Labeled(l, s) => {
+            typed::TypedStmt::Labeled(l, s) => {
                 let bb = self.get_or_create_label_bb(function, *l);
                 if self
                     .builder
@@ -756,7 +774,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.builder.position_at_end(bb);
                 self.gen_typed_stmt(s, function)?;
             }
-            typed::TypedStmtKind::Case {
+            typed::TypedStmt::Case {
                 expr,
                 items,
                 else_stmt,
@@ -774,13 +792,16 @@ impl<'ctx> CodeGen<'ctx> {
                                 .push((self.context.i64_type().const_int(*n as u64, false), c_bb)),
                             typed::TypedExprKind::Variable(typed::TypedVariable::Id(id)) => {
                                 if let Some(v) = self.get_variable(id) {
-                                    let (_p, _l_t, _) = v;
-                                    // This is a bit hacky, but for global constants we try to get the initializer
-                                    if let Some(g) = self.module.get_global(id) {
-                                        if let Some(init) = g.get_initializer() {
-                                            if init.is_int_value() {
-                                                c_s.push((init.into_int_value(), c_bb));
+                                    let (p, _, _) = v;
+                                    // This is a bit hacky, but we try to find if it's a global constant
+                                    for g in self.module.get_globals() {
+                                        if g.as_pointer_value() == *p {
+                                            if let Some(init) = g.get_initializer() {
+                                                if init.is_int_value() {
+                                                    c_s.push((init.into_int_value(), c_bb));
+                                                }
                                             }
+                                            break;
                                         }
                                     }
                                 }
@@ -819,11 +840,11 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 self.builder.position_at_end(m_bb);
             }
-            typed::TypedStmtKind::With { objects, body } => {
+            typed::TypedStmt::With { objects, body } => {
                 self.enter_scope();
                 for obj in objects {
                     let (ptr, l_t) = self.gen_typed_variable_ptr_from_expr(obj)?;
-                    if let typed::Type::Record { fields: _ } = &obj.ty {
+                    if let typed::Type::Record { fields } = &obj.ty {
                         let t_k = format!("{:?}", l_t);
                         if let Some(f_i) = self.record_fields.get(&t_k) {
                             for (f_n, &idx) in f_i {
@@ -835,14 +856,7 @@ impl<'ctx> CodeGen<'ctx> {
                                     l_t.into_struct_type().get_field_type_at_index(idx).unwrap();
                                 self.variables.last_mut().unwrap().insert(
                                     f_n.clone(),
-                                    (
-                                        m_p,
-                                        m_t,
-                                        TypeExpr {
-                                            span: Span::default(),
-                                            node: TypeExprKind::Simple("unknown".to_string()),
-                                        },
-                                    ),
+                                    (m_p, m_t, TypeExpr::Simple("unknown".to_string())),
                                 );
                             }
                         }
@@ -851,7 +865,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.gen_typed_stmt(body, function)?;
                 self.exit_scope();
             }
-            typed::TypedStmtKind::Empty => {
+            typed::TypedStmt::Empty => {
                 let z = self.context.i64_type().const_zero();
                 self.builder.build_or(z, z, "nop").unwrap();
             }
@@ -860,9 +874,6 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn gen_typed_expr(&mut self, expr: &typed::TypedExpr) -> Result<BasicValueEnum<'ctx>, String> {
-        if expr.ty == typed::Type::Error {
-            return Err("Cannot generate code for expression with semantic errors".to_string());
-        }
         match &expr.kind {
             typed::TypedExprKind::Integer(n) => {
                 Ok(self.context.i64_type().const_int(*n as u64, false).into())
@@ -884,7 +895,7 @@ impl<'ctx> CodeGen<'ctx> {
                 Ok((p, l_t)) => Ok(self.builder.build_load(l_t, p, "load").unwrap()),
                 Err(e) => {
                     if let typed::TypedVariable::Id(id) = v {
-                        if let Some(f) = self.module.get_function(id) {
+                        if let Some(f) = self.get_function_robust(id) {
                             return Ok(f.as_global_value().as_pointer_value().into());
                         }
                     }
@@ -1222,9 +1233,14 @@ impl<'ctx> CodeGen<'ctx> {
                     "Sqrt" => "pascal_sqrt",
                     _ => name.as_str(),
                 };
-
-                let call_res = if let Some(f_c) = self.get_function_robust(real_name) {
-                    Some(self.builder.build_call(f_c, &l_a, name).unwrap())
+                if let Some(f_c) = self.get_function_robust(real_name) {
+                    let call = self.builder.build_call(f_c, &l_a, name).unwrap();
+                    let res = call.try_as_basic_value().left();
+                    if let Some(val) = res {
+                        Ok(val)
+                    } else {
+                        Ok(self.context.i64_type().const_zero().as_basic_value_enum())
+                    }
                 } else if let Some((p, l_t, _)) = self.get_variable(name).cloned() {
                     let f_p = self
                         .builder
@@ -1254,28 +1270,13 @@ impl<'ctx> CodeGen<'ctx> {
                         inkwell::types::BasicTypeEnum::PointerType(t) => t.fn_type(&a_t, false),
                         _ => self.context.void_type().fn_type(&a_t, false),
                     };
-                    Some(
-                        self.builder
-                            .build_indirect_call(fn_t, f_p, &l_a, name)
-                            .unwrap(),
-                    )
-                } else {
-                    // Try to re-declare if it's an external interface function we missed
-                    self.declare_external_interfaces();
-                    if let Some(f_c) = self.module.get_function(real_name) {
-                        Some(self.builder.build_call(f_c, &l_a, name).unwrap())
-                    } else {
-                        None
-                    }
-                };
-
-                if let Some(call) = call_res {
-                    let res = call.try_as_basic_value().left();
-                    if let Some(val) = res {
-                        Ok(val)
-                    } else {
-                        Ok(self.context.i64_type().const_zero().as_basic_value_enum())
-                    }
+                    Ok(self
+                        .builder
+                        .build_indirect_call(fn_t, f_p, &l_a, name)
+                        .unwrap()
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap())
                 } else {
                     Err(format!("Func {} not found", name))
                 }
@@ -1457,8 +1458,8 @@ impl<'ctx> CodeGen<'ctx> {
         &mut self,
         te: &TypeExpr,
     ) -> Result<inkwell::types::BasicTypeEnum<'ctx>, String> {
-        match &te.node {
-            TypeExprKind::Simple(name) => match name.as_str() {
+        match te {
+            TypeExpr::Simple(name) => match name.as_str() {
                 "integer" => Ok(self.context.i64_type().as_basic_type_enum()),
                 "real" => Ok(self.context.f64_type().as_basic_type_enum()),
                 "boolean" => Ok(self.context.bool_type().as_basic_type_enum()),
@@ -1473,7 +1474,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .map(|(t, _)| *t)
                     .ok_or_else(|| format!("Type '{}' not defined", name)),
             },
-            TypeExprKind::Record {
+            TypeExpr::Record {
                 fields,
                 variant_part,
             } => {
@@ -1490,10 +1491,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 if let Some(vp) = variant_part {
                     if let Some(tag) = &vp.tag_field {
-                        let tag_type = self.resolve_type(&TypeExpr {
-                            span: vp.span,
-                            node: TypeExprKind::Simple(vp.tag_type.clone()),
-                        })?;
+                        let tag_type = self.resolve_type(&TypeExpr::Simple(vp.tag_type.clone()))?;
                         f_t.push(tag_type);
                         f_m.insert(tag.clone(), idx);
                         idx += 1;
@@ -1516,18 +1514,16 @@ impl<'ctx> CodeGen<'ctx> {
                 self.record_fields.insert(format!("{:?}", l_t), f_m);
                 Ok(l_t)
             }
-            TypeExprKind::Array {
+            TypeExpr::Array {
                 indices,
                 element_type,
             } => {
                 let et = self.resolve_type(element_type)?;
                 let mut t_s = 1;
                 for idx_te in indices {
-                    match &idx_te.node {
-                        TypeExprKind::Subrange { start, end } => {
-                            if let (ExprKind::Integer(s), ExprKind::Integer(e)) =
-                                (&start.node, &end.node)
-                            {
+                    match idx_te {
+                        TypeExpr::Subrange { start, end } => {
+                            if let (Expr::Integer(s), Expr::Integer(e)) = (start, end) {
                                 t_s *= (e - s + 1).max(0) as u64;
                             } else {
                                 t_s = 100;

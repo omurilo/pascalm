@@ -1,11 +1,19 @@
+use crate::ast::CompilationUnit;
 use clap::Parser;
-use std::fs;
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use inkwell::context::Context;
+use lalrpop_util::lalrpop_mod;
 use logos::Logos;
-use pascalm::ast::CompilationUnit;
-use pascalm::{lexer, analyzer, codegen, parser};
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
+
+mod analyzer;
+mod ast;
+mod codegen;
+mod lexer;
+mod symbol_table;
+mod typed_ast;
+lalrpop_mod!(pub parser);
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -30,10 +38,12 @@ fn main() {
     let args = Args::parse();
     let mut loader = ModuleLoader::new();
     loader.search_paths = args.lib_path.iter().map(PathBuf::from).collect();
-    
+
     match loader.load_recursively(Path::new(&args.file), args.verbose) {
         Ok(_) => {
-            let sorted_units = loader.topological_sort().expect("Circular dependency detected");
+            let sorted_units = loader
+                .topological_sort()
+                .expect("Circular dependency detected");
             let context = Context::create();
             let mut module_interfaces = HashMap::new();
             let mut generated_ir_files = Vec::new();
@@ -47,72 +57,104 @@ fn main() {
                 let unit = loader.modules.get(&name).unwrap();
                 match unit {
                     CompilationUnit::Program(p) => {
-                        let mut analyzer = analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
-                        match analyzer.analyze_program(p) {
+                        let mut resolved_p = p.clone();
+                        if let Some(uses) = &p.uses {
+                            resolved_p.uses = Some(
+                                uses.iter()
+                                    .map(|u| {
+                                        loader
+                                            .name_mapping
+                                            .get(&u.to_lowercase())
+                                            .cloned()
+                                            .unwrap_or(u.to_lowercase())
+                                    })
+                                    .collect(),
+                            );
+                        }
+                        let mut analyzer =
+                            analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
+                        match analyzer.analyze_program(&resolved_p) {
                             Ok(typed_ast) => {
-                                if !analyzer.diagnostics.is_empty() {
-                                    for diag in &analyzer.diagnostics {
-                                        eprintln!("Error at {:?}: {}", diag.span, diag.message);
-                                    }
-                                    std::process::exit(1);
-                                }
-                                let mut codegen = codegen::CodeGen::with_interfaces(&context, &p.name, module_interfaces.clone());
-                                codegen.verbose = args.verbose;
-                                if let Err(e) = codegen.gen_program(typed_ast, module_interfaces.clone()) {
+                                let mut codegen = codegen::CodeGen::with_interfaces(
+                                    &context,
+                                    &p.name,
+                                    module_interfaces.clone(),
+                                );
+                                if let Err(e) = codegen.gen_program(typed_ast) {
                                     eprintln!("Codegen error in program {}: {}", name, e);
                                     std::process::exit(1);
                                 }
-                                
+
                                 let ir_path = format!("{}.ll", p.name);
-                                codegen.module.print_to_file(&ir_path).expect("Failed to write LLVM IR");
+                                codegen
+                                    .module
+                                    .print_to_file(&ir_path)
+                                    .expect("Failed to write LLVM IR");
                                 generated_ir_files.push(ir_path);
                             }
                             Err(e) => {
-                                for diag in &analyzer.diagnostics {
-                                    eprintln!("Error at {:?}: {}", diag.span, diag.message);
-                                }
-                                if analyzer.diagnostics.is_empty() {
-                                    eprintln!("Semantic error in program {}: {}", name, e);
-                                }
+                                eprintln!("Semantic error in program {}: {}", name, e);
                                 std::process::exit(1);
                             }
                         }
                     }
                     CompilationUnit::Unit(u) => {
-                        let mut analyzer = analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
-                        let (interface, typed_block) = match analyzer.analyze_unit(u) {
-                            Ok(res) => {
-                                if !analyzer.diagnostics.is_empty() {
-                                    for diag in &analyzer.diagnostics {
-                                        eprintln!("Error in unit {}: at {:?}: {}", name, diag.span, diag.message);
+                        let mut resolved_u = u.clone();
+                        if let Some(uses) = &u.interface.uses {
+                            resolved_u.interface.uses = Some(
+                                uses.iter()
+                                    .map(|u| {
+                                        loader
+                                            .name_mapping
+                                            .get(&u.to_lowercase())
+                                            .cloned()
+                                            .unwrap_or(u.to_lowercase())
+                                    })
+                                    .collect(),
+                            );
+                        }
+                        if let Some(uses) = &u.implementation.uses {
+                            resolved_u.implementation.uses = Some(
+                                uses.iter()
+                                    .map(|u| {
+                                        loader
+                                            .name_mapping
+                                            .get(&u.to_lowercase())
+                                            .cloned()
+                                            .unwrap_or(u.to_lowercase())
+                                    })
+                                    .collect(),
+                            );
+                        }
+                        let mut analyzer =
+                            analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
+                        match analyzer.analyze_unit(&resolved_u) {
+                            Ok((interface, typed_block)) => {
+                                module_interfaces.insert(name.clone(), interface);
+
+                                if !is_builtin {
+                                    let mut codegen = codegen::CodeGen::with_interfaces(
+                                        &context,
+                                        &u.name,
+                                        module_interfaces.clone(),
+                                    );
+                                    if let Err(e) = codegen.gen_unit(typed_block) {
+                                        eprintln!("Codegen error in unit {}: {}", name, e);
+                                        std::process::exit(1);
                                     }
-                                    std::process::exit(1);
+
+                                    let ir_path = format!("{}.ll", u.name);
+                                    codegen
+                                        .module
+                                        .print_to_file(&ir_path)
+                                        .expect("Failed to write LLVM IR");
+                                    generated_ir_files.push(ir_path);
                                 }
-                                res
                             }
                             Err(e) => {
-                                for diag in &analyzer.diagnostics {
-                                    eprintln!("Error in unit {}: at {:?}: {}", name, diag.span, diag.message);
-                                }
-                                if analyzer.diagnostics.is_empty() {
-                                    eprintln!("Semantic error in unit {}: {}", name, e);
-                                }
+                                eprintln!("Semantic error in unit {}: {}", name, e);
                                 std::process::exit(1);
                             }
-                        };
-                        module_interfaces.insert(name.clone(), interface);
-
-                        if !is_builtin {
-                            let mut codegen = codegen::CodeGen::with_interfaces(&context, &u.name, module_interfaces.clone());
-                            codegen.verbose = args.verbose;
-                            if let Err(e) = codegen.gen_unit(typed_block, module_interfaces.clone()) {
-                                eprintln!("Codegen error in unit {}: {}", name, e);
-                                std::process::exit(1);
-                            }
-
-                            let ir_path = format!("{}.ll", u.name);
-                            codegen.module.print_to_file(&ir_path).expect("Failed to write LLVM IR");
-                            generated_ir_files.push(ir_path);
                         }
                     }
                 }
@@ -126,9 +168,10 @@ fn main() {
                 let mut temp_libs = Vec::new();
 
                 for lib_name in used_builtin_libs {
-                    if let Some(content) = loader.embedded_libs.get(&lib_name) {
+                    if let Some(asset) = get_stdlib_assets().iter().find(|a| a.name == lib_name) {
                         let temp_path = std::env::temp_dir().join(format!("lib{}_tmp.a", lib_name));
-                        fs::write(&temp_path, content).expect("Failed to write temporary library");
+                        fs::write(&temp_path, asset.archive)
+                            .expect("Failed to write temporary library");
                         clang_args.push(temp_path.to_str().unwrap().to_string());
                         temp_libs.push(temp_path);
                     }
@@ -175,9 +218,9 @@ fn main() {
 struct ModuleLoader {
     modules: HashMap<String, CompilationUnit>,
     embedded_units: HashMap<String, String>,
-    embedded_libs: HashMap<String, &'static [u8]>,
     search_paths: Vec<PathBuf>,
     loading_stack: Vec<String>,
+    name_mapping: HashMap<String, String>,
 }
 
 impl ModuleLoader {
@@ -185,29 +228,33 @@ impl ModuleLoader {
         let mut loader = Self {
             modules: HashMap::new(),
             embedded_units: HashMap::new(),
-            embedded_libs: HashMap::new(),
             search_paths: Vec::new(),
             loading_stack: Vec::new(),
+            name_mapping: HashMap::new(),
         };
-        
+
         let assets = get_stdlib_assets();
-        for (name, content, lib_content) in assets {
-            loader.embedded_units.insert(name.to_lowercase(), content.to_string());
-            if let Some(lib) = lib_content {
-                loader.embedded_libs.insert(name.to_lowercase(), lib);
-            }
+        for asset in assets {
+            loader
+                .embedded_units
+                .insert(asset.name.to_lowercase(), asset.source.to_string());
         }
-        
+
         loader
     }
 
-    fn load_recursively(&mut self, source_path: &Path, verbose: bool) -> Result<(), String> {
+    fn load_recursively(&mut self, source_path: &Path, verbose: bool) -> Result<String, String> {
         let input = fs::read_to_string(source_path)
             .map_err(|e| format!("Failed to read {}: {}", source_path.display(), e))?;
         self.parse_and_load(input, source_path.to_path_buf(), verbose)
     }
 
-    pub fn parse_and_load(&mut self, input: String, source_path: PathBuf, verbose: bool) -> Result<(), String> {
+    pub fn parse_and_load(
+        &mut self,
+        input: String,
+        source_path: PathBuf,
+        verbose: bool,
+    ) -> Result<String, String> {
         if verbose {
             println!("Tokens for {}:", source_path.display());
             let mut debug_lexer = lexer::Token::lexer(&input);
@@ -217,22 +264,29 @@ impl ModuleLoader {
         }
         let lexer = lexer::Lexer::new(&input);
         let parser = parser::CompilationUnitParser::new();
-        let unit = parser.parse(lexer).map_err(|e| format!("Parser failed: {:?}", e))?;
-        
-        let name = match &unit {
+        let unit = parser
+            .parse(lexer)
+            .map_err(|e| format!("Parser failed: {:?}", e))?;
+
+        let actual_name = match &unit {
             CompilationUnit::Program(p) => p.name.clone(),
             CompilationUnit::Unit(u) => u.name.clone(),
-        }.to_lowercase();
-        
-        if self.loading_stack.contains(&name) {
-            return Err(format!("Circular dependency detected: {} -> {}", self.loading_stack.join(" -> "), name));
+        }
+        .to_lowercase();
+
+        if self.loading_stack.contains(&actual_name) {
+            return Err(format!(
+                "Circular dependency detected: {} -> {}",
+                self.loading_stack.join(" -> "),
+                actual_name
+            ));
         }
 
-        if self.modules.contains_key(&name) {
-            return Ok(());
+        if self.modules.contains_key(&actual_name) {
+            return Ok(actual_name);
         }
 
-        self.loading_stack.push(name.clone());
+        self.loading_stack.push(actual_name.clone());
 
         let deps = match &unit {
             CompilationUnit::Program(p) => p.uses.clone().unwrap_or_default(),
@@ -247,37 +301,46 @@ impl ModuleLoader {
 
         for dep in deps {
             let dep_lower = dep.to_lowercase();
-            if !self.modules.contains_key(&dep_lower) {
-                // 1. Check embedded units
+            if !self.modules.contains_key(&dep_lower) && !self.name_mapping.contains_key(&dep_lower)
+            {
                 if let Some(content) = self.embedded_units.get(&dep_lower) {
                     let virtual_path = PathBuf::from(format!("builtin://{}.pas", dep_lower));
-                    self.parse_and_load(content.to_string(), virtual_path, verbose)?;
+                    let real_unit_name =
+                        self.parse_and_load(content.to_string(), virtual_path, verbose)?;
+                    self.name_mapping.insert(dep_lower.clone(), real_unit_name);
                     continue;
                 }
-                
-                // 2. Check local and provided search paths
+
                 let mut found = false;
                 let mut paths_to_check = vec![base_dir.to_path_buf()];
                 paths_to_check.extend(self.search_paths.clone());
-                
+
                 for path in paths_to_check {
                     let file_path = path.join(format!("{}.pas", dep_lower));
                     if file_path.exists() {
-                        self.load_recursively(&file_path, verbose)?;
+                        let real_unit_name = self.load_recursively(&file_path, verbose)?;
+                        self.name_mapping.insert(dep_lower.clone(), real_unit_name);
+                        found = true;
+                        break;
+                    }
+                    let file_path_pascalm = path.join(format!("{}.pascalm", dep_lower));
+                    if file_path_pascalm.exists() {
+                        let real_unit_name = self.load_recursively(&file_path_pascalm, verbose)?;
+                        self.name_mapping.insert(dep_lower.clone(), real_unit_name);
                         found = true;
                         break;
                     }
                 }
-                
+
                 if !found {
                     return Err(format!("Unit {} not found", dep));
                 }
             }
         }
 
-        self.modules.insert(name.clone(), unit);
+        self.modules.insert(actual_name.clone(), unit);
         self.loading_stack.pop();
-        Ok(())
+        Ok(actual_name)
     }
 
     fn topological_sort(&self) -> Option<Vec<String>> {
@@ -300,16 +363,22 @@ impl ModuleLoader {
         temp_visited: &mut HashSet<String>,
         sorted: &mut Vec<String>,
     ) -> bool {
-        if temp_visited.contains(name) {
+        let actual_name = self
+            .name_mapping
+            .get(name)
+            .unwrap_or(&name.to_string())
+            .to_string();
+
+        if temp_visited.contains(&actual_name) {
             return false;
         }
-        if visited.contains(name) {
+        if visited.contains(&actual_name) {
             return true;
         }
 
-        temp_visited.insert(name.to_string());
+        temp_visited.insert(actual_name.clone());
 
-        let unit = &self.modules[name];
+        let unit = self.modules.get(&actual_name).unwrap();
         let deps = match unit {
             CompilationUnit::Program(p) => p.uses.clone().unwrap_or_default(),
             CompilationUnit::Unit(u) => {
@@ -325,9 +394,9 @@ impl ModuleLoader {
             }
         }
 
-        temp_visited.remove(name);
-        visited.insert(name.to_string());
-        sorted.push(name.to_string());
+        temp_visited.remove(&actual_name);
+        visited.insert(actual_name.clone());
+        sorted.push(actual_name);
         true
     }
 }
