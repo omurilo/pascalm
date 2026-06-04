@@ -1,13 +1,27 @@
+use crate::ast::{Param, TypeExpr};
 use std::collections::HashMap;
-use crate::ast::{TypeExpr, Param};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SymbolKind {
-    Variable { type_expr: TypeExpr },
-    Constant { type_expr: TypeExpr, value: String },
-    Procedure { params: Vec<Param> },
-    Function { params: Vec<Param>, return_type: String },
-    Type { type_expr: TypeExpr },
+    Variable {
+        type_expr: TypeExpr,
+    },
+    Constant {
+        type_expr: TypeExpr,
+        value: String,
+    },
+    Procedure {
+        params: Vec<Param>,
+        external_name: Option<String>,
+    },
+    Function {
+        params: Vec<Param>,
+        return_type: String,
+        external_name: Option<String>,
+    },
+    Type {
+        type_expr: TypeExpr,
+    },
 }
 
 pub struct SymbolTable {

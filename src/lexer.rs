@@ -2,7 +2,7 @@ use logos::Logos;
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 #[logos(skip r"[ \t\r\n\f]+")] // Skip whitespace
-#[logos(skip r"\{[^}]*\}")]    // Skip { comments }
+#[logos(skip r"\{[^}]*\}")] // Skip { comments }
 #[logos(skip r"\(\*(?:[^*]|\*[^)])*\*\)")] // Simple (* *) comment skip (non-nested for now)
 pub enum Token {
     // Keywords (case-insensitive)
@@ -96,6 +96,8 @@ pub enum Token {
     With,
     #[token("forward", ignore(case))]
     Forward,
+    #[token("name", ignore(case))]
+    Name,
     #[token("packed", ignore(case))]
     Packed,
     #[token("unit", ignore(case))]
@@ -241,7 +243,10 @@ mod tests {
         assert_eq!(lex.next(), Some(Ok(Token::CharLiteral('a'))));
         assert_eq!(lex.next(), Some(Ok(Token::CharLiteral('#'))));
         assert_eq!(lex.next(), Some(Ok(Token::CharCode('A'))));
-        assert_eq!(lex.next(), Some(Ok(Token::StringLiteral("string with 'quote'".to_string()))));
+        assert_eq!(
+            lex.next(),
+            Some(Ok(Token::StringLiteral("string with 'quote'".to_string())))
+        );
         assert_eq!(lex.next(), Some(Ok(Token::BooleanLiteral(true))));
     }
 }

@@ -7,19 +7,11 @@ pub enum Type {
     Boolean,
     Char,
     String,
-    Array {
-        element_type: Box<Type>,
-        size: u64,
-    },
-    Record {
-        fields: Vec<(String, Type)>,
-    },
+    Array { element_type: Box<Type>, size: u64 },
+    Record { fields: Vec<(String, Type)> },
     Pointer(Box<Type>),
     Set(Box<Type>),
-    Subrange {
-        start: i64,
-        end: i64,
-    },
+    Subrange { start: i64, end: i64 },
     Enum(Vec<String>),
     Procedure,
     Function(Box<Type>),
@@ -29,6 +21,7 @@ pub enum Type {
 #[derive(Debug, Clone)]
 pub struct TypedProgram {
     pub name: String,
+    pub uses: Vec<String>,
     pub block: TypedBlock,
 }
 
@@ -47,21 +40,51 @@ pub struct TypedProcFunc {
     pub params: Vec<(String, Type, bool)>, // name, type, is_var
     pub return_type: Type,
     pub body: Option<TypedBlock>,
+    pub external_name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub enum TypedStmt {
-    Assignment { target: TypedExpr, value: TypedExpr },
-    If { condition: TypedExpr, then_stmt: Box<TypedStmt>, else_stmt: Option<Box<TypedStmt>> },
-    While { condition: TypedExpr, body: Box<TypedStmt> },
-    Repeat { body: Vec<TypedStmt>, until: TypedExpr },
-    For { id: String, start: TypedExpr, up: bool, end: TypedExpr, body: Box<TypedStmt> },
-    ProcedureCall { name: String, args: Vec<TypedExpr> },
+    Assignment {
+        target: TypedExpr,
+        value: TypedExpr,
+    },
+    If {
+        condition: TypedExpr,
+        then_stmt: Box<TypedStmt>,
+        else_stmt: Option<Box<TypedStmt>>,
+    },
+    While {
+        condition: TypedExpr,
+        body: Box<TypedStmt>,
+    },
+    Repeat {
+        body: Vec<TypedStmt>,
+        until: TypedExpr,
+    },
+    For {
+        id: String,
+        start: TypedExpr,
+        up: bool,
+        end: TypedExpr,
+        body: Box<TypedStmt>,
+    },
+    ProcedureCall {
+        name: String,
+        args: Vec<TypedExpr>,
+    },
     Compound(Vec<TypedStmt>),
-    With { objects: Vec<TypedExpr>, body: Box<TypedStmt> },
+    With {
+        objects: Vec<TypedExpr>,
+        body: Box<TypedStmt>,
+    },
     Goto(i64),
     Labeled(i64, Box<TypedStmt>),
-    Case { expr: TypedExpr, items: Vec<TypedCaseItem>, else_stmt: Option<Box<TypedStmt>> },
+    Case {
+        expr: TypedExpr,
+        items: Vec<TypedCaseItem>,
+        else_stmt: Option<Box<TypedStmt>>,
+    },
     Empty,
 }
 
@@ -85,9 +108,19 @@ pub enum TypedExprKind {
     Char(char),
     String(String),
     Variable(TypedVariable),
-    Binary { op: BinOp, left: Box<TypedExpr>, right: Box<TypedExpr> },
-    Unary { op: UnaryOp, expr: Box<TypedExpr> },
-    FunctionCall { name: String, args: Vec<TypedExpr> },
+    Binary {
+        op: BinOp,
+        left: Box<TypedExpr>,
+        right: Box<TypedExpr>,
+    },
+    Unary {
+        op: UnaryOp,
+        expr: Box<TypedExpr>,
+    },
+    FunctionCall {
+        name: String,
+        args: Vec<TypedExpr>,
+    },
     Set(Vec<TypedElement>),
     Nil,
 }
@@ -95,8 +128,14 @@ pub enum TypedExprKind {
 #[derive(Debug, Clone)]
 pub enum TypedVariable {
     Id(String),
-    MemberAccess { record: Box<TypedExpr>, field: String },
-    ArrayAccess { array: Box<TypedExpr>, index: Box<TypedExpr> },
+    MemberAccess {
+        record: Box<TypedExpr>,
+        field: String,
+    },
+    ArrayAccess {
+        array: Box<TypedExpr>,
+        index: Box<TypedExpr>,
+    },
     PointerDeref(Box<TypedExpr>),
 }
 

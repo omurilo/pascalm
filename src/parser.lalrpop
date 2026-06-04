@@ -60,6 +60,7 @@ extern {
         "uses" => Token::Uses,
         "initialization" => Token::Initialization,
         "external" => Token::External,
+        "name" => Token::Name,
 
         "+" => Token::Plus,
         "-" => Token::Minus,
@@ -90,10 +91,15 @@ extern {
         "char_code" => Token::CharCode(<char>),
         "int_lit" => Token::IntegerLiteral(<i64>),
         "real_lit" => Token::RealLiteral(<f64>),
-        "identifier" => Token::Identifier(<String>),
+         "identifier" => Token::Identifier(<String>),
         "string_lit" => Token::StringLiteral(<String>),
     }
 }
+
+Identifier: String = {
+    "identifier" => <>,
+    "name" => "name".to_string(),
+};
 
 pub CompilationUnit: CompilationUnit = {
     Program => CompilationUnit::Program(<>),
@@ -101,7 +107,7 @@ pub CompilationUnit: CompilationUnit = {
 };
 
 pub Program: Program = {
-    "program" <name:"identifier"> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." => Program {
+    "program" <name:Identifier> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." => Program {
         name,
         heading,
         uses,
@@ -110,7 +116,7 @@ pub Program: Program = {
 };
 
 pub Unit: Unit = {
-    "unit" <name:"identifier"> ";"
+    "unit" <name:Identifier> ";"
     "interface" <interface:InterfaceSection>
     "implementation" <implementation:ImplementationSection>
     <initialization:Initialization?>
@@ -151,7 +157,7 @@ ImplementationSection: ImplementationSection = {
 };
 
 UsesClause: Vec<String> = {
-    "uses" <ids:IdentifierList> ";" => ids,
+    "uses" <ids:PathList> ";" => ids,
 };
 
 Initialization: Vec<Stmt> = {
@@ -164,11 +170,38 @@ HeadingOpt: Option<Vec<String>> = {
 };
 
 IdentifierList: Vec<String> = {
-    <id:"identifier"> => vec![id],
-    <mut list:IdentifierList> "," <id:"identifier"> => {
+    <id:Identifier> => vec![id],
+    <mut list:IdentifierList> "," <id:Identifier> => {
         list.push(id);
         list
     }
+};
+
+PathList: Vec<String> = {
+    <p:Path> => vec![p],
+    <mut list:PathList> "," <p:Path> => {
+        list.push(p);
+        list
+    }
+};
+
+Path: String = {
+    <is_absolute:"/"?> <segments:AbsoluteSegments> => {
+        let mut res = segments;
+        if is_absolute.is_some() {
+            res.insert(0, "".to_string());
+        }
+        res.join("/")
+      } 
+};
+
+AbsoluteSegments: Vec<String> = {
+    <head:Identifier> "/" <tail:AbsoluteSegments> => {
+        let mut res = vec![head];
+        res.extend(tail);
+        res
+    },
+    <s:Identifier> => vec![s],
 };
 
 Block: Block = {
@@ -206,7 +239,7 @@ ConstDecl: Vec<ConstDecl> = {
 };
 
 ConstItem: ConstDecl = {
-    <id:"identifier"> "=" <val:Constant> => ConstDecl { name: id, value: val },
+    <id:Identifier> "=" <val:Constant> => ConstDecl { name: id, value: val },
 };
 
 TypeDecl: Vec<TypeDecl> = {
@@ -218,7 +251,7 @@ TypeDecl: Vec<TypeDecl> = {
 };
 
 TypeItem: TypeDecl = {
-    <id:"identifier"> "=" <te:TypeExpr> => TypeDecl { name: id, type_expr: te },
+    <id:Identifier> "=" <te:TypeExpr> => TypeDecl { name: id, type_expr: te },
 };
 
 VarDecl: Vec<VarDecl> = {
@@ -242,10 +275,10 @@ ProcFuncHeaderList: Vec<ProcFuncDecl> = {
 };
 
 ProcFuncHeader: ProcFuncDecl = {
-    "procedure" <name:"identifier"> <params:Parameters?> => {
+    "procedure" <name:Identifier> <params:Parameters?> => {
         ProcFuncDecl::Procedure { name, params, block_or_forward: BlockOrForward::Forward }
     },
-    "function" <name:"identifier"> <params:Parameters?> ":" <rt:TypeName> => {
+    "function" <name:Identifier> <params:Parameters?> ":" <rt:TypeName> => {
         ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: BlockOrForward::Forward }
     }
 };
@@ -259,17 +292,17 @@ ProcFuncDecl: Vec<ProcFuncDecl> = {
 };
 
 ProcOrFunc: ProcFuncDecl = {
-    "procedure" <name:"identifier"> <params:Parameters?> ";" <block:BlockOrExternal> => {
+    "procedure" <name:Identifier> <params:Parameters?> ";" <block:BlockOrExternal> => {
         ProcFuncDecl::Procedure { name, params, block_or_forward: block }
     },
-    "function" <name:"identifier"> <params:Parameters?> ":" <rt:TypeName> ";" <block:BlockOrExternal> => {
+    "function" <name:Identifier> <params:Parameters?> ":" <rt:TypeName> ";" <block:BlockOrExternal> => {
         ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: block }
     }
 };
 
 BlockOrExternal: BlockOrForward = {
     "forward" => BlockOrForward::Forward,
-    "external" => BlockOrForward::Forward, // Treat external as forward/empty for now
+    "external" <n:("name" <"string_lit">)?> => BlockOrForward::External(n),
     <b:Block> => BlockOrForward::Block(Box::new(b)),
 };
 
@@ -288,8 +321,8 @@ ParamList: Vec<Param> = {
 ParamSection: Param = {
     "var" <ids:IdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: true, ids, type_name: tn },
     <ids:IdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: false, ids, type_name: tn },
-    "procedure" <id:"identifier"> <params:Parameters?> => Param::Procedure { id, params },
-    "function" <id:"identifier"> <params:Parameters?> ":" <tn:TypeName> => Param::Function { id, params, return_type: tn },
+    "procedure" <id:Identifier> <params:Parameters?> => Param::Procedure { id, params },
+    "function" <id:Identifier> <params:Parameters?> ":" <tn:TypeName> => Param::Function { id, params, return_type: tn },
 };
 
 TypeName: String = {
@@ -298,7 +331,7 @@ TypeName: String = {
     "boolean" => "boolean".to_string(),
     "char" => "char".to_string(),
     "string" => "string".to_string(),
-    <id:"identifier"> => id,
+    <id:Identifier> => id,
 };
 
 Constant: Expr = {
@@ -308,9 +341,9 @@ Constant: Expr = {
     <c:"char_code"> => Expr::Char(c),
     <s:"string_lit"> => Expr::String(s),
     <b:"boolean_lit"> => Expr::Boolean(b),
-    <id:"identifier"> => Expr::Variable(Box::new(Variable::Id(id))),
-    "+" <id:"identifier"> => Expr::Unary { op: UnaryOp::Plus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
-    "-" <id:"identifier"> => Expr::Unary { op: UnaryOp::Minus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
+    <id:Identifier> => Expr::Variable(Box::new(Variable::Id(id))),
+    "+" <id:Identifier> => Expr::Unary { op: UnaryOp::Plus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
+    "-" <id:Identifier> => Expr::Unary { op: UnaryOp::Minus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
 };
 
 TypeExpr: TypeExpr = {
@@ -357,7 +390,7 @@ VariantPart: VariantPart = {
 
 #[inline]
 TagField: Option<String> = {
-    <id:"identifier"> ":" => Some(id),
+    <id:Identifier> ":" => Some(id),
     () => None,
 };
 
@@ -425,7 +458,7 @@ MatchedStmt: Stmt = {
     "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:MatchedStmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) },
     "while" <cond:Expr> "do" <body:MatchedStmt> => Stmt::While { condition: cond, body: Box::new(body) },
     "repeat" <body:StmtList> "until" <cond:Expr> => Stmt::Repeat { body, until: cond },
-    "for" <id:"identifier"> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:MatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
+    "for" <id:Identifier> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:MatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
     "with" <ids:VariableList> "do" <body:MatchedStmt> => Stmt::With { ids, body: Box::new(body) },
     <l:"int_lit"> ":" <s:MatchedStmt> => Stmt::Labeled(l, Box::new(s)),
     "case" <expr:Expr> "of" <items:CaseList> <else_stmt:CaseElseOpt> "end" => Stmt::Case { expr, items, else_stmt: else_stmt.map(Box::new) },
@@ -435,7 +468,7 @@ UnmatchedStmt: Stmt = {
     "if" <cond:Expr> "then" <ts:Stmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: None },
     "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:UnmatchedStmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) },
     "while" <cond:Expr> "do" <body:UnmatchedStmt> => Stmt::While { condition: cond, body: Box::new(body) },
-    "for" <id:"identifier"> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:UnmatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
+    "for" <id:Identifier> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:UnmatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
     "with" <ids:VariableList> "do" <body:UnmatchedStmt> => Stmt::With { ids, body: Box::new(body) },
     <l:"int_lit"> ":" <s:UnmatchedStmt> => Stmt::Labeled(l, Box::new(s)),
 };
@@ -480,7 +513,7 @@ ProcedureCall: Stmt = {
     <name:BuiltinProc> => Stmt::ProcedureCall { name, args: None },
     <name:BuiltinProc> "(" <args:ExprList?> ")" => Stmt::ProcedureCall { name, args },
     
-    <id:"identifier"> => Stmt::ProcedureCall { name: id, args: None },
+    <id:Identifier> => Stmt::ProcedureCall { name: id, args: None },
     <v:Variable> "(" <args:ExprList?> ")" => {
         match v {
             Variable::Id(id) => Stmt::ProcedureCall { name: id, args },
@@ -586,8 +619,8 @@ Element: Element = {
 };
 
 Variable: Variable = {
-    <id:"identifier"> => Variable::Id(id),
-    <v:Variable> "." <f:"identifier"> => Variable::MemberAccess { record: Box::new(Expr::Variable(Box::new(v))), field: f },
+    <id:Identifier> => Variable::Id(id),
+    <v:Variable> "." <f:Identifier> => Variable::MemberAccess { record: Box::new(Expr::Variable(Box::new(v))), field: f },
     <v:Variable> "[" <ids:ExprList> "]" => Variable::ArrayAccess { array: Box::new(Expr::Variable(Box::new(v))), indices: ids },
     <v:Variable> "^" => Variable::PointerDeref(Box::new(Expr::Variable(Box::new(v)))),
 };

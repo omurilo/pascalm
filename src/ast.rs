@@ -85,13 +85,25 @@ pub enum ProcFuncDecl {
 pub enum BlockOrForward {
     Block(Box<Block>),
     Forward,
+    External(Option<String>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Param {
-    Variable { is_var: bool, ids: Vec<String>, type_name: String },
-    Procedure { id: String, params: Option<Vec<Param>> },
-    Function { id: String, params: Option<Vec<Param>>, return_type: String },
+    Variable {
+        is_var: bool,
+        ids: Vec<String>,
+        type_name: String,
+    },
+    Procedure {
+        id: String,
+        params: Option<Vec<Param>>,
+    },
+    Function {
+        id: String,
+        params: Option<Vec<Param>>,
+        return_type: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -113,8 +125,13 @@ pub enum TypeExpr {
         end: Expr,
     },
     Enum(Vec<String>),
-    Procedure { params: Option<Vec<Param>> },
-    Function { params: Option<Vec<Param>>, return_type: String },
+    Procedure {
+        params: Option<Vec<Param>>,
+    },
+    Function {
+        params: Option<Vec<Param>>,
+        return_type: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -230,12 +247,27 @@ pub enum Element {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinOp {
-    Add, Sub, Mul, Div, FloatDiv, Mod,
-    Eq, Neq, Lt, Lte, Gt, Gte,
-    And, Or, In, DotDot,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    FloatDiv,
+    Mod,
+    Eq,
+    Neq,
+    Lt,
+    Lte,
+    Gt,
+    Gte,
+    And,
+    Or,
+    In,
+    DotDot,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
-    Plus, Minus, Not,
+    Plus,
+    Minus,
+    Not,
 }
