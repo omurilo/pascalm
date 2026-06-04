@@ -1,6 +1,3 @@
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
-
 #[no_mangle]
 pub extern "C" fn pascal_runtime_init() {
     // Basic runtime initialization for Pascal programs.
