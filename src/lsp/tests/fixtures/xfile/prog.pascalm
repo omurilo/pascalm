@@ -1,0 +1,5 @@
+program P;
+uses mylib;
+begin
+  writeln(triple(3));
+end.
