@@ -23,4 +23,3 @@ begin
     socket_close(client);
   end;
 end.
-

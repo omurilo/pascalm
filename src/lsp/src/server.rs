@@ -8,7 +8,7 @@ use lalrpop_util::ParseError;
 use log::debug;
 use pascalm::ast::Span;
 use pascalm::lexer::{self, Token};
-use pascalm::{parser, CompilationUnit, SemanticAnalyzer, SymbolId, SymbolKind};
+use pascalm::{parser, CompilationUnit, SemanticAnalyzer, SymbolKind};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -83,6 +83,34 @@ impl Backend {
     //     }));
     //     Some(references)
     // }
+    //
+    fn get_rename_edit(
+        &self,
+        uri: String,
+        position: Position,
+        new_name: String,
+    ) -> Option<WorkspaceEdit> {
+        let all_references = self.semanticast_map.get(&uri)?.analyzer.references.clone();
+        let rope = self.document_map.get(&uri)?;
+        let edits = all_references
+            .iter()
+            .map(|item| {
+                let start = offset_to_position(item.0.start, &rope).unwrap();
+                let end = offset_to_position(item.0.end, &rope).unwrap();
+                TextEdit {
+                    range: Range::new(start, end),
+                    new_text: new_name.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let parsed_uri =
+            Url::parse(&uri).unwrap_or_else(|_| Url::from_directory_path(&uri).unwrap());
+        let mut edit_map = std::collections::HashMap::new();
+        edit_map.insert(parsed_uri, edits);
+
+        Some(WorkspaceEdit::new(edit_map))
+    }
 
     // fn get_rename_edit(
     //     &self,
@@ -761,7 +789,7 @@ impl LanguageServer for Backend {
                 ),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(false)),
-                rename_provider: Some(OneOf::Left(false)),
+                rename_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -927,18 +955,18 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
-    async fn rename(&self, _params: RenameParams) -> Result<Option<WorkspaceEdit>> {
-        Ok(None)
+    async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
+        let uri = params.text_document_position.text_document.uri.to_string();
+        let position = params.text_document_position.position;
+        let edits = self.get_rename_edit(uri, position, params.new_name);
+        Ok(edits)
     }
 
     async fn references(&self, _params: ReferenceParams) -> Result<Option<Vec<Location>>> {
         Ok(None)
     }
 
-    async fn formatting(
-        &self,
-        params: DocumentFormattingParams,
-    ) -> Result<Option<Vec<TextEdit>>> {
+    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
         let uri = params.text_document.uri.to_string();
         let Some(rope) = self.document_map.get(&uri) else {
             return Ok(None);
