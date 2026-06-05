@@ -53,62 +53,10 @@ impl SemanticAnalyzer {
                 value: i64::MAX.to_string(),
             },
         );
-        let _ = self.symbol_table.insert(
-            "Chr".to_string(),
-            SymbolKind::Function {
-                params: vec![Param::Variable {
-                    is_var: false,
-                    ids: vec!["num".to_string()],
-                    type_name: "integer".to_string(),
-                }],
-                return_type: "char".to_string(),
-                external_name: None,
-            },
-        );
-        let _ = self.symbol_table.insert(
-            "Ord".to_string(),
-            SymbolKind::Function {
-                params: vec![Param::Variable {
-                    is_var: false,
-                    ids: vec!["val".to_string()],
-                    type_name: "char".to_string(),
-                }],
-                return_type: "integer".to_string(),
-                external_name: None,
-            },
-        );
-
-        // Runtime functions
-        let _ = self.symbol_table.insert(
-            "RuntimeInit".to_string(),
-            SymbolKind::Procedure {
-                params: Vec::new(),
-                external_name: None,
-            },
-        );
-        let _ = self.symbol_table.insert(
-            "Sqrt".to_string(),
-            SymbolKind::Function {
-                params: vec![Param::Variable {
-                    is_var: false,
-                    ids: vec!["n".to_string()],
-                    type_name: "real".to_string(),
-                }],
-                return_type: "real".to_string(),
-                external_name: None,
-            },
-        );
-        let _ = self.symbol_table.insert(
-            "Halt".to_string(),
-            SymbolKind::Procedure {
-                params: vec![Param::Variable {
-                    is_var: false,
-                    ids: vec!["code".to_string()],
-                    type_name: "integer".to_string(),
-                }],
-                external_name: None,
-            },
-        );
+        // Note: runtime intrinsics such as Sqrt, Halt and RuntimeInit are NOT
+        // hardcoded here. They are provided by the `system` unit, which every
+        // program implicitly uses, so their signatures (and `external name`
+        // bindings) come from that unit's interface.
     }
 
     pub fn analyze_program(&mut self, program: &Program) -> Result<typed::TypedProgram, String> {
@@ -175,7 +123,7 @@ impl SemanticAnalyzer {
             &None,
             &[],
         );
-        let interface_symbols = self.symbol_table.global_scope();
+        let mut interface_symbols = self.symbol_table.global_scope();
         self.import_uses(&unit.implementation.uses)?;
         let typed_block = self.analyze_block_internal(
             &unit.implementation.constants,
@@ -184,6 +132,37 @@ impl SemanticAnalyzer {
             &unit.implementation.bodies,
             &unit.initialization.clone().unwrap_or_default(),
         )?;
+        // The `external name '...'` binding lives on the implementation
+        // declaration, but the interface signature is what callers see. Merge
+        // those bindings into the exported interface so call sites resolve the
+        // correct native link symbol.
+        if let Some(bodies) = &unit.implementation.bodies {
+            for body in bodies {
+                let (name, block_or_forward) = match body {
+                    ProcFuncDecl::Procedure {
+                        name,
+                        block_or_forward,
+                        ..
+                    } => (name, block_or_forward),
+                    ProcFuncDecl::Function {
+                        name,
+                        block_or_forward,
+                        ..
+                    } => (name, block_or_forward),
+                };
+                if let BlockOrForward::External(Some(ext)) = block_or_forward {
+                    if let Some(sym) = interface_symbols.get_mut(name) {
+                        match sym {
+                            SymbolKind::Function { external_name, .. }
+                            | SymbolKind::Procedure { external_name, .. } => {
+                                *external_name = Some(ext.clone());
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
         Ok((interface_symbols, typed_block))
     }
 
@@ -720,10 +699,31 @@ impl SemanticAnalyzer {
                 record: Box::new(self.analyze_expr(record)?),
                 field: field.clone(),
             }),
-            Variable::ArrayAccess { array, indices } => Ok(typed::TypedVariable::ArrayAccess {
-                array: Box::new(self.analyze_expr(array)?),
-                index: Box::new(self.analyze_expr(&indices[0])?),
-            }),
+            Variable::ArrayAccess { array, indices } => {
+                // Lower a multi-index access `a[i, j]` into nested single-index
+                // accesses `(a[i])[j]`, matching the nested array type layout.
+                let mut cur_expr = self.analyze_expr(array)?;
+                let n = indices.len();
+                for (k, idx) in indices.iter().enumerate() {
+                    let typed_idx = self.analyze_expr(idx)?;
+                    let elem_ty = match &cur_expr.ty {
+                        typed::Type::Array { element_type, .. } => (**element_type).clone(),
+                        _ => typed::Type::Void,
+                    };
+                    let tv = typed::TypedVariable::ArrayAccess {
+                        array: Box::new(cur_expr),
+                        index: Box::new(typed_idx),
+                    };
+                    if k + 1 == n {
+                        return Ok(tv);
+                    }
+                    cur_expr = typed::TypedExpr {
+                        ty: elem_ty,
+                        kind: typed::TypedExprKind::Variable(tv),
+                    };
+                }
+                Err("Array access without indices".to_string())
+            }
             Variable::PointerDeref(p) => Ok(typed::TypedVariable::PointerDeref(Box::new(
                 self.analyze_expr(p)?,
             ))),
@@ -779,6 +779,17 @@ impl SemanticAnalyzer {
         rt: &typed::Type,
         op: &BinOp,
     ) -> Result<typed::Type, String> {
+        // Set algebra: union (+), difference (-), intersection (*) keep the set type.
+        if matches!(lt, typed::Type::Set(_)) || matches!(rt, typed::Type::Set(_)) {
+            if let BinOp::Add | BinOp::Sub | BinOp::Mul = op {
+                let set_ty = if matches!(lt, typed::Type::Set(_)) {
+                    lt.clone()
+                } else {
+                    rt.clone()
+                };
+                return Ok(set_ty);
+            }
+        }
         match op {
             BinOp::Add => {
                 if *lt == typed::Type::String
@@ -827,10 +838,22 @@ impl SemanticAnalyzer {
                     }
                 }
             },
-            TypeExpr::Array { element_type, .. } => typed::Type::Array {
-                element_type: Box::new(self.convert_type(element_type)),
-                size: 100,
-            },
+            TypeExpr::Array {
+                indices,
+                element_type,
+            } => {
+                // Build a nested array type, one level per index dimension, so
+                // that `array[1..3, 1..2] of T` becomes Array(Array(T)).
+                let mut ty = self.convert_type(element_type);
+                let levels = indices.len().max(1);
+                for _ in 0..levels {
+                    ty = typed::Type::Array {
+                        element_type: Box::new(ty),
+                        size: 100,
+                    };
+                }
+                ty
+            }
             TypeExpr::Record {
                 fields,
                 variant_part,

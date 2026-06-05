@@ -26,6 +26,9 @@ pub struct CodeGen<'ctx> {
     record_fields: HashMap<String, HashMap<String, u32>>,
     labels: HashMap<i64, inkwell::basic_block::BasicBlock<'ctx>>,
     external_interfaces: HashMap<String, HashMap<String, SymbolKind>>,
+    // Maps a procedure/function name (lowercased) to the list of `is_var`
+    // flags for its parameters, so call sites know which args to pass by ref.
+    proc_var_params: HashMap<String, Vec<bool>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -39,6 +42,7 @@ impl<'ctx> CodeGen<'ctx> {
             record_fields: HashMap::new(),
             labels: HashMap::new(),
             external_interfaces: HashMap::new(),
+            proc_var_params: HashMap::new(),
         };
         cg.setup_builtins();
         cg
@@ -69,36 +73,11 @@ impl<'ctx> CodeGen<'ctx> {
             ),
         );
 
-        let void_t = self.context.void_type();
-        let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
-        let f64_t = self.context.f64_type();
-        let i32_t = self.context.i32_type();
-
-        self.module.add_function(
-            "pascal_runtime_init",
-            void_t.fn_type(&[], false),
-            Some(inkwell::module::Linkage::External),
-        );
-        self.module.add_function(
-            "pascal_sqrt",
-            f64_t.fn_type(&[f64_t.into()], false),
-            Some(inkwell::module::Linkage::External),
-        );
-        self.module.add_function(
-            "pascal_halt",
-            void_t.fn_type(&[i32_t.into()], false),
-            Some(inkwell::module::Linkage::External),
-        );
-        self.module.add_function(
-            "HttpGet",
-            void_t.fn_type(&[ptr_t.into()], false),
-            Some(inkwell::module::Linkage::External),
-        );
-        self.module.add_function(
-            "HttpJson",
-            void_t.fn_type(&[ptr_t.into()], false),
-            Some(inkwell::module::Linkage::External),
-        );
+        // No library or runtime functions are declared here. Everything the
+        // generated code calls — including the language intrinsics provided by
+        // the `system` unit (Sqrt, Halt, RuntimeInit, ...) — is resolved on
+        // demand from the unit interfaces via `declare_external_interfaces` /
+        // `get_function_robust`, honoring each declaration's `external name`.
     }
 
     fn get_printf(&self) -> FunctionValue<'ctx> {
@@ -109,6 +88,44 @@ impl<'ctx> CodeGen<'ctx> {
         let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
         self.module
             .add_function("printf", i32_t.fn_type(&[ptr_t.into()], true), None)
+    }
+
+    fn get_strcat(&self) -> FunctionValue<'ctx> {
+        if let Some(f) = self.module.get_function("pascal_strcat") {
+            return f;
+        }
+        let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
+        self.module.add_function(
+            "pascal_strcat",
+            ptr_t.fn_type(&[ptr_t.into(), ptr_t.into()], false),
+            Some(inkwell::module::Linkage::External),
+        )
+    }
+
+    /// Produces a `i8*` C-string pointer for a value being concatenated:
+    /// strings are already pointers, chars are materialized into a 2-byte
+    /// stack buffer.
+    fn to_cstr_ptr(
+        &self,
+        val: BasicValueEnum<'ctx>,
+        ty: &typed::Type,
+    ) -> Result<PointerValue<'ctx>, String> {
+        match ty {
+            typed::Type::String => Ok(val.into_pointer_value()),
+            typed::Type::Char => {
+                let i8_t = self.context.i8_type();
+                let buf_t = i8_t.array_type(2);
+                let buf = self.builder.build_alloca(buf_t, "charbuf").unwrap();
+                let zero = self.context.i32_type().const_zero();
+                let one = self.context.i32_type().const_int(1, false);
+                let c0 = unsafe { self.builder.build_gep(buf_t, buf, &[zero, zero], "c0").unwrap() };
+                let c1 = unsafe { self.builder.build_gep(buf_t, buf, &[zero, one], "c1").unwrap() };
+                self.builder.build_store(c0, val.into_int_value()).unwrap();
+                self.builder.build_store(c1, i8_t.const_zero()).unwrap();
+                Ok(c0)
+            }
+            _ => Err("Unsupported operand for string concatenation".to_string()),
+        }
     }
 
     fn get_scanf(&self) -> FunctionValue<'ctx> {
@@ -406,9 +423,22 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn gen_typed_proc_func(&mut self, decl: &typed::TypedProcFunc) -> Result<(), String> {
         let mut a_t = Vec::new();
-        for (_, ty, _) in &decl.params {
-            a_t.push(self.resolve_typed_type(ty)?.into());
+        for (_, ty, is_var) in &decl.params {
+            if *is_var {
+                // `var` parameters are passed by reference (as a pointer).
+                a_t.push(
+                    self.context
+                        .ptr_type(inkwell::AddressSpace::default())
+                        .into(),
+                );
+            } else {
+                a_t.push(self.resolve_typed_type(ty)?.into());
+            }
         }
+        self.proc_var_params.insert(
+            decl.name.to_lowercase(),
+            decl.params.iter().map(|(_, _, v)| *v).collect(),
+        );
         let ret_t = self.resolve_typed_type(&decl.return_type)?;
         let fn_t = if decl.return_type == typed::Type::Void {
             self.context.void_type().fn_type(&a_t, false)
@@ -435,15 +465,25 @@ impl<'ctx> CodeGen<'ctx> {
             let original_bb = self.builder.get_insert_block();
             self.builder.position_at_end(bb);
             self.enter_scope();
-            for (i, (name, ty, _)) in decl.params.iter().enumerate() {
+            for (i, (name, ty, is_var)) in decl.params.iter().enumerate() {
                 let pt = self.resolve_typed_type(ty)?;
                 let val = function.get_nth_param(i as u32).unwrap();
-                let ptr = self.create_entry_block_alloca(function, name, pt);
-                self.builder.build_store(ptr, val).unwrap();
-                self.variables.last_mut().unwrap().insert(
-                    name.clone(),
-                    (ptr, pt, TypeExpr::Simple("unknown".to_string())),
-                );
+                if *is_var {
+                    // The incoming value is already a pointer to the caller's
+                    // storage; bind the local name directly to it.
+                    let ptr = val.into_pointer_value();
+                    self.variables.last_mut().unwrap().insert(
+                        name.clone(),
+                        (ptr, pt, TypeExpr::Simple("unknown".to_string())),
+                    );
+                } else {
+                    let ptr = self.create_entry_block_alloca(function, name, pt);
+                    self.builder.build_store(ptr, val).unwrap();
+                    self.variables.last_mut().unwrap().insert(
+                        name.clone(),
+                        (ptr, pt, TypeExpr::Simple("unknown".to_string())),
+                    );
+                }
             }
             if decl.return_type != typed::Type::Void {
                 let ptr = self.create_entry_block_alloca(function, &decl.name, ret_t);
@@ -636,18 +676,51 @@ impl<'ctx> CodeGen<'ctx> {
                     let mut fmt = String::new();
                     let mut llvm_args: Vec<inkwell::values::BasicMetadataValueEnum<'ctx>> =
                         Vec::new();
-                    let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
 
                     for arg in args {
                         let val = self.gen_typed_expr(arg)?;
-                        match arg.ty {
+                        match &arg.ty {
                             typed::Type::Integer => {
                                 fmt.push_str("%lld");
                                 llvm_args.push(val.into());
                             }
                             typed::Type::Real => {
-                                fmt.push_str("%lf");
+                                fmt.push_str("%.2f");
                                 llvm_args.push(val.into());
+                            }
+                            typed::Type::Enum(names) => {
+                                // Print the enumeration variant's name by
+                                // selecting the matching string by ordinal.
+                                fmt.push_str("%s");
+                                let ival = val.into_int_value();
+                                let i64_t = self.context.i64_type();
+                                let mut result = self
+                                    .builder
+                                    .build_global_string_ptr("?", "enumunk")
+                                    .unwrap()
+                                    .as_pointer_value();
+                                for (idx, nm) in names.iter().enumerate() {
+                                    let nm_ptr = self
+                                        .builder
+                                        .build_global_string_ptr(nm, "enumname")
+                                        .unwrap()
+                                        .as_pointer_value();
+                                    let cmp = self
+                                        .builder
+                                        .build_int_compare(
+                                            inkwell::IntPredicate::EQ,
+                                            ival,
+                                            i64_t.const_int(idx as u64, false),
+                                            "enumcmp",
+                                        )
+                                        .unwrap();
+                                    result = self
+                                        .builder
+                                        .build_select(cmp, nm_ptr, result, "enumsel")
+                                        .unwrap()
+                                        .into_pointer_value();
+                                }
+                                llvm_args.push(result.into());
                             }
                             typed::Type::Boolean => {
                                 fmt.push_str("%s");
@@ -716,16 +789,20 @@ impl<'ctx> CodeGen<'ctx> {
                             .unwrap();
                     }
                 } else {
+                    let var_flags = self
+                        .proc_var_params
+                        .get(&name.to_lowercase())
+                        .cloned()
+                        .unwrap_or_default();
                     let mut l_a = Vec::new();
-                    for a in args {
-                        l_a.push(self.gen_typed_expr(a)?.into());
+                    for (i, a) in args.iter().enumerate() {
+                        if var_flags.get(i).copied().unwrap_or(false) {
+                            l_a.push(self.gen_typed_target_ptr(a)?.into());
+                        } else {
+                            l_a.push(self.gen_typed_expr(a)?.into());
+                        }
                     }
-                    let real_name = match name.as_str() {
-                        "RuntimeInit" => "pascal_runtime_init",
-                        "Halt" => "pascal_halt",
-                        _ => name.as_str(),
-                    };
-                    if let Some(f_c) = self.get_function_robust(real_name) {
+                    if let Some(f_c) = self.get_function_robust(name) {
                         self.builder.build_call(f_c, &l_a, "call").unwrap();
                     } else if let Some((p, l_t, _)) = self.get_variable(name).cloned() {
                         let f_p = self
@@ -922,6 +999,36 @@ impl<'ctx> CodeGen<'ctx> {
                         .build_int_compare(inkwell::IntPredicate::NE, a, s_t.const_zero(), "isset")
                         .unwrap()
                         .into());
+                }
+                // Set algebra on the 256-bit bitmask representation.
+                if matches!(left.ty, typed::Type::Set(_))
+                    || matches!(right.ty, typed::Type::Set(_))
+                {
+                    let l = lhs.into_int_value();
+                    let r = rhs.into_int_value();
+                    return match op {
+                        BinOp::Add => Ok(self.builder.build_or(l, r, "setunion").unwrap().into()),
+                        BinOp::Mul => Ok(self.builder.build_and(l, r, "setinter").unwrap().into()),
+                        BinOp::Sub => {
+                            let nr = self.builder.build_not(r, "setnot").unwrap();
+                            Ok(self.builder.build_and(l, nr, "setdiff").unwrap().into())
+                        }
+                        _ => Err(format!("Operator {:?} not implemented for sets", op)),
+                    };
+                }
+                // String concatenation: `+` on string/char operands.
+                if op == &BinOp::Add && matches!(expr.ty, typed::Type::String) {
+                    let lp = self.to_cstr_ptr(lhs, &left.ty)?;
+                    let rp = self.to_cstr_ptr(rhs, &right.ty)?;
+                    let strcat = self.get_strcat();
+                    let res = self
+                        .builder
+                        .build_call(strcat, &[lp.into(), rp.into()], "strcat")
+                        .unwrap()
+                        .try_as_basic_value()
+                        .left()
+                        .ok_or("strcat returned no value")?;
+                    return Ok(res);
                 }
                 if lhs.get_type() != rhs.get_type() {
                     if lhs.is_int_value() && rhs.is_float_value() {
@@ -1209,31 +1316,20 @@ impl<'ctx> CodeGen<'ctx> {
                 }
             }
             typed::TypedExprKind::FunctionCall { name, args } => {
-                if name == "Chr" {
-                    let a = self.gen_typed_expr(&args[0])?.into_int_value();
-                    return Ok(self
-                        .builder
-                        .build_int_truncate(a, self.context.i8_type(), "chr")
-                        .unwrap()
-                        .into());
-                }
-                if name == "Ord" {
-                    let a = self.gen_typed_expr(&args[0])?.into_int_value();
-                    return Ok(self
-                        .builder
-                        .build_int_z_extend(a, self.context.i64_type(), "ord")
-                        .unwrap()
-                        .into());
-                }
+                let var_flags = self
+                    .proc_var_params
+                    .get(&name.to_lowercase())
+                    .cloned()
+                    .unwrap_or_default();
                 let mut l_a = Vec::new();
-                for a in args {
-                    l_a.push(self.gen_typed_expr(a)?.into());
+                for (i, a) in args.iter().enumerate() {
+                    if var_flags.get(i).copied().unwrap_or(false) {
+                        l_a.push(self.gen_typed_target_ptr(a)?.into());
+                    } else {
+                        l_a.push(self.gen_typed_expr(a)?.into());
+                    }
                 }
-                let real_name = match name.as_str() {
-                    "Sqrt" => "pascal_sqrt",
-                    _ => name.as_str(),
-                };
-                if let Some(f_c) = self.get_function_robust(real_name) {
+                if let Some(f_c) = self.get_function_robust(name) {
                     let call = self.builder.build_call(f_c, &l_a, name).unwrap();
                     let res = call.try_as_basic_value().left();
                     if let Some(val) = res {

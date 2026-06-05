@@ -1,0 +1,10 @@
+{ Regression test: two units in different directories share the unit name
+  `util`. They must be treated as distinct modules (identity by file path),
+  not deduplicated by unit name. If the loader collapses them, whoB (defined
+  only in b/util) would be missing and this test would fail to compile. }
+program ModuleNameCollision;
+uses a/util, b/util;
+begin
+  writeln('a=', who());
+  writeln('b=', whoB());
+end.

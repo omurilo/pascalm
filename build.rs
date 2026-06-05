@@ -5,32 +5,11 @@ use std::process::Command;
 fn main() {
     lalrpop::process_root().unwrap();
 
-    // Compile runtime_lib.rs to LLVM bitcode
     let out_dir = env::var("OUT_DIR").unwrap();
-    let dest_path = Path::new(&out_dir).join("runtime_lib.bc");
 
-    let status = Command::new("rustc")
-        .args(&[
-            "src/runtime_lib.rs",
-            "--crate-type",
-            "lib",
-            "--emit",
-            "llvm-bc",
-            "-o",
-            dest_path.to_str().unwrap(),
-            "-C",
-            "opt-level=3",
-            "-C",
-            "panic=abort",
-            "--edition",
-            "2021",
-        ])
-        .status()
-        .expect("Failed to run rustc to compile runtime");
-
-    if !status.success() {
-        panic!("rustc failed to compile runtime_lib.rs");
-    }
+    // The language runtime intrinsics (sqrt, halt, runtime_init, string
+    // concatenation, ...) live in the `system` stdlib crate, compiled below
+    // alongside the other stdlib units.
 
     // Compile everything in src/stdlib/
     let stdlib_path = Path::new("src/stdlib");
