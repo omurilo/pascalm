@@ -964,27 +964,4 @@ impl SemanticAnalyzer {
         }
         Ok(())
     }
-
-    fn get_expr_type_legacy(&self, expr: &Expr) -> Result<TypeExpr, String> {
-        match expr {
-            Expr::Integer(_) => Ok(TypeExpr::Simple("integer".to_string())),
-            Expr::Real(_) => Ok(TypeExpr::Simple("real".to_string())),
-            _ => Ok(TypeExpr::Simple("unknown".to_string())),
-        }
-    }
-    fn is_boolean(&self, ty: &typed::Type) -> bool {
-        *ty == typed::Type::Boolean
-    }
-    fn is_compatible(&self, target: &typed::Type, source: &typed::Type) -> bool {
-        if target == source {
-            return true;
-        }
-        if *target == typed::Type::Real && *source == typed::Type::Integer {
-            return true;
-        }
-        if *target == typed::Type::String && *source == typed::Type::Char {
-            return true;
-        }
-        false
-    }
 }

@@ -921,7 +921,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.enter_scope();
                 for obj in objects {
                     let (ptr, l_t) = self.gen_typed_variable_ptr_from_expr(obj)?;
-                    if let typed::Type::Record { fields } = &obj.ty {
+                    if let typed::Type::Record { .. } = &obj.ty {
                         let t_k = format!("{:?}", l_t);
                         if let Some(f_i) = self.record_fields.get(&t_k) {
                             for (f_n, &idx) in f_i {
@@ -1636,27 +1636,5 @@ impl<'ctx> CodeGen<'ctx> {
             }
             _ => Ok(self.context.i64_type().as_basic_type_enum()),
         }
-    }
-    fn gen_stmt(&mut self, _stmt: &Stmt, _f: FunctionValue<'ctx>) -> Result<(), String> {
-        Ok(())
-    }
-    fn gen_expr(&mut self, _expr: &Expr) -> Result<BasicValueEnum<'ctx>, String> {
-        Err("Deprecated".to_string())
-    }
-    fn gen_target_ptr(&mut self, _expr: &Expr) -> Result<PointerValue<'ctx>, String> {
-        Err("Deprecated".to_string())
-    }
-    fn gen_variable_ptr_with_type(
-        &mut self,
-        _var: &Variable,
-    ) -> Result<
-        (
-            PointerValue<'ctx>,
-            inkwell::types::BasicTypeEnum<'ctx>,
-            TypeExpr,
-        ),
-        String,
-    > {
-        Err("Deprecated".to_string())
     }
 }
