@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::Deref;
 
@@ -5,8 +6,9 @@ use crop::Rope;
 use dashmap::DashMap;
 use lalrpop_util::ParseError;
 use log::debug;
+use pascalm::ast::Span;
 use pascalm::lexer::{self, Token};
-use pascalm::{parser, CompilationUnit, SemanticAnalyzer};
+use pascalm::{parser, CompilationUnit, SemanticAnalyzer, SymbolId, SymbolKind};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
@@ -301,6 +303,87 @@ impl Backend {
         self.document_map.insert(item.uri.clone(), rope);
     }
 
+    fn build_semantic_tokens(&self, uri: &str) -> Option<Vec<SemanticToken>> {
+        let semantic_result = self.semanticast_map.get(uri)?;
+        let rope = self.document_map.get(uri)?;
+        let analyzer = &semantic_result.analyzer;
+
+        let mut sema: HashMap<usize, u32> = HashMap::new();
+        for (span, id) in analyzer
+            .definitions
+            .iter()
+            .chain(analyzer.references.iter())
+        {
+            if span.start == span.end {
+                continue;
+            } // pula builtins (span default 0..0)
+            if let Some(info) = analyzer.symbol_table.all_symbols.get(*id) {
+                let idx = match info.kind {
+                    SymbolKind::Function { .. } | SymbolKind::Procedure { .. } => 5, // FUNCTION
+                    SymbolKind::Type { .. } => 6,
+                    // TYPE
+                    SymbolKind::Variable { .. } | SymbolKind::Constant { .. } => 4, // VARIABLE
+                };
+                sema.insert(span.start, idx);
+            }
+        }
+
+        let mut incomplete_tokens: Vec<(usize, usize, u32)> = Vec::new();
+        for spanned in lexer::Lexer::new(&rope.to_string()) {
+            let Ok((start, token, end)) = spanned else {
+                continue;
+            };
+            let Some(mut idx) = token_type_index(&token) else {
+                continue;
+            };
+
+            if matches!(token, Token::Identifier(_)) {
+                if let Some(&sidx) = sema.get(&start) {
+                    idx = sidx;
+                }
+            }
+            incomplete_tokens.push((start, end - start, idx));
+        }
+
+        incomplete_tokens.sort_by(|a, b| a.0.cmp(&b.0));
+
+        // Convert to LSP SemanticToken format with delta encoding
+        let mut pre_line: u32 = 0;
+        let mut pre_start: u32 = 0;
+
+        let semantic_tokens = incomplete_tokens
+            .iter()
+            .map(|(start, length, token_type)| {
+                // Convert byte offset to line and character
+                let line = rope.line_of_byte(*start) as u32;
+                let line_start_byte = rope.byte_of_line(line as usize);
+                let char_offset = *start - line_start_byte;
+
+                let delta_line = line - pre_line;
+                let delta_start = if delta_line == 0 {
+                    char_offset as u32 - pre_start
+                } else {
+                    char_offset as u32
+                };
+
+                let token = SemanticToken {
+                    delta_line,
+                    delta_start,
+                    length: *length as u32,
+                    token_type: *token_type,
+                    token_modifiers_bitset: 0,
+                };
+
+                pre_line = line;
+                pre_start = char_offset as u32;
+
+                token
+            })
+            .collect::<Vec<_>>();
+
+        Some(semantic_tokens)
+    }
+
     // fn build_semantic_tokens(&self, uri: &str) -> Option<Vec<SemanticToken>> {
     //     let semantic_result = self.semanticast_map.get(uri)?;
     //     let rope = self.document_map.get(uri)?;
@@ -475,6 +558,59 @@ impl Backend {
     // }
 }
 
+fn token_type_index(token: &Token) -> Option<u32> {
+    use Token::*;
+    Some(match token {
+        // 0 = KEYWORD — palavras reservadas
+        Program | Var | Const | Type | Label | Procedure | Function | Begin | End | If | Then
+        | Else | While | Do | For | To | Downto | Repeat | Until | Case | Of | Goto | Array
+        | Record | Set | File | Write | Writeln | Read | Readln | With | Forward | Name
+        | Packed | Unit | Interface | Implementation | Uses | Initialization | External | Nil => 0,
+
+        // operadores que são palavras — também tratados como keyword
+        // (troque para 1/OPERATOR se preferir tematizar como símbolo)
+        Not | And | Or | Div | Mod | In => 0,
+
+        // booleanos: true/false como keyword/constante
+        BooleanLiteral(_) => 0,
+
+        // 6 = TYPE — tipos primitivos embutidos
+        Integer | Real | Boolean | String | Char => 6,
+
+        // 1 = OPERATOR — operadores simbólicos
+        Plus | Minus | Slash | Star | Gte | Lte | Gt | Lt | Eq | Neq | Assign | Caret => 1,
+
+        // 2 = NUMBER
+        IntegerLiteral(_) | RealLiteral(_) => 2,
+
+        // 3 = STRING — strings e chars
+        StringLiteral(_) | CharLiteral(_) | CharCode(_) => 3,
+
+        // 4 = VARIABLE — default p/ identificadores
+        // (no passo 4 você refina para FUNCTION/TYPE via o analyzer)
+        Identifier(_) => 4,
+
+        // pontuação e erro → sem highlight
+        LParen | RParen | LBrace | RBrace | LBracket | RBracket | Comma | Colon | Semicolon
+        | Dot | DotDot | Error => return None,
+    })
+}
+
+fn legend() -> SemanticTokensLegend {
+    SemanticTokensLegend {
+        token_types: vec![
+            SemanticTokenType::KEYWORD,
+            SemanticTokenType::OPERATOR,
+            SemanticTokenType::NUMBER,
+            SemanticTokenType::STRING,
+            SemanticTokenType::VARIABLE,
+            SemanticTokenType::FUNCTION,
+            SemanticTokenType::TYPE,
+        ],
+        token_modifiers: vec![],
+    }
+}
+
 fn lalrpop_error_to_diagnostic(text: &str, err: ParseError<usize, Token, String>) -> Diagnostic {
     let (start, end, message) = match err {
         ParseError::InvalidToken { location } => {
@@ -609,7 +745,16 @@ impl LanguageServer for Backend {
                     }),
                     file_operations: None,
                 }),
-                semantic_tokens_provider: None,
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: legend(),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            range: Some(false),
+                            ..Default::default()
+                        },
+                    ),
+                ),
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(false)),
                 rename_provider: Some(OneOf::Left(false)),
@@ -750,6 +895,18 @@ impl LanguageServer for Backend {
             }
         }
         Ok(None)
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri.to_string();
+        let data = self.build_semantic_tokens(&uri).unwrap_or_default();
+        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data,
+        })))
     }
 
     async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
