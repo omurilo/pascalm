@@ -6,7 +6,6 @@ use crop::Rope;
 use dashmap::DashMap;
 use lalrpop_util::ParseError;
 use log::debug;
-use pascalm::ast::Span;
 use pascalm::lexer::{self, Token};
 use pascalm::{parser, CompilationUnit, SemanticAnalyzer, SymbolKind};
 use tower_lsp::jsonrpc::Result;
@@ -52,38 +51,6 @@ impl Backend {
         None
     }
 
-    // fn get_references(
-    //     &self,
-    //     uri: String,
-    //     position: Position,
-    //     include_self: bool,
-    // ) -> Option<Vec<Location>> {
-    //     let rope = self.document_map.get(&uri)?;
-    //     let compilation_result = self.semanticast_map.get(&uri)?;
-    //     let offset = position_to_offset(position, &rope)?;
-    //     let symbol_id = compilation_result.semantic.get_symbol_at(offset)?;
-    //
-    //     let mut references = Vec::new();
-    //     let uri = Url::parse(&uri).unwrap_or_else(|_| Url::from_directory_path(&uri).unwrap());
-    //     if include_self {
-    //         // Include the symbol definition itself
-    //         let symbol_span = compilation_result.semantic.get_symbol_span(symbol_id);
-    //         let start = offset_to_position(symbol_span.start as usize, &rope)?;
-    //         let end = offset_to_position(symbol_span.end as usize, &rope)?;
-    //         references.push(Location::new(uri.clone(), Range::new(start, end)));
-    //     }
-    //     // Find the reference at the current position
-    //     let ref_ids = compilation_result.semantic.get_symbol_references(symbol_id);
-    //
-    //     references.extend(ref_ids.iter().filter_map(|ref_id| {
-    //         let span = compilation_result.semantic.reference_spans[*ref_id];
-    //         let start = offset_to_position(span.start as usize, &rope)?;
-    //         let end = offset_to_position(span.end as usize, &rope)?;
-    //         Some(Location::new(uri.clone(), Range::new(start, end)))
-    //     }));
-    //     Some(references)
-    // }
-    //
     fn get_rename_edit(
         &self,
         uri: String,
@@ -111,31 +78,6 @@ impl Backend {
 
         Some(WorkspaceEdit::new(edit_map))
     }
-
-    // fn get_rename_edit(
-    //     &self,
-    //     uri: String,
-    //     position: Position,
-    //     new_name: String,
-    // ) -> Option<WorkspaceEdit> {
-    //     let all_reference = self.get_references(uri.clone(), position, true)?;
-    //
-    //     let edits = all_reference
-    //         .into_iter()
-    //         .map(|item| TextEdit {
-    //             range: item.range,
-    //             new_text: new_name.clone(),
-    //         })
-    //         .collect::<Vec<_>>();
-    //
-    //     // Create workspace edit with the text edits
-    //     let parsed_uri =
-    //         Url::parse(&uri).unwrap_or_else(|_| Url::from_directory_path(&uri).unwrap());
-    //     let mut edit_map = std::collections::HashMap::new();
-    //     edit_map.insert(parsed_uri, edits);
-    //
-    //     Some(WorkspaceEdit::new(edit_map))
-    // }
 
     // fn get_struct_id_from_field(
     //     &self,
@@ -413,179 +355,6 @@ impl Backend {
 
         Some(semantic_tokens)
     }
-
-    // fn build_semantic_tokens(&self, uri: &str) -> Option<Vec<SemanticToken>> {
-    //     let semantic_result = self.semanticast_map.get(uri)?;
-    //     let rope = self.document_map.get(uri)?;
-    //
-    //     // Collect all tokens from symbols and references
-    //     // Token type indices correspond to LEGEND_TYPE order:
-    //     // 0: FUNCTION, 1: VARIABLE, 2: PARAMETER, 3: STRUCT, 4: PROPERTY (field)
-    //     let mut incomplete_tokens: Vec<(usize, usize, u32)> = Vec::new(); // (start, length, token_type)
-    //
-    //     // Add symbol definitions
-    //     for (symbol_id, span) in semantic_result.semantic.symbol_spans.iter_enumerated() {
-    //         let kind = semantic_result.semantic.get_symbol_kind(symbol_id);
-    //         let token_type = match kind {
-    //             SymbolKind::Function => 0,  // FUNCTION
-    //             SymbolKind::Variable => 1,  // VARIABLE
-    //             SymbolKind::Parameter => 2, // PARAMETER
-    //             SymbolKind::Struct => 3,    // STRUCT
-    //             SymbolKind::Field => 4,     // PROPERTY
-    //         };
-    //         incomplete_tokens.push((
-    //             span.start as usize,
-    //             (span.end - span.start) as usize,
-    //             token_type,
-    //         ));
-    //     }
-    //
-    //     // Add references (they reference symbols, so use the symbol's kind)
-    //     for (ref_id, span) in semantic_result.semantic.reference_spans.iter_enumerated() {
-    //         if let Some(symbol_id) = semantic_result.semantic.references[ref_id] {
-    //             let kind = semantic_result.semantic.get_symbol_kind(symbol_id);
-    //             let token_type = match kind {
-    //                 SymbolKind::Function => 0,  // FUNCTION
-    //                 SymbolKind::Variable => 1,  // VARIABLE
-    //                 SymbolKind::Parameter => 2, // PARAMETER
-    //                 SymbolKind::Struct => 3,    // STRUCT
-    //                 SymbolKind::Field => 4,     // PROPERTY
-    //             };
-    //             incomplete_tokens.push((
-    //                 span.start as usize,
-    //                 (span.end - span.start) as usize,
-    //                 token_type,
-    //             ));
-    //         }
-    //     }
-    //
-    //     // Sort by start position
-    //     incomplete_tokens.sort_by(|a, b| a.0.cmp(&b.0));
-    //
-    //     // Convert to LSP SemanticToken format with delta encoding
-    //     let mut pre_line: u32 = 0;
-    //     let mut pre_start: u32 = 0;
-    //
-    //     let semantic_tokens = incomplete_tokens
-    //         .iter()
-    //         .map(|(start, length, token_type)| {
-    //             // Convert byte offset to line and character
-    //             let line = rope.line_of_byte(*start) as u32;
-    //             let line_start_byte = rope.byte_of_line(line as usize);
-    //             let char_offset = *start - line_start_byte;
-    //
-    //             let delta_line = line - pre_line;
-    //             let delta_start = if delta_line == 0 {
-    //                 char_offset as u32 - pre_start
-    //             } else {
-    //                 char_offset as u32
-    //             };
-    //
-    //             let token = SemanticToken {
-    //                 delta_line,
-    //                 delta_start,
-    //                 length: *length as u32,
-    //                 token_type: *token_type,
-    //                 token_modifiers_bitset: 0,
-    //             };
-    //
-    //             pre_line = line;
-    //             pre_start = char_offset as u32;
-    //
-    //             token
-    //         })
-    //         .collect::<Vec<_>>();
-    //
-    //     Some(semantic_tokens)
-    // }
-    //
-    // fn build_semantic_tokens_range(&self, uri: &str, range: Range) -> Option<Vec<SemanticToken>> {
-    //     let semantic_result = self.semanticast_map.get(uri)?;
-    //     let rope = self.document_map.get(uri)?;
-    //
-    //     // Convert range to byte offsets
-    //     let start_offset = position_to_offset(range.start, &rope)?;
-    //     let end_offset = position_to_offset(range.end, &rope)?;
-    //
-    //     // Collect all tokens from symbols and references within the range
-    //     let mut incomplete_tokens: Vec<(usize, usize, u32)> = Vec::new();
-    //
-    //     // Add symbol definitions within range
-    //     for (symbol_id, span) in semantic_result.semantic.symbol_spans.iter_enumerated() {
-    //         let token_start = span.start as usize;
-    //         if token_start >= start_offset && token_start < end_offset {
-    //             let kind = semantic_result.semantic.get_symbol_kind(symbol_id);
-    //             let token_type = match kind {
-    //                 SymbolKind::Function => 0,
-    //                 SymbolKind::Variable => 1,
-    //                 SymbolKind::Parameter => 2,
-    //                 SymbolKind::Struct => 3,
-    //                 SymbolKind::Field => 4,
-    //             };
-    //             incomplete_tokens.push((token_start, (span.end - span.start) as usize, token_type));
-    //         }
-    //     }
-    //
-    //     // Add references within range
-    //     for (ref_id, span) in semantic_result.semantic.reference_spans.iter_enumerated() {
-    //         let token_start = span.start as usize;
-    //         if token_start >= start_offset && token_start < end_offset {
-    //             if let Some(symbol_id) = semantic_result.semantic.references[ref_id] {
-    //                 let kind = semantic_result.semantic.get_symbol_kind(symbol_id);
-    //                 let token_type = match kind {
-    //                     SymbolKind::Function => 0,
-    //                     SymbolKind::Variable => 1,
-    //                     SymbolKind::Parameter => 2,
-    //                     SymbolKind::Struct => 3,
-    //                     SymbolKind::Field => 4,
-    //                 };
-    //                 incomplete_tokens.push((
-    //                     token_start,
-    //                     (span.end - span.start) as usize,
-    //                     token_type,
-    //                 ));
-    //             }
-    //         }
-    //     }
-    //
-    //     // Sort by start position
-    //     incomplete_tokens.sort_by(|a, b| a.0.cmp(&b.0));
-    //
-    //     // Convert to LSP SemanticToken format with delta encoding
-    //     let mut pre_line: u32 = 0;
-    //     let mut pre_start: u32 = 0;
-    //
-    //     let semantic_tokens = incomplete_tokens
-    //         .iter()
-    //         .map(|(start, length, token_type)| {
-    //             let line = rope.line_of_byte(*start) as u32;
-    //             let line_start_byte = rope.byte_of_line(line as usize);
-    //             let char_offset = *start - line_start_byte;
-    //
-    //             let delta_line = line - pre_line;
-    //             let delta_start = if delta_line == 0 {
-    //                 char_offset as u32 - pre_start
-    //             } else {
-    //                 char_offset as u32
-    //             };
-    //
-    //             let token = SemanticToken {
-    //                 delta_line,
-    //                 delta_start,
-    //                 length: *length as u32,
-    //                 token_type: *token_type,
-    //                 token_modifiers_bitset: 0,
-    //             };
-    //
-    //             pre_line = line;
-    //             pre_start = char_offset as u32;
-    //
-    //             token
-    //         })
-    //         .collect::<Vec<_>>();
-    //
-    //     Some(semantic_tokens)
-    // }
 }
 
 fn token_type_index(token: &Token) -> Option<u32> {
