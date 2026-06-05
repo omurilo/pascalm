@@ -1,0 +1,628 @@
+use crate::lexer::Token;
+use crate::ast::*;
+
+grammar;
+
+extern {
+    type Location = usize;
+    type Error = String;
+
+    enum Token {
+        "program" => Token::Program,
+        "var" => Token::Var,
+        "const" => Token::Const,
+        "type" => Token::Type,
+        "label" => Token::Label,
+        "procedure" => Token::Procedure,
+        "function" => Token::Function,
+        "begin" => Token::Begin,
+        "end" => Token::End,
+        "if" => Token::If,
+        "then" => Token::Then,
+        "else" => Token::Else,
+        "while" => Token::While,
+        "do" => Token::Do,
+        "for" => Token::For,
+        "to" => Token::To,
+        "downto" => Token::Downto,
+        "repeat" => Token::Repeat,
+        "until" => Token::Until,
+        "case" => Token::Case,
+        "of" => Token::Of,
+        "goto" => Token::Goto,
+        "array" => Token::Array,
+        "record" => Token::Record,
+        "set" => Token::Set,
+        "in" => Token::In,
+        "file" => Token::File,
+        "integer" => Token::Integer,
+        "real" => Token::Real,
+        "boolean" => Token::Boolean,
+        "string" => Token::String,
+        "char" => Token::Char,
+        "not" => Token::Not,
+        "and" => Token::And,
+        "or" => Token::Or,
+        "div" => Token::Div,
+        "mod" => Token::Mod,
+        "write" => Token::Write,
+        "writeln" => Token::Writeln,
+        "read" => Token::Read,
+        "readln" => Token::Readln,
+        "nil" => Token::Nil,
+        "with" => Token::With,
+        "forward" => Token::Forward,
+        "packed" => Token::Packed,
+        "unit" => Token::Unit,
+        "interface" => Token::Interface,
+        "implementation" => Token::Implementation,
+        "uses" => Token::Uses,
+        "initialization" => Token::Initialization,
+        "external" => Token::External,
+        "name" => Token::Name,
+
+        "+" => Token::Plus,
+        "-" => Token::Minus,
+        "/" => Token::Slash,
+        "*" => Token::Star,
+        "(" => Token::LParen,
+        ")" => Token::RParen,
+        "{" => Token::LBrace,
+        "}" => Token::RBrace,
+        "[" => Token::LBracket,
+        "]" => Token::RBracket,
+        ">=" => Token::Gte,
+        "<=" => Token::Lte,
+        ">" => Token::Gt,
+        "<" => Token::Lt,
+        "=" => Token::Eq,
+        "<>" => Token::Neq,
+        ":=" => Token::Assign,
+        "," => Token::Comma,
+        ":" => Token::Colon,
+        ";" => Token::Semicolon,
+        ".." => Token::DotDot,
+        "." => Token::Dot,
+        "^" => Token::Caret,
+
+        "boolean_lit" => Token::BooleanLiteral(<bool>),
+        "char_lit" => Token::CharLiteral(<char>),
+        "char_code" => Token::CharCode(<char>),
+        "int_lit" => Token::IntegerLiteral(<i64>),
+        "real_lit" => Token::RealLiteral(<f64>),
+         "identifier" => Token::Identifier(<String>),
+        "string_lit" => Token::StringLiteral(<String>),
+    }
+}
+
+Identifier: String = {
+    "identifier" => <>,
+    "name" => "name".to_string(),
+};
+
+pub CompilationUnit: CompilationUnit = {
+    Program => CompilationUnit::Program(<>),
+    Unit => CompilationUnit::Unit(<>),
+};
+
+pub Program: Program = {
+    "program" <name:Identifier> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." => Program {
+        name,
+        heading,
+        uses,
+        block,
+    }
+};
+
+pub Unit: Unit = {
+    "unit" <name:Identifier> ";"
+    "interface" <interface:InterfaceSection>
+    "implementation" <implementation:ImplementationSection>
+    <initialization:Initialization?>
+    "end" "." => Unit {
+        name,
+        interface,
+        implementation,
+        initialization,
+    }
+};
+
+InterfaceSection: InterfaceSection = {
+    <uses:UsesClause?>
+    <constants:(ConstDecl ";")?>
+    <types:(TypeDecl ";")?>
+    <variables:(VarDecl ";")?>
+    <headers:(ProcFuncHeaderList ";")?> => InterfaceSection {
+        uses,
+        constants: constants.map(|(c, _)| c),
+        types: types.map(|(t, _)| t),
+        variables: variables.map(|(v, _)| v),
+        headers: headers.map(|(p, _)| p),
+    }
+};
+
+ImplementationSection: ImplementationSection = {
+    <uses:UsesClause?>
+    <constants:(ConstDecl ";")?>
+    <types:(TypeDecl ";")?>
+    <variables:(VarDecl ";")?>
+    <bodies:(ProcFuncDecl ";")?> => ImplementationSection {
+        uses,
+        constants: constants.map(|(c, _)| c),
+        types: types.map(|(t, _)| t),
+        variables: variables.map(|(v, _)| v),
+        bodies: bodies.map(|(p, _)| p),
+    }
+};
+
+UsesClause: Vec<String> = {
+    "uses" <ids:PathList> ";" => ids,
+};
+
+Initialization: Vec<Stmt> = {
+    "initialization" <list:StmtList> => list,
+};
+
+HeadingOpt: Option<Vec<String>> = {
+    "(" <ids:IdentifierList> ")" => Some(ids),
+    () => None,
+};
+
+IdentifierList: Vec<String> = {
+    <id:Identifier> => vec![id],
+    <mut list:IdentifierList> "," <id:Identifier> => {
+        list.push(id);
+        list
+    }
+};
+
+PathList: Vec<String> = {
+    <p:Path> => vec![p],
+    <mut list:PathList> "," <p:Path> => {
+        list.push(p);
+        list
+    }
+};
+
+Path: String = {
+    <is_absolute:"/"?> <segments:AbsoluteSegments> => {
+        let mut res = segments;
+        if is_absolute.is_some() {
+            res.insert(0, "".to_string());
+        }
+        res.join("/")
+      } 
+};
+
+AbsoluteSegments: Vec<String> = {
+    <head:Identifier> "/" <tail:AbsoluteSegments> => {
+        let mut res = vec![head];
+        res.extend(tail);
+        res
+    },
+    <s:Identifier> => vec![s],
+};
+
+Block: Block = {
+    <labels:(LabelDecl ";")?>
+    <constants:(ConstDecl ";")?>
+    <types:(TypeDecl ";")?>
+    <variables:(VarDecl ";")?>
+    <procs:(ProcFuncDecl ";")?>
+    <stmts:CompoundStmtInner> => {
+        Block {
+            labels: labels.map(|(l, _)| l),
+            constants: constants.map(|(c, _)| c),
+            types: types.map(|(t, _)| t),
+            variables: variables.map(|(v, _)| v),
+            procedures_functions: procs.map(|(p, _)| p),
+            statements: stmts,
+        }
+    }
+};
+
+LabelDecl: Vec<i64> = {
+    "label" <n:"int_lit"> => vec![n],
+    <mut list:LabelDecl> "," <n:"int_lit"> => {
+        list.push(n);
+        list
+    }
+};
+
+ConstDecl: Vec<ConstDecl> = {
+    "const" <c:ConstItem> => vec![c],
+    <mut list:ConstDecl> ";" <c:ConstItem> => {
+        list.push(c);
+        list
+    }
+};
+
+ConstItem: ConstDecl = {
+    <id:Identifier> "=" <val:Constant> => ConstDecl { name: id, value: val },
+};
+
+TypeDecl: Vec<TypeDecl> = {
+    "type" <t:TypeItem> => vec![t],
+    <mut list:TypeDecl> ";" <t:TypeItem> => {
+        list.push(t);
+        list
+    }
+};
+
+TypeItem: TypeDecl = {
+    <id:Identifier> "=" <te:TypeExpr> => TypeDecl { name: id, type_expr: te },
+};
+
+VarDecl: Vec<VarDecl> = {
+    "var" <v:VarItem> => vec![v],
+    <mut list:VarDecl> ";" <v:VarItem> => {
+        list.push(v);
+        list
+    }
+};
+
+VarItem: VarDecl = {
+    <ids:IdentifierList> ":" <te:TypeExpr> => VarDecl { ids, type_expr: te },
+};
+
+ProcFuncHeaderList: Vec<ProcFuncDecl> = {
+    <decl:ProcFuncHeader> => vec![decl],
+    <mut list:ProcFuncHeaderList> ";" <decl:ProcFuncHeader> => {
+        list.push(decl);
+        list
+    }
+};
+
+ProcFuncHeader: ProcFuncDecl = {
+    "procedure" <name:Identifier> <params:Parameters?> => {
+        ProcFuncDecl::Procedure { name, params, block_or_forward: BlockOrForward::Forward }
+    },
+    "function" <name:Identifier> <params:Parameters?> ":" <rt:TypeName> => {
+        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: BlockOrForward::Forward }
+    }
+};
+
+ProcFuncDecl: Vec<ProcFuncDecl> = {
+    <decl:ProcOrFunc> => vec![decl],
+    <mut list:ProcFuncDecl> ";" <decl:ProcOrFunc> => {
+        list.push(decl);
+        list
+    }
+};
+
+ProcOrFunc: ProcFuncDecl = {
+    "procedure" <name:Identifier> <params:Parameters?> ";" <block:BlockOrExternal> => {
+        ProcFuncDecl::Procedure { name, params, block_or_forward: block }
+    },
+    "function" <name:Identifier> <params:Parameters?> ":" <rt:TypeName> ";" <block:BlockOrExternal> => {
+        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: block }
+    }
+};
+
+BlockOrExternal: BlockOrForward = {
+    "forward" => BlockOrForward::Forward,
+    "external" <n:("name" <"string_lit">)?> => BlockOrForward::External(n),
+    <b:Block> => BlockOrForward::Block(Box::new(b)),
+};
+
+Parameters: Vec<Param> = {
+    "(" <list:ParamList?> ")" => list.unwrap_or_default(),
+};
+
+ParamList: Vec<Param> = {
+    <p:ParamSection> => vec![p],
+    <mut list:ParamList> ";" <p:ParamSection> => {
+        list.push(p);
+        list
+    }
+};
+
+ParamSection: Param = {
+    "var" <ids:IdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: true, ids, type_name: tn },
+    <ids:IdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: false, ids, type_name: tn },
+    "procedure" <id:Identifier> <params:Parameters?> => Param::Procedure { id, params },
+    "function" <id:Identifier> <params:Parameters?> ":" <tn:TypeName> => Param::Function { id, params, return_type: tn },
+};
+
+TypeName: String = {
+    "integer" => "integer".to_string(),
+    "real" => "real".to_string(),
+    "boolean" => "boolean".to_string(),
+    "char" => "char".to_string(),
+    "string" => "string".to_string(),
+    <id:Identifier> => id,
+};
+
+Constant: Expr = {
+    <n:"int_lit"> => Expr::Integer(n),
+    <n:"real_lit"> => Expr::Real(n),
+    <c:"char_lit"> => Expr::Char(c),
+    <c:"char_code"> => Expr::Char(c),
+    <s:"string_lit"> => Expr::String(s),
+    <b:"boolean_lit"> => Expr::Boolean(b),
+    <id:Identifier> => Expr::Variable(Box::new(Variable::Id(id))),
+    "+" <id:Identifier> => Expr::Unary { op: UnaryOp::Plus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
+    "-" <id:Identifier> => Expr::Unary { op: UnaryOp::Minus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
+};
+
+TypeExpr: TypeExpr = {
+    <tn:TypeName> => TypeExpr::Simple(tn),
+    "array" "[" <indices:TypeExprList> "]" "of" <et:TypeExpr> => TypeExpr::Array {
+        indices,
+        element_type: Box::new(et),
+    },
+    "record" <fl:FieldList> "end" => TypeExpr::Record {
+        fields: fl.0,
+        variant_part: fl.1,
+    },
+    "^" <tn:TypeName> => TypeExpr::Pointer(Box::new(TypeExpr::Simple(tn))),
+    "set" "of" <te:SimpleType> => TypeExpr::Set(Box::new(te)),
+    "file" "of" <te:TypeExpr> => TypeExpr::File(Box::new(te)),
+    <start:Constant> ".." <end:Constant> => TypeExpr::Subrange { start, end },
+    "(" <ids:IdentifierList> ")" => TypeExpr::Enum(ids),
+    "procedure" <params:Parameters?> => TypeExpr::Procedure { params },
+    "function" <params:Parameters?> ":" <rt:TypeName> => TypeExpr::Function { params, return_type: rt },
+};
+
+FieldList: (Vec<VarDecl>, Option<VariantPart>) = {
+    <fixed:FixedPart?> <vp:(";" VariantPart)?> ";"? => (fixed.unwrap_or_default(), vp.map(|(_, v)| v)),
+    <vp:VariantPart> ";"? => (vec![], Some(vp)),
+};
+
+FixedPart: Vec<VarDecl> = {
+    <v:VarItem> => vec![v],
+    <list:FixedPart> ";" <v:VarItem> => {
+        let mut list = list;
+        list.push(v);
+        list
+    },
+};
+
+#[inline]
+VariantPart: VariantPart = {
+    "case" <tag:TagField> <tn:TypeName> "of" <variants:VariantList> => VariantPart {
+        tag_field: tag,
+        tag_type: tn,
+        variants,
+    }
+};
+
+#[inline]
+TagField: Option<String> = {
+    <id:Identifier> ":" => Some(id),
+    () => None,
+};
+
+VariantList: Vec<Variant> = {
+    <v:Variant> => vec![v],
+    <mut list:VariantList> ";" <v:Variant> => {
+        list.push(v);
+        list
+    },
+};
+
+Variant: Variant = {
+    <labels:CaseLabelList> ":" "(" <fl:FieldList> ")" => Variant {
+        labels,
+        fields: fl.0,
+        nested_variant: fl.1.map(Box::new),
+    }
+};
+
+SimpleType: TypeExpr = {
+    <tn:TypeName> => TypeExpr::Simple(tn),
+    <start:Constant> ".." <end:Constant> => TypeExpr::Subrange { start, end },
+    "(" <ids:IdentifierList> ")" => TypeExpr::Enum(ids),
+};
+
+TypeExprList: Vec<TypeExpr> = {
+    <te:TypeExpr> => vec![te],
+    <mut list:TypeExprList> "," <te:TypeExpr> => {
+        list.push(te);
+        list
+    }
+};
+
+CompoundStmt: Stmt = {
+    "begin" <list:StmtList> "end" => Stmt::Compound(list),
+};
+
+CompoundStmtInner: Vec<Stmt> = {
+    "begin" <list:StmtList> "end" => list,
+};
+
+StmtList: Vec<Stmt> = {
+    <s:Stmt> => vec![s],
+    <mut list:StmtList> ";" <s:OptionalStmt> => {
+        list.push(s);
+        list
+    }
+};
+
+OptionalStmt: Stmt = {
+    Stmt => <>,
+    () => Stmt::Empty,
+};
+
+Stmt: Stmt = {
+    MatchedStmt,
+    UnmatchedStmt,
+};
+
+MatchedStmt: Stmt = {
+    <target:Variable> ":=" <val:Expr> => Stmt::Assignment { target: Expr::Variable(Box::new(target)), value: val },
+    "goto" <n:"int_lit"> => Stmt::Goto(n),
+    CompoundStmt,
+    ProcedureCall,
+    "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:MatchedStmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) },
+    "while" <cond:Expr> "do" <body:MatchedStmt> => Stmt::While { condition: cond, body: Box::new(body) },
+    "repeat" <body:StmtList> "until" <cond:Expr> => Stmt::Repeat { body, until: cond },
+    "for" <id:Identifier> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:MatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
+    "with" <ids:VariableList> "do" <body:MatchedStmt> => Stmt::With { ids, body: Box::new(body) },
+    <l:"int_lit"> ":" <s:MatchedStmt> => Stmt::Labeled(l, Box::new(s)),
+    "case" <expr:Expr> "of" <items:CaseList> <else_stmt:CaseElseOpt> "end" => Stmt::Case { expr, items, else_stmt: else_stmt.map(Box::new) },
+};
+
+UnmatchedStmt: Stmt = {
+    "if" <cond:Expr> "then" <ts:Stmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: None },
+    "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:UnmatchedStmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) },
+    "while" <cond:Expr> "do" <body:UnmatchedStmt> => Stmt::While { condition: cond, body: Box::new(body) },
+    "for" <id:Identifier> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:UnmatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
+    "with" <ids:VariableList> "do" <body:UnmatchedStmt> => Stmt::With { ids, body: Box::new(body) },
+    <l:"int_lit"> ":" <s:UnmatchedStmt> => Stmt::Labeled(l, Box::new(s)),
+};
+
+ForTo: bool = {
+    "to" => true,
+    "downto" => false,
+};
+
+CaseList: Vec<CaseItem> = {
+    <item:CaseItem> => vec![item],
+    <mut list:CaseList> ";" <item:CaseItem> => {
+        list.push(item);
+        list
+    }
+};
+
+CaseItem: CaseItem = {
+    <labels:CaseLabelList> ":" <stmt:Stmt> => CaseItem { labels, stmt },
+};
+
+CaseLabelList: Vec<Expr> = {
+    <el:CaseLabel> => vec![el],
+    <mut list:CaseLabelList> "," <el:CaseLabel> => {
+        list.push(el);
+        list
+    }
+};
+
+CaseLabel: Expr = {
+    <c:Constant> => c,
+    <c1:Constant> ".." <c2:Constant> => Expr::Range(Box::new(c1), Box::new(c2)),
+};
+
+CaseElseOpt: Option<Stmt> = {
+    ";" "else" <s:Stmt> ";"? => Some(s),
+    ";" => None,
+    () => None,
+};
+
+ProcedureCall: Stmt = {
+    <name:BuiltinProc> => Stmt::ProcedureCall { name, args: None },
+    <name:BuiltinProc> "(" <args:ExprList?> ")" => Stmt::ProcedureCall { name, args },
+    
+    <id:Identifier> => Stmt::ProcedureCall { name: id, args: None },
+    <v:Variable> "(" <args:ExprList?> ")" => {
+        match v {
+            Variable::Id(id) => Stmt::ProcedureCall { name: id, args },
+            Variable::MemberAccess { record, field } => {
+                let mut new_args = vec![*record];
+                if let Some(mut a) = args {
+                    new_args.append(&mut a);
+                }
+                Stmt::ProcedureCall { name: field, args: Some(new_args) }
+            },
+            _ => panic!("Invalid procedure call target"),
+        }
+    },
+};
+
+VariableList: Vec<Expr> = {
+    <v:Variable> => vec![Expr::Variable(Box::new(v))],
+    <mut list:VariableList> "," <v:Variable> => {
+        list.push(Expr::Variable(Box::new(v)));
+        list
+    }
+};
+
+Expr: Expr = {
+    #[precedence(level="0")]
+    PrimaryExpr,
+    #[precedence(level="1")]
+    "not" <e:Expr> => Expr::Unary { op: UnaryOp::Not, expr: Box::new(e) },
+    "+" <e:Expr> => Expr::Unary { op: UnaryOp::Plus, expr: Box::new(e) },
+    "-" <e:Expr> => Expr::Unary { op: UnaryOp::Minus, expr: Box::new(e) },
+    #[precedence(level="2")] #[assoc(side="left")]
+    <l:Expr> "*" <r:Expr> => Expr::Binary { op: BinOp::Mul, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "/" <r:Expr> => Expr::Binary { op: BinOp::FloatDiv, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "div" <r:Expr> => Expr::Binary { op: BinOp::Div, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "mod" <r:Expr> => Expr::Binary { op: BinOp::Mod, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "and" <r:Expr> => Expr::Binary { op: BinOp::And, left: Box::new(l), right: Box::new(r) },
+    #[precedence(level="3")] #[assoc(side="left")]
+    <l:Expr> "+" <r:Expr> => Expr::Binary { op: BinOp::Add, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "-" <r:Expr> => Expr::Binary { op: BinOp::Sub, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "or" <r:Expr> => Expr::Binary { op: BinOp::Or, left: Box::new(l), right: Box::new(r) },
+    #[precedence(level="4")] #[assoc(side="left")]
+    <l:Expr> "=" <r:Expr> => Expr::Binary { op: BinOp::Eq, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "<>" <r:Expr> => Expr::Binary { op: BinOp::Neq, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "<" <r:Expr> => Expr::Binary { op: BinOp::Lt, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "<=" <r:Expr> => Expr::Binary { op: BinOp::Lte, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> ">" <r:Expr> => Expr::Binary { op: BinOp::Gt, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> ">=" <r:Expr> => Expr::Binary { op: BinOp::Gte, left: Box::new(l), right: Box::new(r) },
+    <l:Expr> "in" <r:Expr> => Expr::Binary { op: BinOp::In, left: Box::new(l), right: Box::new(r) },
+};
+
+PrimaryExpr: Expr = {
+    <n:"int_lit"> => Expr::Integer(n),
+    <n:"real_lit"> => Expr::Real(n),
+    <c:"char_lit"> => Expr::Char(c),
+    <c:"char_code"> => Expr::Char(c),
+    <s:"string_lit"> => Expr::String(s),
+    <b:"boolean_lit"> => Expr::Boolean(b),
+    "nil" => Expr::Nil,
+    "[" <els:ElementList?> "]" => Expr::Set(els.unwrap_or_default()),
+    
+    // Function calls and UFCS (Method calls desugared to function calls)
+    <v:Variable> "(" <args:ExprList?> ")" => {
+        match v {
+            Variable::Id(id) => Expr::FunctionCall { name: id, args },
+            Variable::MemberAccess { record, field } => {
+                let mut new_args = vec![*record];
+                if let Some(mut a) = args {
+                    new_args.append(&mut a);
+                }
+                Expr::FunctionCall { name: field, args: Some(new_args) }
+            },
+            _ => panic!("Invalid function call target"),
+        }
+    },
+    
+    <v:Variable> => Expr::Variable(Box::new(v)),
+    "(" <e:Expr> ")" => e,
+};
+
+BuiltinProc: String = {
+    "write" => "write".to_string(),
+    "writeln" => "writeln".to_string(),
+    "read" => "read".to_string(),
+    "readln" => "readln".to_string(),
+};
+
+ElementList: Vec<Element> = {
+    <el:Element> => vec![el],
+    <mut list:ElementList> "," <el:Element> => {
+        list.push(el);
+        list
+    }
+};
+
+Element: Element = {
+    <e:Expr> ".." <e2:Expr> => Element::Range(e, e2),
+    <e:Expr> => Element::Single(e),
+};
+
+Variable: Variable = {
+    <id:Identifier> => Variable::Id(id),
+    <v:Variable> "." <f:Identifier> => Variable::MemberAccess { record: Box::new(Expr::Variable(Box::new(v))), field: f },
+    <v:Variable> "[" <ids:ExprList> "]" => Variable::ArrayAccess { array: Box::new(Expr::Variable(Box::new(v))), indices: ids },
+    <v:Variable> "^" => Variable::PointerDeref(Box::new(Expr::Variable(Box::new(v)))),
+};
+
+ExprList: Vec<Expr> = {
+    <e:Expr> => vec![e],
+    <mut list:ExprList> "," <e:Expr> => {
+        list.push(e);
+        list
+    }
+};
