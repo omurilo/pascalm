@@ -1,11 +1,13 @@
 program TestSockets;
+
 var
   s: Socket;
   client: Socket;
   req: HttpRequest;
   res: HttpResponse;
+
 begin
-  s := socket_create();
+  s := socket_create;
   socket_bind(s, '0.0.0.0', 8080);
   socket_listen(s, 10);
   writeln('Server listening on port 8080...');
@@ -21,3 +23,4 @@ begin
     socket_close(client);
   end;
 end.
+

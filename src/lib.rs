@@ -6,6 +6,7 @@ pub mod typed_ast;
 pub mod symbol_table;
 pub mod analyzer;
 pub mod codegen;
+pub mod formatter;
 lalrpop_mod!(pub parser);
 
 pub use analyzer::{SemanticAnalyzer, Diagnostic};

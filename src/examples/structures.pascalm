@@ -1,4 +1,5 @@
 program TesteEstruturas;
+
 type
   TInfo = record
     id: integer;
@@ -6,9 +7,10 @@ type
   TArrayInfo = array[5..6] of TInfo;
 var
   dados: TArrayInfo;
+
 begin
   dados[5].id := 50;
   dados[6].id := 60;
-  writeln(dados[5].id); { Deve imprimir 50 }
-  writeln(dados[6].id); { Deve imprimir 60 }
+  writeln(dados[5].id);
+  writeln(dados[6].id);
 end.

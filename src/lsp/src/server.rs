@@ -304,8 +304,10 @@ impl Backend {
     }
 
     fn build_semantic_tokens(&self, uri: &str) -> Option<Vec<SemanticToken>> {
-        let semantic_result = self.semanticast_map.get(uri)?;
+        // Always lock document_map before semanticast_map, matching hover/goto/
+        // formatting, so the two maps are never acquired in opposite orders.
         let rope = self.document_map.get(uri)?;
+        let semantic_result = self.semanticast_map.get(uri)?;
         let analyzer = &semantic_result.analyzer;
 
         let mut sema: HashMap<usize, u32> = HashMap::new();
@@ -696,9 +698,11 @@ pub fn get_diagnostics(
 }
 
 fn offset_to_position(offset: usize, rope: &Rope) -> Option<Position> {
-    if offset > rope.byte_len() {
-        return None;
-    }
+    // Clamp instead of bailing: while the user types, a stale analysis can hold
+    // spans that point past the (now shorter) document. Clamping keeps the
+    // conversion total so callers never panic on `unwrap()` — a hung request
+    // here shows up to the editor as an LSP timeout.
+    let offset = offset.min(rope.byte_len());
     let line = rope.line_of_byte(offset);
     let line_start_byte = rope.byte_of_line(line);
     let column = offset - line_start_byte;
@@ -718,7 +722,7 @@ impl LanguageServer for Backend {
     async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             capabilities: ServerCapabilities {
-                document_formatting_provider: Some(OneOf::Left(false)), //verificar para adicionar true
+                document_formatting_provider: Some(OneOf::Left(true)),
                 inlay_hint_provider: Some(OneOf::Left(false)), // verificar para adicionar true
                 text_document_sync: Some(TextDocumentSyncCapability::Options(
                     TextDocumentSyncOptions {
@@ -786,8 +790,14 @@ impl LanguageServer for Backend {
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        // FULL sync sends the whole document as the last change; some clients may
+        // send an empty list, so guard against indexing an empty vec (a panic
+        // here would kill the task and stall the server).
+        let Some(change) = params.content_changes.last() else {
+            return;
+        };
         self.on_change(TextDocumentChange {
-            text: &params.content_changes[0].text,
+            text: &change.text,
             uri: params.text_document.uri.to_string(),
         })
         .await;
@@ -807,26 +817,30 @@ impl LanguageServer for Backend {
 
         debug!("file saved");
 
-        if let Some(text_rope) = self.document_map.get(&uri) {
-            let text = text_rope.deref().to_string();
-            let lexer = lexer::Lexer::new(&text);
-            let parser = parser::CompilationUnitParser::new();
+        // Copy the text out and drop the document_map guard BEFORE awaiting.
+        // Holding a DashMap guard across `.await` can deadlock the runtime
+        // against a concurrent did_change write on the same shard.
+        let text = match self.document_map.get(&uri) {
+            Some(text_rope) => text_rope.deref().to_string(),
+            None => return,
+        };
 
-            if let Ok(unit) = parser.parse(lexer) {
-                let (diagnostics, analyzer) = get_diagnostics(&text, &unit);
+        let lexer = lexer::Lexer::new(&text);
+        let parser = parser::CompilationUnitParser::new();
+        if let Ok(unit) = parser.parse(lexer) {
+            let (diagnostics, analyzer) = get_diagnostics(&text, &unit);
 
-                self.client
-                    .publish_diagnostics(params.text_document.uri, diagnostics, None)
-                    .await;
+            self.client
+                .publish_diagnostics(params.text_document.uri, diagnostics, None)
+                .await;
 
-                self.semanticast_map.insert(
-                    uri.clone(),
-                    AnalysisResult {
-                        ast: unit,
-                        analyzer,
-                    },
-                );
-            }
+            self.semanticast_map.insert(
+                uri,
+                AnalysisResult {
+                    ast: unit,
+                    analyzer,
+                },
+            );
         }
     }
 
@@ -921,8 +935,35 @@ impl LanguageServer for Backend {
         Ok(None)
     }
 
-    async fn formatting(&self, _params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
-        Ok(None)
+    async fn formatting(
+        &self,
+        params: DocumentFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri.to_string();
+        let Some(rope) = self.document_map.get(&uri) else {
+            return Ok(None);
+        };
+        let text = rope.to_string();
+
+        // Only format syntactically valid input — never rewrite a broken file.
+        let lexer = lexer::Lexer::new(&text);
+        let parser = parser::CompilationUnitParser::new();
+        let Ok(unit) = parser.parse(lexer) else {
+            return Ok(None);
+        };
+
+        let formatted = pascalm::formatter::format_compilation_unit(&unit, &text);
+        if formatted == text {
+            return Ok(None);
+        }
+
+        // Replace the whole document with the formatted output.
+        let end = offset_to_position(text.len(), &rope).unwrap_or(Position::new(0, 0));
+        let range = Range::new(Position::new(0, 0), end);
+        Ok(Some(vec![TextEdit {
+            range,
+            new_text: formatted,
+        }]))
     }
 
     async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
