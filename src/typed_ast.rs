@@ -11,6 +11,7 @@ pub enum Type {
     Record { fields: Vec<(String, Type)> },
     Pointer(Box<Type>),
     Set(Box<Type>),
+    #[allow(dead_code)]
     Subrange { start: i64, end: i64 },
     Enum(Vec<String>),
     Procedure,
@@ -20,6 +21,7 @@ pub enum Type {
 
 #[derive(Debug, Clone)]
 pub struct TypedProgram {
+    #[allow(dead_code)]
     pub name: String,
     pub uses: Vec<String>,
     pub block: TypedBlock,
@@ -27,6 +29,7 @@ pub struct TypedProgram {
 
 #[derive(Debug, Clone)]
 pub struct TypedBlock {
+    #[allow(dead_code)]
     pub labels: Vec<i64>,
     pub constants: Vec<(String, TypedExpr)>,
     pub variables: Vec<(String, Type)>,
