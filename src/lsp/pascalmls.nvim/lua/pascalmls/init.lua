@@ -24,6 +24,18 @@ local M = {}
 local uv = vim.uv or vim.loop
 local did_setup = false
 
+-- Prefer the binary the `build` step placed in this plugin's `bin/` dir; fall
+-- back to a `pascalmls` on PATH (e.g. a `cargo install`ed one).
+local function default_cmd()
+  local src = debug.getinfo(1, "S").source:sub(2) -- strip leading '@'
+  local root = vim.fn.fnamemodify(src, ":h:h:h") -- lua/pascalmls/init.lua -> plugin root
+  local bin = root .. "/bin/pascalmls"
+  if vim.fn.executable(bin) == 1 then
+    return { bin }
+  end
+  return { "pascalmls" }
+end
+
 -- Does `dir` directly contain a .pascalm/.pas file?
 local function dir_has_pascal(dir)
   local ok, it = pcall(vim.fs.dir, dir)
@@ -127,7 +139,7 @@ function M.setup(opts)
   })
 
   local config = {
-    cmd = opts.cmd or { "pascalmls" },
+    cmd = opts.cmd or default_cmd(),
     filetypes = { "pascalm", "pas" },
   }
   -- `root_dir` follows the Neovim 0.11 signature `root_dir(bufnr, on_dir)` —

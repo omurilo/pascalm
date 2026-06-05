@@ -12,32 +12,41 @@ Neovim integration for the [PascalM](../../../README.md) language server (`pasca
   scoped to `pascalmls` only — it does **not** touch the global `:LspRestart`, so
   other servers behave exactly as your config already defines.
 
-## Requirements
+## The server binary
 
-The `pascalmls` binary must be on your `PATH`:
+You don't need to install `pascalmls` yourself — the `build` step (`build.sh`)
+fetches it. It **downloads a prebuilt binary** for your platform from the latest
+GitHub Release into the plugin's `bin/` directory (no toolchain required). If no
+release asset is available and the Rust source sits next to the plugin (in-repo
+checkout), it **falls back to building from source** (needs Rust + LLVM 18).
 
-```bash
-cd src/lsp
-cargo install --path .   # or: cargo build && cp target/debug/pascalmls ~/.cargo/bin/
-```
+The plugin then runs `<plugin>/bin/pascalmls` automatically, falling back to a
+`pascalmls` on your `PATH` if the bundled binary isn't present.
+
+> Publishing the assets: a release must contain binaries named
+> `pascalmls-<target>` (e.g. `pascalmls-aarch64-apple-darwin`,
+> `pascalmls-x86_64-unknown-linux-gnu`). See the repo's release workflow.
 
 ## Install (lazy.nvim)
 
-Local checkout — just declare it, nothing else needed:
+Local checkout — declare it with the `build` step:
 
 ```lua
 {
   dir = vim.fn.expand("~/projects/personal/pascalm/src/lsp/pascalmls.nvim"),
-  lazy = false, -- load at startup so the filetype is registered
-  opts = {},    -- lazy.nvim calls require("pascalmls").setup(opts)
+  build = "bash build.sh", -- download (or build) the server binary
+  lazy = false,            -- load at startup so the filetype is registered
+  opts = {},               -- lazy.nvim calls require("pascalmls").setup(opts)
 }
 ```
 
 Published to GitHub:
 
 ```lua
-{ "omurilo/pascalmls.nvim", lazy = false, opts = {} }
+{ "omurilo/pascalmls.nvim", build = "bash build.sh", lazy = false, opts = {} }
 ```
+
+Re-run the download/build at any time with `:Lazy build pascalmls`.
 
 ## Options
 

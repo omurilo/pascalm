@@ -57,19 +57,45 @@ impl Backend {
         position: Position,
         new_name: String,
     ) -> Option<WorkspaceEdit> {
-        let all_references = self.semanticast_map.get(&uri)?.analyzer.references.clone();
+        // document_map before semanticast_map (consistent lock order).
         let rope = self.document_map.get(&uri)?;
-        let edits = all_references
+        let result = self.semanticast_map.get(&uri)?;
+        let analyzer = &result.analyzer;
+
+        // Identify exactly which symbol the cursor is on; rename only that one.
+        let offset = position_to_offset(position, &rope)?;
+        let symbol_id = self.find_symbol_at_offset(analyzer, offset)?;
+
+        // Refuse to rename symbols without a real definition span (builtins like
+        // `writeln`, or externally-provided symbols) — we can't rewrite those.
+        let has_real_def = analyzer
+            .definitions
             .iter()
-            .map(|item| {
-                let start = offset_to_position(item.0.start, &rope).unwrap();
-                let end = offset_to_position(item.0.end, &rope).unwrap();
-                TextEdit {
-                    range: Range::new(start, end),
-                    new_text: new_name.clone(),
-                }
-            })
-            .collect::<Vec<_>>();
+            .any(|(span, id)| *id == symbol_id && span.start != span.end);
+        if !has_real_def {
+            return None;
+        }
+
+        // Every occurrence of this symbol = its definition(s) + its references.
+        let mut seen = std::collections::HashSet::new();
+        let mut edits = Vec::new();
+        for (span, id) in analyzer.definitions.iter().chain(analyzer.references.iter()) {
+            if *id != symbol_id || span.start == span.end {
+                continue;
+            }
+            if !seen.insert((span.start, span.end)) {
+                continue; // dedup: overlapping edits are invalid in a WorkspaceEdit
+            }
+            let start = offset_to_position(span.start, &rope)?;
+            let end = offset_to_position(span.end, &rope)?;
+            edits.push(TextEdit {
+                range: Range::new(start, end),
+                new_text: new_name.clone(),
+            });
+        }
+        if edits.is_empty() {
+            return None;
+        }
 
         let parsed_uri =
             Url::parse(&uri).unwrap_or_else(|_| Url::from_directory_path(&uri).unwrap());
