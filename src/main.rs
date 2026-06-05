@@ -31,8 +31,11 @@ struct Args {
     lib_path: Vec<String>,
 }
 
-const RUNTIME_BC: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/runtime_lib.bc"));
 include!(concat!(env!("OUT_DIR"), "/libs.rs"));
+
+/// The `system` unit provides the language runtime intrinsics and is linked
+/// into every program implicitly, whether or not it is explicitly `use`d.
+const IMPLICIT_RUNTIME_UNIT: &str = "system";
 
 fn main() {
     let args = Args::parse();
@@ -49,28 +52,18 @@ fn main() {
             let mut generated_ir_files = Vec::new();
             let mut used_builtin_libs = HashSet::new();
 
-            for name in sorted_units {
-                let is_builtin = loader.embedded_units.contains_key(&name);
+            for id in sorted_units {
+                let is_builtin = loader.embedded_units.contains_key(&id);
                 if is_builtin {
-                    used_builtin_libs.insert(name.clone());
+                    used_builtin_libs.insert(id.clone());
                 }
-                let unit = loader.modules.get(&name).unwrap();
-                match unit {
+                let loaded = loader.modules.get(&id).unwrap();
+                let uses_map = loaded.uses_map.clone();
+                let unit = loaded.unit.clone();
+                match &unit {
                     CompilationUnit::Program(p) => {
                         let mut resolved_p = p.clone();
-                        if let Some(uses) = &p.uses {
-                            resolved_p.uses = Some(
-                                uses.iter()
-                                    .map(|u| {
-                                        loader
-                                            .name_mapping
-                                            .get(&u.to_lowercase())
-                                            .cloned()
-                                            .unwrap_or(u.to_lowercase())
-                                    })
-                                    .collect(),
-                            );
-                        }
+                        resolved_p.uses = resolve_uses(&p.uses, &uses_map);
                         let mut analyzer =
                             analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
                         match analyzer.analyze_program(&resolved_p) {
@@ -81,7 +74,7 @@ fn main() {
                                     module_interfaces.clone(),
                                 );
                                 if let Err(e) = codegen.gen_program(typed_ast) {
-                                    eprintln!("Codegen error in program {}: {}", name, e);
+                                    eprintln!("Codegen error in program {}: {}", id, e);
                                     std::process::exit(1);
                                 }
 
@@ -93,57 +86,38 @@ fn main() {
                                 generated_ir_files.push(ir_path);
                             }
                             Err(e) => {
-                                eprintln!("Semantic error in program {}: {}", name, e);
+                                eprintln!("Semantic error in program {}: {}", id, e);
                                 std::process::exit(1);
                             }
                         }
                     }
                     CompilationUnit::Unit(u) => {
                         let mut resolved_u = u.clone();
-                        if let Some(uses) = &u.interface.uses {
-                            resolved_u.interface.uses = Some(
-                                uses.iter()
-                                    .map(|u| {
-                                        loader
-                                            .name_mapping
-                                            .get(&u.to_lowercase())
-                                            .cloned()
-                                            .unwrap_or(u.to_lowercase())
-                                    })
-                                    .collect(),
-                            );
-                        }
-                        if let Some(uses) = &u.implementation.uses {
-                            resolved_u.implementation.uses = Some(
-                                uses.iter()
-                                    .map(|u| {
-                                        loader
-                                            .name_mapping
-                                            .get(&u.to_lowercase())
-                                            .cloned()
-                                            .unwrap_or(u.to_lowercase())
-                                    })
-                                    .collect(),
-                            );
-                        }
+                        resolved_u.interface.uses = resolve_uses(&u.interface.uses, &uses_map);
+                        resolved_u.implementation.uses =
+                            resolve_uses(&u.implementation.uses, &uses_map);
                         let mut analyzer =
                             analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
                         match analyzer.analyze_unit(&resolved_u) {
                             Ok((interface, typed_block)) => {
-                                module_interfaces.insert(name.clone(), interface);
+                                module_interfaces.insert(id.clone(), interface);
 
                                 if !is_builtin {
+                                    // The module id (a sanitized canonical path)
+                                    // names the unit's LLVM module so its
+                                    // `<id>_init` symbol is unique even across
+                                    // units that share a `unit` name.
                                     let mut codegen = codegen::CodeGen::with_interfaces(
                                         &context,
-                                        &u.name,
+                                        &id,
                                         module_interfaces.clone(),
                                     );
                                     if let Err(e) = codegen.gen_unit(typed_block) {
-                                        eprintln!("Codegen error in unit {}: {}", name, e);
+                                        eprintln!("Codegen error in unit {}: {}", id, e);
                                         std::process::exit(1);
                                     }
 
-                                    let ir_path = format!("{}.ll", u.name);
+                                    let ir_path = format!("{}.ll", id);
                                     codegen
                                         .module
                                         .print_to_file(&ir_path)
@@ -152,7 +126,7 @@ fn main() {
                                 }
                             }
                             Err(e) => {
-                                eprintln!("Semantic error in unit {}: {}", name, e);
+                                eprintln!("Semantic error in unit {}: {}", id, e);
                                 std::process::exit(1);
                             }
                         }
@@ -167,7 +141,16 @@ fn main() {
                 let mut clang_args = generated_ir_files.clone();
                 let mut temp_libs = Vec::new();
 
-                for lib_name in used_builtin_libs {
+                // The `system` runtime is always linked last (lowest-level), so
+                // emit the explicitly-used libs first and skip it here to avoid
+                // linking it twice if it was also `use`d directly.
+                let mut libs_to_link: Vec<String> = used_builtin_libs
+                    .into_iter()
+                    .filter(|l| l != IMPLICIT_RUNTIME_UNIT)
+                    .collect();
+                libs_to_link.push(IMPLICIT_RUNTIME_UNIT.to_string());
+
+                for lib_name in libs_to_link {
                     if let Some(asset) = get_stdlib_assets().iter().find(|a| a.name == lib_name) {
                         let temp_path = std::env::temp_dir().join(format!("lib{}_tmp.a", lib_name));
                         fs::write(&temp_path, asset.archive)
@@ -176,10 +159,6 @@ fn main() {
                         temp_libs.push(temp_path);
                     }
                 }
-
-                let runtime_path = std::env::temp_dir().join("runtime_lib.bc");
-                fs::write(&runtime_path, RUNTIME_BC).expect("Failed to write temporary runtime");
-                clang_args.push(runtime_path.to_str().unwrap().to_string());
 
                 let status = std::process::Command::new("clang")
                     .args(&clang_args)
@@ -202,7 +181,6 @@ fn main() {
                 }
 
                 // Cleanup temp files
-                let _ = fs::remove_file(runtime_path);
                 for lib in temp_libs {
                     let _ = fs::remove_file(lib);
                 }
@@ -215,12 +193,18 @@ fn main() {
     }
 }
 
+/// A parsed module plus the resolution of its `uses` specs to module ids,
+/// computed in the importing module's directory context.
+struct LoadedModule {
+    unit: CompilationUnit,
+    uses_map: HashMap<String, String>, // use-spec (lowercased) -> module id
+}
+
 struct ModuleLoader {
-    modules: HashMap<String, CompilationUnit>,
-    embedded_units: HashMap<String, String>,
+    modules: HashMap<String, LoadedModule>, // key: module id
+    embedded_units: HashMap<String, String>, // builtin name -> source
     search_paths: Vec<PathBuf>,
-    loading_stack: Vec<String>,
-    name_mapping: HashMap<String, String>,
+    loading_stack: Vec<String>, // module ids currently being loaded
 }
 
 impl ModuleLoader {
@@ -230,7 +214,6 @@ impl ModuleLoader {
             embedded_units: HashMap::new(),
             search_paths: Vec::new(),
             loading_stack: Vec::new(),
-            name_mapping: HashMap::new(),
         };
 
         let assets = get_stdlib_assets();
@@ -243,20 +226,62 @@ impl ModuleLoader {
         loader
     }
 
-    fn load_recursively(&mut self, source_path: &Path, verbose: bool) -> Result<String, String> {
-        let input = fs::read_to_string(source_path)
-            .map_err(|e| format!("Failed to read {}: {}", source_path.display(), e))?;
-        self.parse_and_load(input, source_path.to_path_buf(), verbose)
+    /// A module's stable identity. File modules use a sanitized form of their
+    /// canonical path, so the same file reached via different `uses` paths is
+    /// one module, while two distinct files that share a `unit` name stay
+    /// separate. Builtin (embedded) units are identified by their name.
+    fn file_module_id(path: &Path) -> Result<String, String> {
+        let canonical = fs::canonicalize(path)
+            .map_err(|e| format!("Failed to resolve {}: {}", path.display(), e))?;
+        Ok(Self::sanitize_id(&canonical.to_string_lossy()))
     }
 
-    pub fn parse_and_load(
+    fn sanitize_id(raw: &str) -> String {
+        let mut out = String::from("m_");
+        for c in raw.chars() {
+            if c.is_ascii_alphanumeric() {
+                out.push(c.to_ascii_lowercase());
+            } else {
+                out.push('_');
+            }
+        }
+        out
+    }
+
+    fn load_recursively(&mut self, source_path: &Path, verbose: bool) -> Result<String, String> {
+        let id = Self::file_module_id(source_path)?;
+        if self.modules.contains_key(&id) {
+            return Ok(id);
+        }
+        let input = fs::read_to_string(source_path)
+            .map_err(|e| format!("Failed to read {}: {}", source_path.display(), e))?;
+        let base_dir = source_path
+            .parent()
+            .unwrap_or(Path::new("."))
+            .to_path_buf();
+        self.load_unit(id, input, base_dir, verbose)
+    }
+
+    fn load_unit(
         &mut self,
+        id: String,
         input: String,
-        source_path: PathBuf,
+        base_dir: PathBuf,
         verbose: bool,
     ) -> Result<String, String> {
+        if self.loading_stack.contains(&id) {
+            return Err(format!(
+                "Circular dependency detected: {} -> {}",
+                self.loading_stack.join(" -> "),
+                id
+            ));
+        }
+        if self.modules.contains_key(&id) {
+            return Ok(id);
+        }
+
         if verbose {
-            println!("Tokens for {}:", source_path.display());
+            println!("Tokens for {}:", id);
             let mut debug_lexer = lexer::Token::lexer(&input);
             while let Some(token) = debug_lexer.next() {
                 println!("  {:?} at {:?}", token, debug_lexer.span());
@@ -264,31 +289,24 @@ impl ModuleLoader {
         }
         let lexer = lexer::Lexer::new(&input);
         let parser = parser::CompilationUnitParser::new();
-        let unit = parser
+        let mut unit = parser
             .parse(lexer)
             .map_err(|e| format!("Parser failed: {:?}", e))?;
 
-        let actual_name = match &unit {
-            CompilationUnit::Program(p) => p.name.clone(),
-            CompilationUnit::Unit(u) => u.name.clone(),
-        }
-        .to_lowercase();
-
-        if self.loading_stack.contains(&actual_name) {
-            return Err(format!(
-                "Circular dependency detected: {} -> {}",
-                self.loading_stack.join(" -> "),
-                actual_name
-            ));
+        // Every program implicitly uses the `system` unit so that the language
+        // intrinsics (Sqrt, Halt, ...) are in scope without an explicit `uses`.
+        if id != IMPLICIT_RUNTIME_UNIT {
+            if let CompilationUnit::Program(p) = &mut unit {
+                let uses = p.uses.get_or_insert_with(Vec::new);
+                if !uses.iter().any(|u| u.to_lowercase() == IMPLICIT_RUNTIME_UNIT) {
+                    uses.insert(0, IMPLICIT_RUNTIME_UNIT.to_string());
+                }
+            }
         }
 
-        if self.modules.contains_key(&actual_name) {
-            return Ok(actual_name);
-        }
+        self.loading_stack.push(id.clone());
 
-        self.loading_stack.push(actual_name.clone());
-
-        let deps = match &unit {
+        let specs: Vec<String> = match &unit {
             CompilationUnit::Program(p) => p.uses.clone().unwrap_or_default(),
             CompilationUnit::Unit(u) => {
                 let mut d = u.interface.uses.clone().unwrap_or_default();
@@ -297,50 +315,50 @@ impl ModuleLoader {
             }
         };
 
-        let base_dir = source_path.parent().unwrap_or(Path::new("."));
+        let mut uses_map: HashMap<String, String> = HashMap::new();
+        for spec in specs {
+            let spec_lower = spec.to_lowercase();
+            if uses_map.contains_key(&spec_lower) {
+                continue;
+            }
+            let dep_id = self.resolve_dependency(&spec_lower, &base_dir, verbose)?;
+            uses_map.insert(spec_lower, dep_id);
+        }
 
-        for dep in deps {
-            let dep_lower = dep.to_lowercase();
-            if !self.modules.contains_key(&dep_lower) && !self.name_mapping.contains_key(&dep_lower)
-            {
-                if let Some(content) = self.embedded_units.get(&dep_lower) {
-                    let virtual_path = PathBuf::from(format!("builtin://{}.pas", dep_lower));
-                    let real_unit_name =
-                        self.parse_and_load(content.to_string(), virtual_path, verbose)?;
-                    self.name_mapping.insert(dep_lower.clone(), real_unit_name);
-                    continue;
-                }
+        self.modules
+            .insert(id.clone(), LoadedModule { unit, uses_map });
+        self.loading_stack.pop();
+        Ok(id)
+    }
 
-                let mut found = false;
-                let mut paths_to_check = vec![base_dir.to_path_buf()];
-                paths_to_check.extend(self.search_paths.clone());
+    /// Resolves a single `uses` spec to a module id, loading it if necessary.
+    /// Embedded builtin units win by name; otherwise the spec is treated as a
+    /// path relative to the importer's directory, then the `-L` search paths.
+    fn resolve_dependency(
+        &mut self,
+        spec_lower: &str,
+        base_dir: &Path,
+        verbose: bool,
+    ) -> Result<String, String> {
+        if let Some(content) = self.embedded_units.get(spec_lower).cloned() {
+            let id = spec_lower.to_string();
+            if !self.modules.contains_key(&id) {
+                self.load_unit(id.clone(), content, PathBuf::from("."), verbose)?;
+            }
+            return Ok(id);
+        }
 
-                for path in paths_to_check {
-                    let file_path = path.join(format!("{}.pas", dep_lower));
-                    if file_path.exists() {
-                        let real_unit_name = self.load_recursively(&file_path, verbose)?;
-                        self.name_mapping.insert(dep_lower.clone(), real_unit_name);
-                        found = true;
-                        break;
-                    }
-                    let file_path_pascalm = path.join(format!("{}.pascalm", dep_lower));
-                    if file_path_pascalm.exists() {
-                        let real_unit_name = self.load_recursively(&file_path_pascalm, verbose)?;
-                        self.name_mapping.insert(dep_lower.clone(), real_unit_name);
-                        found = true;
-                        break;
-                    }
-                }
-
-                if !found {
-                    return Err(format!("Unit {} not found", dep));
+        let mut candidates = vec![base_dir.to_path_buf()];
+        candidates.extend(self.search_paths.clone());
+        for dir in candidates {
+            for ext in ["pas", "pascalm"] {
+                let file_path = dir.join(format!("{}.{}", spec_lower, ext));
+                if file_path.exists() {
+                    return self.load_recursively(&file_path, verbose);
                 }
             }
         }
-
-        self.modules.insert(actual_name.clone(), unit);
-        self.loading_stack.pop();
-        Ok(actual_name)
+        Err(format!("Unit {} not found", spec_lower))
     }
 
     fn topological_sort(&self) -> Option<Vec<String>> {
@@ -348,8 +366,8 @@ impl ModuleLoader {
         let mut visited = HashSet::new();
         let mut temp_visited = HashSet::new();
 
-        for name in self.modules.keys() {
-            if !self.visit(name, &mut visited, &mut temp_visited, &mut sorted) {
+        for id in self.modules.keys() {
+            if !self.visit(id, &mut visited, &mut temp_visited, &mut sorted) {
                 return None;
             }
         }
@@ -358,45 +376,50 @@ impl ModuleLoader {
 
     fn visit(
         &self,
-        name: &str,
+        id: &str,
         visited: &mut HashSet<String>,
         temp_visited: &mut HashSet<String>,
         sorted: &mut Vec<String>,
     ) -> bool {
-        let actual_name = self
-            .name_mapping
-            .get(name)
-            .unwrap_or(&name.to_string())
-            .to_string();
-
-        if temp_visited.contains(&actual_name) {
+        if temp_visited.contains(id) {
             return false;
         }
-        if visited.contains(&actual_name) {
+        if visited.contains(id) {
             return true;
         }
 
-        temp_visited.insert(actual_name.clone());
+        temp_visited.insert(id.to_string());
 
-        let unit = self.modules.get(&actual_name).unwrap();
-        let deps = match unit {
-            CompilationUnit::Program(p) => p.uses.clone().unwrap_or_default(),
-            CompilationUnit::Unit(u) => {
-                let mut d = u.interface.uses.clone().unwrap_or_default();
-                d.extend(u.implementation.uses.clone().unwrap_or_default());
-                d
-            }
-        };
-
-        for dep in deps {
-            if !self.visit(&dep.to_lowercase(), visited, temp_visited, sorted) {
-                return false;
+        if let Some(module) = self.modules.get(id) {
+            for dep_id in module.uses_map.values() {
+                if !self.visit(dep_id, visited, temp_visited, sorted) {
+                    return false;
+                }
             }
         }
 
-        temp_visited.remove(&actual_name);
-        visited.insert(actual_name.clone());
-        sorted.push(actual_name);
+        temp_visited.remove(id);
+        visited.insert(id.to_string());
+        sorted.push(id.to_string());
         true
     }
+}
+
+/// Maps a unit's `uses` specs to their resolved module ids for the analyzer
+/// and codegen, preserving order. Unknown specs fall back to their lowercase
+/// form (e.g. builtins that were resolved by name).
+fn resolve_uses(
+    specs: &Option<Vec<String>>,
+    uses_map: &HashMap<String, String>,
+) -> Option<Vec<String>> {
+    specs.as_ref().map(|v| {
+        v.iter()
+            .map(|u| {
+                uses_map
+                    .get(&u.to_lowercase())
+                    .cloned()
+                    .unwrap_or_else(|| u.to_lowercase())
+            })
+            .collect()
+    })
 }

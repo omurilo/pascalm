@@ -49,7 +49,6 @@ extern {
         "writeln" => Token::Writeln,
         "read" => Token::Read,
         "readln" => Token::Readln,
-        "Chr" => Token::Chr,
         "nil" => Token::Nil,
         "with" => Token::With,
         "forward" => Token::Forward,
@@ -575,7 +574,6 @@ PrimaryExpr: Expr = {
     "[" <els:ElementList?> "]" => Expr::Set(els.unwrap_or_default()),
     
     // Function calls and UFCS (Method calls desugared to function calls)
-    <name:BuiltinFunc> "(" <args:ExprList?> ")" => Expr::FunctionCall { name, args },
     <v:Variable> "(" <args:ExprList?> ")" => {
         match v {
             Variable::Id(id) => Expr::FunctionCall { name: id, args },
@@ -592,10 +590,6 @@ PrimaryExpr: Expr = {
     
     <v:Variable> => Expr::Variable(Box::new(v)),
     "(" <e:Expr> ")" => e,
-};
-
-BuiltinFunc: String = {
-    "Chr" => "Chr".to_string(),
 };
 
 BuiltinProc: String = {

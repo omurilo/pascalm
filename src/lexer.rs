@@ -88,8 +88,6 @@ pub enum Token {
     Read,
     #[token("readln", ignore(case))]
     Readln,
-    #[token("Chr", ignore(case))]
-    Chr,
     #[token("nil", ignore(case))]
     Nil,
     #[token("with", ignore(case))]

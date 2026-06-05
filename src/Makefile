@@ -12,7 +12,7 @@ CARGO      := cargo
 PROJECT    := pascalm
 
 # Library path for local dependencies (like libzstd.so)
-export LIBRARY_PATH := $(shell pwd)/../lib:$(LIBRARY_PATH)
+# export LIBRARY_PATH := $(shell pwd)/../lib:$(LIBRARY_PATH)
 # Target binary path relative to the root (where Cargo.toml usually is)
 # From src/ directory, cargo will find the parent Cargo.toml automatically.
 
