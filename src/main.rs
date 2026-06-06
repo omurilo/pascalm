@@ -1,18 +1,31 @@
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use inkwell::context::Context;
 use pascalm::ast::CompilationUnit;
 use pascalm::loader::{resolve_uses, ModuleLoader, IMPLICIT_RUNTIME_UNIT};
 use pascalm::stdlib_assets::get_stdlib_assets;
-use pascalm::{analyzer, codegen};
+use pascalm::{analyzer, codegen, formatter, lexer, parser};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[derive(Subcommand, Debug)]
+#[command(args_conflicts_with_subcommands = true)]
+pub enum Commands {
+    #[command(arg_required_else_help = true)]
+    Fmt {
+        #[arg(long)]
+        all: bool,
+
+        #[arg(short, long = "file")]
+        file_path: Option<String>,
+    },
+}
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(short, long)]
-    file: String,
+    file: Option<String>,
 
     #[arg(short, long)]
     output: Option<String>,
@@ -22,14 +35,80 @@ struct Args {
 
     #[arg(short = 'L', long)]
     lib_path: Vec<String>,
+
+    #[command(subcommand)]
+    command: Commands,
 }
 
 fn main() {
     let args = Args::parse();
+
     let mut loader = ModuleLoader::new();
     loader.search_paths = args.lib_path.iter().map(PathBuf::from).collect();
 
-    match loader.load_recursively(Path::new(&args.file), args.verbose) {
+    match args.command {
+        Commands::Fmt { all, file_path } => {
+            // TODO: resolve all files and format when all is true or format file of file_path
+            if all {
+                // TODO: scan all files and format
+                fn visit_dir(path: &Path) -> std::io::Result<()> {
+                    for entry in fs::read_dir(path)? {
+                        let entry = entry?;
+                        let path = entry.path();
+
+                        if path.is_dir() {
+                            visit_dir(&path)?;
+                        } else {
+                            let source = match path.extension().and_then(|e| e.to_str()) {
+                                Some("pas") | Some("pascalm") => std::fs::read_to_string(&path)?,
+                                _ => continue,
+                            };
+                            let lexer = lexer::Lexer::new(&source);
+                            let parser = parser::CompilationUnitParser::new();
+                            let Ok(unit) = parser.parse(lexer) else {
+                                continue;
+                            };
+
+                            let formatted = formatter::format_compilation_unit(&unit, &source);
+                            if formatted == source {
+                                continue;
+                            }
+
+                            let _ = std::fs::write(path, formatted);
+                        }
+                    }
+
+                    Ok(())
+                }
+
+                let _ = visit_dir(Path::new("."));
+                return;
+            }
+
+            let file = file_path.expect("file is required");
+            // TODO: retrieve file and format
+            // formatter::format_compilation_unit()
+            let source = std::fs::read_to_string(&file).unwrap();
+
+            let lexer = lexer::Lexer::new(&source);
+            let parser = parser::CompilationUnitParser::new();
+            let Ok(unit) = parser.parse(lexer) else {
+                return ();
+            };
+
+            let formatted = formatter::format_compilation_unit(&unit, &source);
+            if formatted == source {
+                return ();
+            }
+
+            let _ = std::fs::write(file, formatted);
+            return;
+        }
+    }
+
+    let file = args.file.expect("file is required");
+
+    match loader.load_recursively(Path::new(&file), args.verbose) {
         Ok(_) => {
             let sorted_units = loader
                 .topological_sort()

@@ -132,7 +132,10 @@ impl ModuleLoader {
         if id != IMPLICIT_RUNTIME_UNIT {
             if let CompilationUnit::Program(p) = &mut unit {
                 let uses = p.uses.get_or_insert_with(Vec::new);
-                if !uses.iter().any(|u| u.to_lowercase() == IMPLICIT_RUNTIME_UNIT) {
+                if !uses
+                    .iter()
+                    .any(|u| u.to_lowercase() == IMPLICIT_RUNTIME_UNIT)
+                {
                     uses.insert(0, IMPLICIT_RUNTIME_UNIT.to_string());
                 }
             }

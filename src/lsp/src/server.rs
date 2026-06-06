@@ -10,7 +10,7 @@ use dashmap::DashMap;
 use lalrpop_util::ParseError;
 use log::debug;
 use pascalm::lexer::{self, Token};
-use pascalm::loader::{resolve_uses, ModuleLoader};
+use pascalm::loader::{resolve_uses, ModuleLoader, IMPLICIT_RUNTIME_UNIT};
 use pascalm::symbol_table::SymbolInfo;
 use pascalm::{parser, CompilationUnit, SemanticAnalyzer, SymbolKind};
 use tower_lsp::jsonrpc::Result;
@@ -93,23 +93,26 @@ impl Backend {
     /// `Location` in the *defining* file. This is the cross-file part of
     /// go-to-definition. Returns `None` if no used unit exports `name`.
     fn cross_file_definition(&self, uses: &[String], name: &str) -> Option<Location> {
-        for spec in uses {
-            let Some((uri, symbol_info)) = self.extract_symbol_info(spec, name) else {
-                continue;
-            };
-
-            let path = uri.to_file_path().ok()?;
-            let text = std::fs::read_to_string(&path).ok()?;
-            let rope = Rope::from(text);
-            let start = offset_to_position(symbol_info.span.start, &rope)?;
-            let end = offset_to_position(symbol_info.span.end, &rope)?;
-            return Some(Location::new(uri, Range::new(start, end)));
-        }
-
-        None
+        let (uri, symbol_info) = self.resolve_imported(uses, name)?;
+        let path = uri.to_file_path().ok()?;
+        let text = std::fs::read_to_string(&path).ok()?;
+        let rope = Rope::from(text);
+        let start = offset_to_position(symbol_info.span.start, &rope)?;
+        let end = offset_to_position(symbol_info.span.end, &rope)?;
+        Some(Location::new(uri, Range::new(start, end)))
     }
 
-    fn extract_symbol_info(&self, spec: &String, name: &str) -> Option<(Url, SymbolInfo)> {
+    /// Resolve `name` to a symbol exported by one of `uses` — plus the implicit
+    /// `system` runtime, which programs use without listing it. Returns the
+    /// defining file's URL and the symbol info.
+    fn resolve_imported(&self, uses: &[String], name: &str) -> Option<(Url, SymbolInfo)> {
+        uses.iter()
+            .map(String::as_str)
+            .chain(std::iter::once(IMPLICIT_RUNTIME_UNIT))
+            .find_map(|spec| self.extract_symbol_info(spec, name))
+    }
+
+    fn extract_symbol_info(&self, spec: &str, name: &str) -> Option<(Url, SymbolInfo)> {
         let stem = spec.rsplit(['/', '\\']).next().unwrap_or(spec);
         let Some(module_id) = self.unit_by_stem.get(stem).map(|r| r.value().clone()) else {
             return None;
@@ -176,6 +179,11 @@ impl Backend {
         let mut loader = ModuleLoader::new();
         loader.search_paths = vec![root.to_path_buf()];
 
+        // Embedded stdlib units (system/net/json) have no file on disk; write
+        // their source to a cache so go-to-definition/hover can point at them.
+        // Keyed by the unit id (lowercased name), matching the loader's module id.
+        let embedded_paths = materialize_stdlib();
+
         let mut id_to_path: HashMap<String, PathBuf> = HashMap::new();
         for path in &files {
             if loader.load_recursively(path, false).is_ok() {
@@ -220,10 +228,16 @@ impl Backend {
                 }
             }
 
-            let Some(path) = id_to_path.get(id) else {
+            // File-backed units use their real path; embedded stdlib units use
+            // the materialized cache file.
+            let Some(path) = id_to_path
+                .get(id)
+                .cloned()
+                .or_else(|| embedded_paths.get(id).cloned())
+            else {
                 continue;
             };
-            let Ok(url) = Url::from_file_path(path) else {
+            let Ok(url) = Url::from_file_path(&path) else {
                 continue;
             };
             if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
@@ -762,6 +776,25 @@ fn collect_pascal_files(dir: &Path, out: &mut Vec<PathBuf>, depth: usize) {
     }
 }
 
+/// Write the embedded stdlib unit sources to a cache directory so the editor
+/// can open them (go-to-definition / hover into stdlib). Returns a map of unit
+/// id (lowercased name — matching the loader's module id) -> cache file path.
+/// The written source is byte-identical to what the analyzer sees, so the spans
+/// in its analysis line up with this file.
+fn materialize_stdlib() -> HashMap<String, PathBuf> {
+    let dir = std::env::temp_dir().join("pascalmls").join("stdlib");
+    let _ = std::fs::create_dir_all(&dir);
+    let mut map = HashMap::new();
+    for asset in pascalm::stdlib_assets::get_stdlib_assets() {
+        let name = asset.name.to_lowercase();
+        let path = dir.join(format!("{name}.pas"));
+        if std::fs::write(&path, asset.source).is_ok() {
+            map.insert(name, path);
+        }
+    }
+    map
+}
+
 /// Extract the identifier (`[A-Za-z0-9_]+`) surrounding `offset`, if any.
 fn word_at_offset(text: &str, offset: usize) -> Option<String> {
     let bytes = text.as_bytes();
@@ -1029,13 +1062,13 @@ impl LanguageServer for Backend {
 
                 let text = rope.to_string();
                 if let Some(name) = word_at_offset(&text, offset) {
-                    let Some((_, symbol_info)) = unit_uses(&result.ast)
-                        .iter()
-                        .find_map(|spec| self.extract_symbol_info(spec, &name))
+                    let Some((_, symbol_info)) =
+                        self.resolve_imported(&unit_uses(&result.ast), &name)
                     else {
                         return Ok(None);
                     };
-                    let content = format!("```pascal\n{}: {}\n```", name, symbol_info.kind);
+                    let content =
+                        format!("```pascal\n{} : {}\n```", symbol_info.name, symbol_info.kind);
                     return Ok(Some(Hover {
                         contents: HoverContents::Markup(MarkupContent {
                             kind: MarkupKind::Markdown,

@@ -440,6 +440,53 @@ fn goto_definition_resolves_path_style_uses() {
 }
 
 #[test]
+fn goto_and_hover_resolve_stdlib_symbols() {
+    // `Sqrt` comes from the implicit `system` stdlib unit, which is embedded
+    // (no file on disk). The server materializes it to a cache file so both
+    // hover and go-to-definition work.
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/stdlib");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/prog.pascalm");
+    let text = std::fs::read_to_string(format!("{dir}/prog.pascalm")).unwrap();
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+    s.did_open(&prog_uri, &text);
+
+    // `Sqrt` is on line 2, char 10.
+    let hover = s.request_until(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": prog_uri },
+            "position": { "line": 2, "character": 10 }
+        }),
+        |r| !r.is_null(),
+    );
+    let value = hover["result"]["contents"]["value"].as_str().unwrap_or("");
+    assert!(
+        value.contains("Sqrt"),
+        "hover should describe the stdlib symbol, got: {}",
+        hover["result"]
+    );
+
+    let goto = s.request_until(
+        "textDocument/definition",
+        json!({
+            "textDocument": { "uri": prog_uri },
+            "position": { "line": 2, "character": 10 }
+        }),
+        |r| !r.is_null(),
+    );
+    let uri = goto["result"]["uri"].as_str().unwrap_or("");
+    assert!(
+        uri.ends_with("system.pas"),
+        "go-to-definition should land in the materialized system.pas, got: {}",
+        goto["result"]
+    );
+}
+
+#[test]
 fn workspace_units_are_analyzed_on_init() {
     // Point the server at the repo's multi-unit fixture and confirm it indexes
     // and analyzes the units (the foundation for cross-file features).
