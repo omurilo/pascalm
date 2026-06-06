@@ -11,7 +11,10 @@ use lalrpop_util::ParseError;
 use log::debug;
 use pascalm::lexer::{self, Token};
 use pascalm::loader::{resolve_uses, ModuleLoader, IMPLICIT_RUNTIME_UNIT};
-use pascalm::symbol_table::SymbolInfo;
+use pascalm::ast::{
+    Block, BlockOrForward, ConstDecl, Param, ProcFuncDecl, Span, TypeDecl, TypeExpr, VarDecl,
+};
+use pascalm::symbol_table::{SymbolId, SymbolInfo};
 use pascalm::{parser, CompilationUnit, SemanticAnalyzer, SymbolKind};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -262,56 +265,171 @@ impl Backend {
         position: Position,
         new_name: String,
     ) -> Option<WorkspaceEdit> {
+        let parsed_uri =
+            Url::parse(&uri).unwrap_or_else(|_| Url::from_directory_path(&uri).unwrap());
+
         // document_map before semanticast_map (consistent lock order).
         let rope = self.document_map.get(&uri)?;
         let result = self.semanticast_map.get(&uri)?;
-        let analyzer = &result.analyzer;
 
-        // Identify exactly which symbol the cursor is on; rename only that one.
         let offset = position_to_offset(position, &rope)?;
-        let symbol_id = self.find_symbol_at_offset(analyzer, offset)?;
 
-        // Refuse to rename symbols without a real definition span (builtins like
-        // `writeln`, or externally-provided symbols) — we can't rewrite those.
-        let has_real_def = analyzer
-            .definitions
-            .iter()
-            .any(|(span, id)| *id == symbol_id && span.start != span.end);
-        if !has_real_def {
+        // Renaming touches the declaration too, so always include it. Builtins
+        // and externally-provided symbols have no real definition span anywhere,
+        // so `symbol_occurrences` yields nothing for them and rename is refused.
+        let occurrences = self.symbol_occurrences(&parsed_uri, &rope, &result, offset, true)?;
+
+        let edit_map: std::collections::HashMap<Url, Vec<TextEdit>> = occurrences
+            .into_iter()
+            .map(|(file, ranges)| {
+                let edits = ranges
+                    .into_iter()
+                    .map(|range| TextEdit {
+                        range,
+                        new_text: new_name.clone(),
+                    })
+                    .collect();
+                (file, edits)
+            })
+            .collect();
+
+        if edit_map.values().all(|edits| edits.is_empty()) {
             return None;
         }
-
-        // Every occurrence of this symbol = its definition(s) + its references.
-        let mut seen = std::collections::HashSet::new();
-        let mut edits = Vec::new();
-        for (span, id) in analyzer
-            .definitions
-            .iter()
-            .chain(analyzer.references.iter())
-        {
-            if *id != symbol_id || span.start == span.end {
-                continue;
-            }
-            if !seen.insert((span.start, span.end)) {
-                continue; // dedup: overlapping edits are invalid in a WorkspaceEdit
-            }
-            let start = offset_to_position(span.start, &rope)?;
-            let end = offset_to_position(span.end, &rope)?;
-            edits.push(TextEdit {
-                range: Range::new(start, end),
-                new_text: new_name.clone(),
-            });
-        }
-        if edits.is_empty() {
-            return None;
-        }
-
-        let parsed_uri =
-            Url::parse(&uri).unwrap_or_else(|_| Url::from_directory_path(&uri).unwrap());
-        let mut edit_map = std::collections::HashMap::new();
-        edit_map.insert(parsed_uri, edits);
 
         Some(WorkspaceEdit::new(edit_map))
+    }
+
+    /// Is `name` part of the public interface of the unit stored at `uri`? Used
+    /// to decide whether a locally-defined symbol can be referenced from other
+    /// files (and therefore needs a workspace-wide search).
+    fn is_exported_here(&self, uri: &Url, name: &str) -> bool {
+        let uri_s = uri.to_string();
+        self.analyses
+            .iter()
+            .any(|e| e.uri == uri_s && e.interface.contains_key(name))
+    }
+
+    /// Every occurrence of the symbol at `offset` in the current file, as a map
+    /// of file URL -> ranges.
+    ///
+    /// The search widens to the whole workspace when the symbol is part of a
+    /// unit's public surface — either defined-and-exported here, or imported
+    /// from a used unit. The covered files are the defining unit plus every unit
+    /// that `uses` it. Purely local symbols (parameters, loop variables, private
+    /// declarations) stay single-file and are matched precisely by symbol id.
+    ///
+    /// `include_decl` adds the definition span (references honors
+    /// `include_declaration`; rename always wants it). Returns `None` for
+    /// builtins / unresolved symbols, which have no real definition to anchor to.
+    fn symbol_occurrences(
+        &self,
+        uri: &Url,
+        rope: &Rope,
+        result: &AnalysisResult,
+        offset: usize,
+        include_decl: bool,
+    ) -> Option<HashMap<Url, Vec<Range>>> {
+        let text = rope.to_string();
+
+        // The symbol's name, plus its id when the live analysis recorded one.
+        // Cross-unit uses (e.g. an imported function call) are NOT in the live
+        // per-file analysis — it runs without interfaces, so imported names are
+        // out of scope and never resolve — so fall back to the word under the
+        // cursor, the same way go-to-definition does.
+        let (symbol_id, name) = match self.find_symbol_at_offset(&result.analyzer, offset) {
+            Some(id) => (
+                Some(id),
+                result.analyzer.symbol_table.all_symbols.get(id)?.name.clone(),
+            ),
+            None => (None, word_at_offset(&text, offset)?),
+        };
+        let uses = unit_uses(&result.ast);
+
+        let has_local_def = result.analyzer.definitions.iter().any(|(span, id)| {
+            span.start != span.end
+                && match symbol_id {
+                    Some(sid) => *id == sid,
+                    None => result
+                        .analyzer
+                        .symbol_table
+                        .all_symbols
+                        .get(*id)
+                        .is_some_and(|s| s.name == name),
+                }
+        });
+
+        // Which unit (by file stem) DEFINES this symbol, if it's a cross-file one.
+        let def_stem = if let Some((def_url, _)) = self.resolve_imported(&uses, &name) {
+            url_stem(&def_url)
+        } else if has_local_def && self.is_exported_here(uri, &name) {
+            url_stem(uri)
+        } else {
+            None
+        };
+
+        // Purely local symbol: stay single-file, matched precisely by id when we
+        // have one (a name fallback would over-match shadowing declarations).
+        let Some(def_stem) = def_stem else {
+            if !has_local_def {
+                return None;
+            }
+            let ranges = match symbol_id {
+                Some(sid) => single_file_ranges(&result.analyzer, rope, sid, include_decl),
+                None => name_ranges(&result.analyzer, rope, &name, true, include_decl),
+            };
+            if ranges.is_empty() {
+                return None;
+            }
+            return Some(HashMap::from([(uri.clone(), ranges)]));
+        };
+
+        // Workspace-wide. We scan the interface-aware `analyses` (built with
+        // `with_interfaces`), not the live per-file analysis: only the former
+        // records cross-unit references. Each file's spans are anchored to its
+        // on-disk text, so we read from disk to match (unsaved edits to an open
+        // file are reflected on its next save-time re-analysis).
+        let mut out: HashMap<Url, Vec<Range>> = HashMap::new();
+        for entry in self.analyses.iter() {
+            let Ok(file_url) = Url::parse(&entry.uri) else {
+                continue;
+            };
+            let Some(stem) = url_stem(&file_url) else {
+                continue;
+            };
+
+            let is_def = stem == def_stem;
+            let imports_def = self
+                .workspace
+                .get(&stem)
+                .map(|iu| {
+                    unit_uses(&iu.unit)
+                        .iter()
+                        .any(|u| use_spec_stem(u) == def_stem)
+                })
+                .unwrap_or(false);
+            if !is_def && !imports_def {
+                continue;
+            }
+
+            let Some(file_text) = file_url
+                .to_file_path()
+                .ok()
+                .and_then(|p| std::fs::read_to_string(p).ok())
+            else {
+                continue;
+            };
+            let file_rope = Rope::from(file_text);
+            let ranges = name_ranges(&entry.analyzer, &file_rope, &name, is_def, include_decl);
+            if !ranges.is_empty() {
+                out.insert(file_url, ranges);
+            }
+        }
+
+        if out.is_empty() {
+            return None;
+        }
+        Some(out)
     }
 
     // fn get_struct_id_from_field(
@@ -831,6 +949,324 @@ fn unit_uses(unit: &CompilationUnit) -> Vec<String> {
         .collect()
 }
 
+/// Lowercased file stem of a file URL — the key a `uses` spec resolves by.
+fn url_stem(url: &Url) -> Option<String> {
+    url.to_file_path()
+        .ok()?
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_lowercase())
+}
+
+/// Lowercased stem of a `uses` spec (which may carry a path, e.g. `sub/mylib`).
+fn use_spec_stem(spec: &str) -> String {
+    spec.rsplit(['/', '\\']).next().unwrap_or(spec).to_lowercase()
+}
+
+/// Sort, dedup, and map a set of source spans to LSP ranges, dropping synthetic
+/// (zero-width) spans.
+fn spans_to_ranges(mut spans: Vec<Span>, rope: &Rope) -> Vec<Range> {
+    spans.retain(|s| s.start != s.end);
+    spans.sort();
+    spans.dedup();
+    spans
+        .into_iter()
+        .filter_map(|span| {
+            Some(Range::new(
+                offset_to_position(span.start, rope)?,
+                offset_to_position(span.end, rope)?,
+            ))
+        })
+        .collect()
+}
+
+/// Occurrences of one specific symbol id within a single file's analysis.
+fn single_file_ranges(
+    analyzer: &SemanticAnalyzer,
+    rope: &Rope,
+    symbol_id: SymbolId,
+    include_decl: bool,
+) -> Vec<Range> {
+    let mut spans = Vec::new();
+    if include_decl {
+        spans.extend(
+            analyzer
+                .definitions
+                .iter()
+                .filter(|(_, id)| *id == symbol_id)
+                .map(|(span, _)| *span),
+        );
+    }
+    spans.extend(
+        analyzer
+            .references
+            .iter()
+            .filter(|(_, id)| *id == symbol_id)
+            .map(|(span, _)| *span),
+    );
+    spans_to_ranges(spans, rope)
+}
+
+/// Occurrences of a symbol matched by `name` within a single file's analysis.
+///
+/// In the defining file the symbol carries a real span; in an importing file
+/// the imported entry has a synthetic (zero-width) span — matching the right
+/// flavor keeps a same-named local in the importer from being mistaken for the
+/// import.
+fn name_ranges(
+    analyzer: &SemanticAnalyzer,
+    rope: &Rope,
+    name: &str,
+    is_def_file: bool,
+    include_decl: bool,
+) -> Vec<Range> {
+    let ids: std::collections::HashSet<SymbolId> = analyzer
+        .symbol_table
+        .all_symbols
+        .iter()
+        .filter(|s| {
+            s.name == name
+                && if is_def_file {
+                    s.span.start != s.span.end
+                } else {
+                    s.span.start == s.span.end
+                }
+        })
+        .map(|s| s.id)
+        .collect();
+    if ids.is_empty() {
+        return Vec::new();
+    }
+
+    let mut spans = Vec::new();
+    if is_def_file && include_decl {
+        spans.extend(
+            analyzer
+                .definitions
+                .iter()
+                .filter(|(_, id)| ids.contains(id))
+                .map(|(span, _)| *span),
+        );
+    }
+    spans.extend(
+        analyzer
+            .references
+            .iter()
+            .filter(|(_, id)| ids.contains(id))
+            .map(|(span, _)| *span),
+    );
+    spans_to_ranges(spans, rope)
+}
+
+/// LSP completion-item kind for a resolved symbol.
+fn symbol_completion_kind(kind: &SymbolKind) -> CompletionItemKind {
+    match kind {
+        SymbolKind::Variable { .. } => CompletionItemKind::VARIABLE,
+        SymbolKind::Constant { .. } => CompletionItemKind::CONSTANT,
+        SymbolKind::Procedure { .. } | SymbolKind::Function { .. } => CompletionItemKind::FUNCTION,
+        SymbolKind::Type { .. } => CompletionItemKind::CLASS,
+    }
+}
+
+/// LSP document-symbol kind for a type declaration, distinguishing records and
+/// enums from plain aliases.
+fn type_decl_kind(te: &TypeExpr) -> tower_lsp::lsp_types::SymbolKind {
+    use tower_lsp::lsp_types::SymbolKind as K;
+    match te {
+        TypeExpr::Record { .. } => K::STRUCT,
+        TypeExpr::Enum(_) => K::ENUM,
+        _ => K::CLASS,
+    }
+}
+
+#[allow(deprecated)]
+fn make_doc_symbol(
+    name: &str,
+    kind: tower_lsp::lsp_types::SymbolKind,
+    detail: Option<String>,
+    span: &Span,
+    children: Option<Vec<DocumentSymbol>>,
+    rope: &Rope,
+) -> Option<DocumentSymbol> {
+    let range = Range::new(
+        offset_to_position(span.start, rope)?,
+        offset_to_position(span.end, rope)?,
+    );
+    Some(DocumentSymbol {
+        name: name.to_string(),
+        detail,
+        kind,
+        tags: None,
+        deprecated: None,
+        range,
+        selection_range: range,
+        children,
+    })
+}
+
+/// Document symbol for a procedure/function, nesting its parameters and local
+/// declarations as children.
+fn proc_func_symbol(pf: &ProcFuncDecl, rope: &Rope) -> Option<DocumentSymbol> {
+    use tower_lsp::lsp_types::SymbolKind as K;
+    let (name, name_span, params, body, detail) = match pf {
+        ProcFuncDecl::Procedure {
+            name,
+            name_span,
+            params,
+            block_or_forward,
+        } => (name, name_span, params, block_or_forward, "procedure".to_string()),
+        ProcFuncDecl::Function {
+            name,
+            name_span,
+            params,
+            return_type,
+            block_or_forward,
+        } => (
+            name,
+            name_span,
+            params,
+            block_or_forward,
+            format!("function: {}", return_type),
+        ),
+    };
+
+    let mut children = param_symbols(params, rope);
+    if let BlockOrForward::Block(b) = body {
+        children.extend(block_symbols(b, rope));
+    }
+    let children = (!children.is_empty()).then_some(children);
+
+    make_doc_symbol(name, K::FUNCTION, Some(detail), name_span, children, rope)
+}
+
+/// Document symbols for a parameter list (each named parameter, by its span).
+fn param_symbols(params: &Option<Vec<Param>>, rope: &Rope) -> Vec<DocumentSymbol> {
+    use tower_lsp::lsp_types::SymbolKind as K;
+    let mut out = Vec::new();
+    for p in params.iter().flatten() {
+        match p {
+            Param::Variable { ids, id_spans, .. } => {
+                for (i, id) in ids.iter().enumerate() {
+                    let Some(span) = id_spans.get(i) else {
+                        continue;
+                    };
+                    if let Some(s) = make_doc_symbol(id, K::VARIABLE, None, span, None, rope) {
+                        out.push(s);
+                    }
+                }
+            }
+            Param::Procedure { id, id_span, .. } | Param::Function { id, id_span, .. } => {
+                if let Some(s) = make_doc_symbol(id, K::FUNCTION, None, id_span, None, rope) {
+                    out.push(s);
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Document symbols for the declarations of a single section group.
+fn section_symbols(
+    constants: Option<&[ConstDecl]>,
+    types: Option<&[TypeDecl]>,
+    variables: Option<&[VarDecl]>,
+    procs: Option<&[ProcFuncDecl]>,
+    rope: &Rope,
+) -> Vec<DocumentSymbol> {
+    use tower_lsp::lsp_types::SymbolKind as K;
+    let mut out = Vec::new();
+
+    for c in constants.unwrap_or(&[]) {
+        if let Some(s) =
+            make_doc_symbol(&c.name, K::CONSTANT, None, &c.name_span, None, rope)
+        {
+            out.push(s);
+        }
+    }
+    for t in types.unwrap_or(&[]) {
+        if let Some(s) = make_doc_symbol(
+            &t.name,
+            type_decl_kind(&t.type_expr),
+            None,
+            &t.name_span,
+            None,
+            rope,
+        ) {
+            out.push(s);
+        }
+    }
+    for v in variables.unwrap_or(&[]) {
+        for (i, id) in v.ids.iter().enumerate() {
+            let Some(span) = v.id_spans.get(i) else {
+                continue;
+            };
+            if let Some(s) = make_doc_symbol(id, K::VARIABLE, None, span, None, rope) {
+                out.push(s);
+            }
+        }
+    }
+    for pf in procs.unwrap_or(&[]) {
+        if let Some(s) = proc_func_symbol(pf, rope) {
+            out.push(s);
+        }
+    }
+    out
+}
+
+/// Document symbols for a `Block` (program body or procedure/function body).
+fn block_symbols(block: &Block, rope: &Rope) -> Vec<DocumentSymbol> {
+    section_symbols(
+        block.constants.as_deref(),
+        block.types.as_deref(),
+        block.variables.as_deref(),
+        block.procedures_functions.as_deref(),
+        rope,
+    )
+}
+
+/// Reserved words offered as completion fallbacks in any scope.
+const PASCAL_KEYWORDS: &[&str] = &[
+    "and",
+    "array",
+    "begin",
+    "case",
+    "const",
+    "div",
+    "do",
+    "downto",
+    "else",
+    "end",
+    "file",
+    "for",
+    "function",
+    "goto",
+    "if",
+    "implementation",
+    "in",
+    "interface",
+    "label",
+    "mod",
+    "nil",
+    "not",
+    "of",
+    "or",
+    "packed",
+    "procedure",
+    "program",
+    "record",
+    "repeat",
+    "set",
+    "then",
+    "to",
+    "type",
+    "unit",
+    "until",
+    "uses",
+    "var",
+    "while",
+    "with",
+];
+
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
     #[allow(deprecated)]
@@ -865,7 +1301,7 @@ impl LanguageServer for Backend {
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
-                    trigger_characters: Some(vec![".".to_string()]),
+                    trigger_characters: Some(vec![" ".to_string()]),
                     work_done_progress_options: Default::default(),
                     all_commit_characters: None,
                     completion_item: None,
@@ -890,6 +1326,7 @@ impl LanguageServer for Backend {
                 definition_provider: Some(OneOf::Left(true)),
                 references_provider: Some(OneOf::Left(true)),
                 rename_provider: Some(OneOf::Left(true)),
+                document_symbol_provider: Some(OneOf::Left(true)),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -1095,8 +1532,107 @@ impl LanguageServer for Backend {
         })))
     }
 
-    async fn completion(&self, _params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        Ok(None)
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
+        let uri = params
+            .text_document_position
+            .text_document
+            .uri
+            .to_string();
+        let Some(result) = self.semanticast_map.get(&uri) else {
+            return Ok(None);
+        };
+
+        // Dedup by label: a symbol can appear in `all_symbols` more than once
+        // (re-declared across scopes), and imported names may also be local.
+        let mut seen = std::collections::HashSet::new();
+        let mut items = Vec::new();
+
+        // 1) Symbols defined in this file. Builtins (`writeln`, `integer`, ...)
+        //    carry synthetic spans but are still worth suggesting, so we keep
+        //    them; we only skip exact-label duplicates.
+        for sym in &result.analyzer.symbol_table.all_symbols {
+            if seen.insert(sym.name.clone()) {
+                items.push(CompletionItem {
+                    label: sym.name.clone(),
+                    kind: Some(symbol_completion_kind(&sym.kind)),
+                    detail: Some(sym.kind.to_string()),
+                    ..Default::default()
+                });
+            }
+        }
+
+        // 2) Symbols exported by the units this file `uses` — these resolve via
+        //    the workspace analysis index.
+        for spec in unit_uses(&result.ast) {
+            let stem = spec.rsplit(['/', '\\']).next().unwrap_or(&spec).to_lowercase();
+            let Some(module_id) = self.unit_by_stem.get(&stem).map(|r| r.value().clone()) else {
+                continue;
+            };
+            let Some(analyzed) = self.analyses.get(&module_id) else {
+                continue;
+            };
+            for (name, kind) in &analyzed.interface {
+                if seen.insert(name.clone()) {
+                    items.push(CompletionItem {
+                        label: name.clone(),
+                        kind: Some(symbol_completion_kind(kind)),
+                        detail: Some(format!("{} (from {})", kind, stem)),
+                        ..Default::default()
+                    });
+                }
+            }
+        }
+
+        // 3) Language keywords, so completion is useful even in an empty scope.
+        for kw in PASCAL_KEYWORDS {
+            if seen.insert(kw.to_string()) {
+                items.push(CompletionItem {
+                    label: kw.to_string(),
+                    kind: Some(CompletionItemKind::KEYWORD),
+                    ..Default::default()
+                });
+            }
+        }
+
+        Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn document_symbol(
+        &self,
+        params: DocumentSymbolParams,
+    ) -> Result<Option<DocumentSymbolResponse>> {
+        let uri = params.text_document.uri.to_string();
+        let (Some(rope), Some(result)) =
+            (self.document_map.get(&uri), self.semanticast_map.get(&uri))
+        else {
+            return Ok(None);
+        };
+
+        let symbols = match &result.ast {
+            CompilationUnit::Program(p) => block_symbols(&p.block, &rope),
+            CompilationUnit::Unit(u) => {
+                let mut out = Vec::new();
+                // Interface declarations (the unit's public surface).
+                out.extend(section_symbols(
+                    u.interface.constants.as_deref(),
+                    u.interface.types.as_deref(),
+                    u.interface.variables.as_deref(),
+                    u.interface.headers.as_deref(),
+                    &rope,
+                ));
+                // Implementation bodies (so the outline reaches private procs).
+                out.extend(section_symbols(
+                    u.implementation.constants.as_deref(),
+                    u.implementation.types.as_deref(),
+                    u.implementation.variables.as_deref(),
+                    u.implementation.bodies.as_deref(),
+                    &rope,
+                ));
+                out
+            }
+        };
+
+        Ok(Some(DocumentSymbolResponse::Nested(symbols)))
     }
 
     async fn rename(&self, params: RenameParams) -> Result<Option<WorkspaceEdit>> {
@@ -1121,36 +1657,20 @@ impl LanguageServer for Backend {
         let Some(offset) = position_to_offset(position, &rope) else {
             return Ok(None);
         };
-        let Some(symbol_id) = self.find_symbol_at_offset(&result.analyzer, offset) else {
+
+        let Some(occurrences) = self.symbol_occurrences(&uri, &rope, &result, offset, include_decl)
+        else {
             return Ok(None);
         };
 
-        let mut refs = Vec::new();
-
-        if include_decl {
-            for (span, id) in &result.analyzer.definitions {
-                if *id == symbol_id && span.start != span.end {
-                    let start = offset_to_position(span.start, &rope).unwrap();
-                    let end = offset_to_position(span.end, &rope).unwrap();
-                    refs.push(Location {
-                        uri: uri.clone(),
-                        range: Range::new(start, end),
-                    })
-                }
-            }
-        }
-
-        for (span, id) in &result.analyzer.references {
-            if *id == symbol_id {
-                let start = offset_to_position(span.start, &rope).unwrap();
-                let end = offset_to_position(span.end, &rope).unwrap();
-                refs.push(Location {
-                    uri: uri.clone(),
-                    range: Range::new(start, end),
-                });
-            }
-        }
-
+        let refs = occurrences
+            .into_iter()
+            .flat_map(|(file, ranges)| {
+                ranges
+                    .into_iter()
+                    .map(move |range| Location::new(file.clone(), range))
+            })
+            .collect();
         Ok(Some(refs))
     }
 

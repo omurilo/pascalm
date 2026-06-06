@@ -356,12 +356,12 @@ fn goto_definition_jumps_into_a_used_unit() {
     s.wait_log_containing("analyzed"); // workspace indexed/analyzed
     s.did_open(&prog_uri, &text);
 
-    // `writeln(triple(3))` is on line 3; `triple` comes from `uses mylib`.
+    // `writeln(triple(3))` is on line 4; `triple` comes from `uses mylib`.
     let resp = s.request_until(
         "textDocument/definition",
         json!({
             "textDocument": { "uri": prog_uri },
-            "position": { "line": 3, "character": 10 }
+            "position": { "line": 4, "character": 10 }
         }),
         |r| !r.is_null(),
     );
@@ -395,7 +395,7 @@ fn hover_resolves_symbol_from_a_used_unit() {
         "textDocument/hover",
         json!({
             "textDocument": { "uri": prog_uri },
-            "position": { "line": 3, "character": 10 }
+            "position": { "line": 4, "character": 10 }
         }),
         |r| !r.is_null(),
     );
@@ -427,7 +427,7 @@ fn goto_definition_resolves_path_style_uses() {
         "textDocument/definition",
         json!({
             "textDocument": { "uri": prog_uri },
-            "position": { "line": 3, "character": 10 }
+            "position": { "line": 4, "character": 10 }
         }),
         |r| !r.is_null(),
     );
@@ -454,12 +454,12 @@ fn goto_and_hover_resolve_stdlib_symbols() {
     s.wait_log_containing("analyzed");
     s.did_open(&prog_uri, &text);
 
-    // `Sqrt` is on line 2, char 10.
+    // `Sqrt` is on line 3, char 10.
     let hover = s.request_until(
         "textDocument/hover",
         json!({
             "textDocument": { "uri": prog_uri },
-            "position": { "line": 2, "character": 10 }
+            "position": { "line": 3, "character": 10 }
         }),
         |r| !r.is_null(),
     );
@@ -474,7 +474,7 @@ fn goto_and_hover_resolve_stdlib_symbols() {
         "textDocument/definition",
         json!({
             "textDocument": { "uri": prog_uri },
-            "position": { "line": 2, "character": 10 }
+            "position": { "line": 3, "character": 10 }
         }),
         |r| !r.is_null(),
     );
@@ -505,4 +505,144 @@ fn workspace_units_are_analyzed_on_init() {
         .and_then(|n| n.parse().ok())
         .unwrap_or(0);
     assert!(analyzed > 0, "expected some analyzed units, log was: {log}");
+}
+
+#[test]
+fn completion_offers_symbols_and_keywords() {
+    let mut s = Server::start();
+    s.initialize(None);
+    let uri = "file:///sample.pascalm";
+    s.did_open(uri, SAMPLE);
+
+    let resp = s.request_until(
+        "textDocument/completion",
+        json!({
+            "textDocument": { "uri": uri },
+            "position": { "line": 10, "character": 0 }
+        }),
+        |r| r.as_array().map_or(false, |a| !a.is_empty()),
+    );
+    let labels: Vec<&str> = resp["result"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|i| i["label"].as_str())
+        .collect();
+
+    // Local declarations from the file.
+    assert!(labels.contains(&"x"), "completion missing local `x`: {labels:?}");
+    assert!(labels.contains(&"Inc"), "completion missing proc `Inc`: {labels:?}");
+    // Language keywords are always offered.
+    assert!(
+        labels.contains(&"begin"),
+        "completion missing keyword `begin`: {labels:?}"
+    );
+}
+
+#[test]
+fn document_symbols_outline_the_file() {
+    let mut s = Server::start();
+    s.initialize(None);
+    let uri = "file:///sample.pascalm";
+    s.did_open(uri, SAMPLE);
+
+    let resp = s.request_until(
+        "textDocument/documentSymbol",
+        json!({ "textDocument": { "uri": uri } }),
+        |r| r.as_array().map_or(false, |a| !a.is_empty()),
+    );
+    let syms = resp["result"].as_array().unwrap();
+    let names: Vec<&str> = syms.iter().filter_map(|s| s["name"].as_str()).collect();
+
+    // Top-level vars and the procedure show up in the outline.
+    assert!(names.contains(&"x"), "outline missing var `x`: {names:?}");
+    assert!(names.contains(&"y"), "outline missing var `y`: {names:?}");
+    assert!(names.contains(&"Inc"), "outline missing proc `Inc`: {names:?}");
+
+    // The procedure nests its local parameter/declarations as children.
+    let inc = syms.iter().find(|s| s["name"] == "Inc").unwrap();
+    let children = inc["children"].as_array().expect("Inc should have children");
+    let child_names: Vec<&str> = children.iter().filter_map(|c| c["name"].as_str()).collect();
+    assert!(
+        child_names.contains(&"val"),
+        "Inc's children should include param `val`: {child_names:?}"
+    );
+}
+
+#[test]
+fn references_span_files_for_an_exported_symbol() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/xfile");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/prog.pascalm");
+    let text = std::fs::read_to_string(format!("{dir}/prog.pascalm")).unwrap();
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+    s.did_open(&prog_uri, &text);
+
+    // Cursor on the imported `triple` use (line 4). Its references must reach the
+    // defining unit (mylib.pas) as well as this program.
+    let resp = s.request_until(
+        "textDocument/references",
+        json!({
+            "textDocument": { "uri": prog_uri },
+            "position": { "line": 4, "character": 10 },
+            "context": { "includeDeclaration": true }
+        }),
+        |r| r.as_array().map_or(false, |a| !a.is_empty()),
+    );
+    let locs = resp["result"].as_array().unwrap();
+    let files: std::collections::HashSet<&str> =
+        locs.iter().filter_map(|l| l["uri"].as_str()).collect();
+
+    assert!(
+        files.iter().any(|u| u.ends_with("prog.pascalm")),
+        "references should include the program, got: {files:?}"
+    );
+    assert!(
+        files.iter().any(|u| u.ends_with("mylib.pas")),
+        "references should reach the defining unit, got: {files:?}"
+    );
+}
+
+#[test]
+fn rename_spans_files_for_an_exported_symbol() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/xfile");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/prog.pascalm");
+    let text = std::fs::read_to_string(format!("{dir}/prog.pascalm")).unwrap();
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+    s.did_open(&prog_uri, &text);
+
+    let resp = s.request(
+        "textDocument/rename",
+        json!({
+            "textDocument": { "uri": prog_uri },
+            "position": { "line": 4, "character": 10 },
+            "newName": "tripled"
+        }),
+    );
+    let changes = resp["result"]["changes"]
+        .as_object()
+        .expect("rename should produce changes across files");
+    let files: Vec<&str> = changes.keys().map(String::as_str).collect();
+
+    assert!(
+        files.iter().any(|u| u.ends_with("prog.pascalm")),
+        "rename should edit the program, got: {files:?}"
+    );
+    assert!(
+        files.iter().any(|u| u.ends_with("mylib.pas")),
+        "rename should edit the defining unit, got: {files:?}"
+    );
+    // Every edit must carry the new name.
+    for edits in changes.values() {
+        for e in edits.as_array().unwrap() {
+            assert_eq!(e["newText"], "tripled");
+        }
+    }
 }

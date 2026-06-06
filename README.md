@@ -42,7 +42,8 @@ O compilador segue o pipeline clássico, todo implementado em Rust:
 │   │   └── run_tests.sh
 │   └── lsp/                   # language server `pascalmls`
 │       ├── src/server.rs      #   servidor (tower-lsp)
-│       └── init.lua           #   exemplo de configuração para Neovim
+│       ├── tests/lsp.rs       #   testes end-to-end (drive o servidor via JSON-RPC)
+│       └── pascalmls.nvim/    #   plugin de integração para Neovim
 ├── run_rust_tests.sh          # roda a suíte de testes de integração
 └── .github/workflows/         # CI (build + testes em Ubuntu)
 ```
@@ -122,20 +123,73 @@ pascalm --file src/examples/structures.pascalm --output structures
 
 O compilador gera um `.ll` por módulo e os linka (com a stdlib) em um único executável nativo.
 
+### Formatando pela CLI
+
+Além de compilar, o binário expõe o subcomando `fmt`, que aplica a mesma formatação do LSP (ver [Formatador](#formatador)):
+
+```bash
+pascalm fmt --file <arquivo.pascalm>   # formata um arquivo no lugar
+pascalm fmt --all                      # formata todos os .pas/.pascalm a partir do diretório atual
+```
+
 ## Ferramentas de editor
 
 ### Language server (`pascalmls`)
 
-O LSP fica em `src/lsp` e oferece diagnósticos, hover, ir-para-definição, *semantic tokens* (highlight) e formatação.
+O LSP fica em `src/lsp` (crate `pascalmls`, que depende do crate `pascalm` — o compilador e o LSP compartilham o **mesmo** analisador e formatador). O servidor é construído sobre [`tower-lsp`](https://crates.io/crates/tower-lsp).
+
+#### Recursos disponíveis
+
+| Recurso | Método LSP | Observações |
+|---|---|---|
+| Diagnósticos | `publish_diagnostics` | Sintáticos + semânticos, atualizados a cada mudança (*push*). |
+| Hover | `textDocument/hover` | Mostra a assinatura/tipo do símbolo, **inclusive cross-file** (de units em `uses`) e da stdlib. |
+| Ir para definição | `textDocument/definition` | **Cross-file** (pula para a unit definidora) e para símbolos da stdlib. |
+| Referências | `textDocument/references` | No arquivo e **cross-file** para símbolos exportados (a unit definidora + todas que a usam). |
+| Renomear | `textDocument/rename` | No arquivo e **cross-file** para símbolos exportados. Recusa *builtins*. |
+| Autocomplete | `textDocument/completion` | Símbolos locais + exportados pelas units em `uses` + palavras-chave. |
+| Outline / símbolos | `textDocument/documentSymbol` | Estrutura do arquivo (consts/types/vars/procs, com params e locais aninhados). |
+| *Semantic tokens* | `textDocument/semanticTokens/full` | Realce semântico. |
+| Formatação | `textDocument/formatting` | Documento inteiro; preserva comentários. |
+| Índice de workspace | — | No `initialize`, varre e analisa as units do projeto (base das features cross-file). |
+
+#### Instalação
 
 ```bash
-cd src/lsp
-cargo build --release
-# instale no PATH para o editor encontrar:
-cargo install --path .
+export LLVM_SYS_180_PREFIX="$(brew --prefix llvm@18)"   # ajuste para o seu sistema
+export LIBRARY_PATH="$(brew --prefix zstd)/lib:$LIBRARY_PATH"  # macOS, se reclamar de zstd
+cargo install --path src/lsp --force
 ```
 
-Para Neovim há um exemplo de configuração em `src/lsp/init.lua` (associa as extensões `.pas`/`.pascalm` ao servidor `pascalmls`).
+Isso coloca `pascalmls` no `PATH` (`~/.cargo/bin`). Depois de reinstalar, reinicie o servidor no editor (ex.: `:LspRestart` no Neovim).
+
+Para Neovim há um plugin pronto em `src/lsp/pascalmls.nvim` (registra os filetypes `.pas`/`.pascalm`, configura e habilita o servidor, e re-attacha após restart). Veja o [README do plugin](src/lsp/pascalmls.nvim/README.md).
+
+#### Limitações do que existe hoje
+
+- **Completion** é por identificador, não *member-access*: depois de `registro.` ele não filtra pelos campos do tipo (lista os mesmos símbolos globais). O caractere de trigger `.` apenas reabre a lista geral.
+- **References/rename cross-file** usam o índice construído no `initialize`. Edições **não salvas** em *outros* arquivos só refletem após nova análise (ao salvar); no caminho cross-file até o buffer atual é lido do disco.
+- **Match cross-file é por nome + stem da unit**: duas units que exportem o mesmo identificador podem gerar ocorrências imprecisas.
+- **Rename** recusa *builtins* (ex. `writeln`); símbolos da stdlib (`system`/`net`/`json`) só existem como cópia materializada em cache temporário, então renomeá-los não tem efeito prático.
+- **Análise por-arquivo (buffer ao vivo) roda sem interfaces**: símbolos importados não entram em escopo nela, então features *single-file* (ex. *semantic tokens*) não enxergam referências a símbolos de outras units. As features cross-file contornam isso usando o índice de workspace.
+- **Document symbols** usa o *span do nome* como range da entrada (não o range completo da declaração).
+- **Sincronização é FULL**: o editor reenvia o documento inteiro a cada mudança.
+- Diagnósticos são *push* e a análise semântica para no primeiro erro fatal (além dos coletados no buffer).
+
+#### O que ainda não tem (ideias de roadmap)
+
+- *Signature help* (ajuda de parâmetros ao chamar proc/função).
+- Completion ciente de contexto e de *member-access* (`registro.campo`, `ponteiro^.`).
+- *Workspace symbols* (`workspace/symbol`) — busca de símbolos no projeto inteiro.
+- *Code actions* / *quick fixes*.
+- *Document highlight* (destacar ocorrências do símbolo sob o cursor).
+- *Inlay hints* (tipos inferidos, nomes de parâmetro) — a *capability* existe mas está desligada.
+- *Folding ranges*, *selection ranges*, *code lens*, *document links*.
+- *Call hierarchy* / *type hierarchy*.
+- Ir para declaração / definição de tipo / implementação (hoje só `definition`).
+- Formatação por intervalo (*range*) e *on-type* (hoje só documento inteiro).
+- Diagnósticos *pull* (`textDocument/diagnostic`) e sincronização incremental.
+- Re-análise incremental do workspace ao salvar (manter cross-file sempre fresco).
 
 ### Formatador
 
@@ -150,6 +204,9 @@ A formatação é exposta pelo LSP (`textDocument/formatting`) e implementada em
 # testes unitários do crate (analisador, formatador, etc.)
 export LLVM_SYS_180_PREFIX=/usr/lib/llvm-18
 cargo test
+
+# testes end-to-end do LSP (sobem o servidor e dirigem via JSON-RPC)
+cargo test --manifest-path src/lsp/Cargo.toml
 ```
 
 ## Autor

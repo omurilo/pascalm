@@ -2,6 +2,29 @@
 
 Neovim integration for the [PascalM](../../../README.md) language server (`pascalmls`).
 
+## What the server provides
+
+Once attached, `pascalmls` offers (all via the standard `vim.lsp` handlers):
+
+- **Diagnostics** — syntactic + semantic, refreshed on every change.
+- **Hover** (`K`) — symbol signature/type, including symbols imported from `uses` units and the stdlib.
+- **Go-to-definition** (`grd` / `vim.lsp.buf.definition`) — cross-file and into the stdlib.
+- **References** (`grr`) and **rename** (`grn`) — single-file and **cross-file** for exported symbols.
+- **Completion** (`<C-x><C-o>`, or wire `vim.lsp.completion.enable` / `nvim-cmp`) — local symbols, symbols exported by `used` units, and keywords.
+- **Document symbols** — feeds the outline / `gO` / `:Telescope lsp_document_symbols` / aerial, etc.
+- **Semantic tokens** (highlight) and **formatting** (`gq` / `vim.lsp.buf.format`).
+
+The capabilities and their **current limitations / roadmap** are documented in the main
+[project README](../../../README.md#language-server-pascalmls). In short: completion is
+identifier-level (no member-access yet), and cross-file references/rename rely on the
+workspace index built at startup (unsaved edits in *other* files reflect after a save).
+
+> Completion note: Neovim's native client exposes server completion through omnifunc
+> (`<C-x><C-o>`). For as-you-type popups, enable `vim.lsp.completion.enable(true, client_id, bufnr, { autotrigger = true })`
+> on `LspAttach`, or use `nvim-cmp` + `cmp-nvim-lsp`.
+
+## Setup
+
 `setup()` does everything for you:
 
 - registers the `pascalm`/`pas` filetypes;
