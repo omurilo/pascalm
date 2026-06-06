@@ -48,9 +48,7 @@ fn main() {
 
     match args.command {
         Commands::Fmt { all, file_path } => {
-            // TODO: resolve all files and format when all is true or format file of file_path
             if all {
-                // TODO: scan all files and format
                 fn visit_dir(path: &Path) -> std::io::Result<()> {
                     for entry in fs::read_dir(path)? {
                         let entry = entry?;

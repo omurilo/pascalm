@@ -5,8 +5,8 @@ var
 
 begin
   i := 0;
-  repeat 
+  repeat
     writeln('O i tem valor', i);
     i := i + 1;
-  until (i < 10);
+  until i < 10;
 end.

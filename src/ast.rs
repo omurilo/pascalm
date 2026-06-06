@@ -24,6 +24,9 @@ pub struct Program {
     pub heading: Option<Vec<String>>,
     pub uses: Option<Vec<String>>,
     pub block: Block,
+    /// Byte offset of the `program` keyword, so the formatter can flush a
+    /// file-header comment above the heading instead of into a later section.
+    pub kw_offset: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -32,6 +35,8 @@ pub struct Unit {
     pub interface: InterfaceSection,
     pub implementation: ImplementationSection,
     pub initialization: Option<Vec<Stmt>>,
+    /// Byte offset of the `unit` keyword; see [`Program::kw_offset`].
+    pub kw_offset: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,6 +65,22 @@ pub struct Block {
     pub variables: Option<Vec<VarDecl>>,
     pub procedures_functions: Option<Vec<ProcFuncDecl>>,
     pub statements: Vec<Stmt>,
+    /// Byte offset of each declaration section's keyword (`label`/`const`/
+    /// `type`/`var`), when the section is present. Used only by the formatter to
+    /// anchor section-header comments above the keyword instead of letting them
+    /// drift into the section body.
+    pub section_spans: SectionSpans,
+}
+
+/// Byte offsets of the declaration-section keywords within a [`Block`], so the
+/// formatter can tell a comment that precedes a section keyword apart from one
+/// that sits between the keyword and its first declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SectionSpans {
+    pub labels: Option<usize>,
+    pub constants: Option<usize>,
+    pub types: Option<usize>,
+    pub variables: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

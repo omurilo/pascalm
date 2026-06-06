@@ -106,16 +106,17 @@ pub CompilationUnit: CompilationUnit = {
 };
 
 pub Program: Program = {
-    "program" <name:Identifier> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." => Program {
+    <kw:@L> "program" <name:Identifier> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." => Program {
         name,
         heading,
         uses,
         block,
+        kw_offset: kw,
     }
 };
 
 pub Unit: Unit = {
-    "unit" <name:Identifier> ";"
+    <kw:@L> "unit" <name:Identifier> ";"
     "interface" <interface:InterfaceSection>
     "implementation" <implementation:ImplementationSection>
     <initialization:Initialization?>
@@ -124,6 +125,7 @@ pub Unit: Unit = {
         interface,
         implementation,
         initialization,
+        kw_offset: kw,
     }
 };
 
@@ -215,12 +217,21 @@ AbsoluteSegments: Vec<String> = {
 };
 
 Block: Block = {
-    <labels:(LabelDecl ";")?>
-    <constants:(ConstDecl ";")?>
-    <types:(TypeDecl ";")?>
-    <variables:(VarDecl ";")?>
+    <lpos:@L> <labels:(LabelDecl ";")?>
+    <cpos:@L> <constants:(ConstDecl ";")?>
+    <tpos:@L> <types:(TypeDecl ";")?>
+    <vpos:@L> <variables:(VarDecl ";")?>
     <procs:(ProcFuncDecl ";")?>
     <stmts:CompoundStmtInner> => {
+        // Each `@L` is the offset of the token that begins its section; it is
+        // only meaningful (and only used by the formatter) when that section is
+        // actually present, so it is recorded as the section keyword position.
+        let section_spans = SectionSpans {
+            labels: labels.as_ref().map(|_| lpos),
+            constants: constants.as_ref().map(|_| cpos),
+            types: types.as_ref().map(|_| tpos),
+            variables: variables.as_ref().map(|_| vpos),
+        };
         Block {
             labels: labels.map(|(l, _)| l),
             constants: constants.map(|(c, _)| c),
@@ -228,6 +239,7 @@ Block: Block = {
             variables: variables.map(|(v, _)| v),
             procedures_functions: procs.map(|(p, _)| p),
             statements: stmts,
+            section_spans,
         }
     }
 };

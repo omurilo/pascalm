@@ -12,7 +12,10 @@
 //! spans the AST already carries on identifiers, calls and declarations.
 //!
 //! Placement is faithful for the common cases (header comments, comments above
-//! declarations/procedures, between statements, and trailing `;`-line comments).
+//! declarations/procedures and section keywords, between statements, and
+//! trailing `;`-line comments). A comment above a `label`/`const`/`type`/`var`
+//! keyword stays above the keyword (anchored via [`SectionSpans`]), while one
+//! between the keyword and the first declaration stays inside the section.
 //! Known cosmetic edge cases: a comment sitting immediately before a *nested*
 //! `end` may move just past it, and comments between reordered declaration
 //! sections (e.g. a `var` interleaved with `const`) may shift, because the
@@ -171,6 +174,8 @@ impl Formatter {
     }
 
     fn program(&mut self, p: &Program) {
+        // Flush any file-header comment so it stays above the `program` line.
+        self.flush_before(p.kw_offset);
         let heading = match &p.heading {
             Some(h) if !h.is_empty() => format!("({})", h.join(", ")),
             _ => String::new(),
@@ -182,6 +187,8 @@ impl Formatter {
     }
 
     fn unit(&mut self, u: &Unit) {
+        // Flush any file-header comment so it stays above the `unit` line.
+        self.flush_before(u.kw_offset);
         self.writeln(&format!("unit {};", u.name));
         self.blank();
         self.writeln("interface");
@@ -210,11 +217,18 @@ impl Formatter {
 
     fn interface_section(&mut self, s: &InterfaceSection) {
         self.uses_clause(&s.uses);
-        self.opt_const_section(&s.constants);
-        self.opt_type_section(&s.types);
-        self.opt_var_section(&s.variables);
+        self.opt_const_section(&s.constants, None);
+        self.opt_type_section(&s.types, None);
+        self.opt_var_section(&s.variables, None);
         if let Some(headers) = &s.headers {
             for pf in headers {
+                // Flush comments above each header so they don't drift down into
+                // the implementation section.
+                let name_span = match pf {
+                    ProcFuncDecl::Procedure { name_span, .. }
+                    | ProcFuncDecl::Function { name_span, .. } => *name_span,
+                };
+                self.flush_before(name_span.start);
                 let sig = self.proc_func_signature(pf);
                 self.writeln(&format!("{};", sig));
             }
@@ -223,9 +237,9 @@ impl Formatter {
 
     fn implementation_section(&mut self, s: &ImplementationSection) {
         self.uses_clause(&s.uses);
-        self.opt_const_section(&s.constants);
-        self.opt_type_section(&s.types);
-        self.opt_var_section(&s.variables);
+        self.opt_const_section(&s.constants, None);
+        self.opt_type_section(&s.types, None);
+        self.opt_var_section(&s.variables, None);
         if let Some(bodies) = &s.bodies {
             for pf in bodies {
                 self.proc_func(pf);
@@ -266,6 +280,8 @@ impl Formatter {
         let mut emitted = false;
         if let Some(labels) = &b.labels {
             if !labels.is_empty() {
+                // Flush a section-header comment (`{ labels }`) above the keyword.
+                self.flush_for(b.section_spans.labels);
                 let joined = labels
                     .iter()
                     .map(|l| l.to_string())
@@ -275,9 +291,9 @@ impl Formatter {
                 emitted = true;
             }
         }
-        emitted |= self.opt_const_section(&b.constants);
-        emitted |= self.opt_type_section(&b.types);
-        emitted |= self.opt_var_section(&b.variables);
+        emitted |= self.opt_const_section(&b.constants, b.section_spans.constants);
+        emitted |= self.opt_type_section(&b.types, b.section_spans.types);
+        emitted |= self.opt_var_section(&b.variables, b.section_spans.variables);
         if let Some(pfs) = &b.procedures_functions {
             for pf in pfs {
                 self.blank();
@@ -288,9 +304,14 @@ impl Formatter {
         emitted
     }
 
-    fn opt_const_section(&mut self, decls: &Option<Vec<ConstDecl>>) -> bool {
+    /// `kw_offset` is the byte offset of the `const` keyword when known (program
+    /// blocks). Comments before it are flushed at the *outer* indent so a
+    /// section-header comment sits above `const`, while comments between the
+    /// keyword and the first declaration stay inside the section.
+    fn opt_const_section(&mut self, decls: &Option<Vec<ConstDecl>>, kw_offset: Option<usize>) -> bool {
         match decls {
             Some(d) if !d.is_empty() => {
+                self.flush_for(kw_offset);
                 self.writeln("const");
                 self.indent += 1;
                 for c in d {
@@ -305,9 +326,10 @@ impl Formatter {
         }
     }
 
-    fn opt_type_section(&mut self, decls: &Option<Vec<TypeDecl>>) -> bool {
+    fn opt_type_section(&mut self, decls: &Option<Vec<TypeDecl>>, kw_offset: Option<usize>) -> bool {
         match decls {
             Some(d) if !d.is_empty() => {
+                self.flush_for(kw_offset);
                 self.writeln("type");
                 self.indent += 1;
                 for t in d {
@@ -322,9 +344,10 @@ impl Formatter {
         }
     }
 
-    fn opt_var_section(&mut self, decls: &Option<Vec<VarDecl>>) -> bool {
+    fn opt_var_section(&mut self, decls: &Option<Vec<VarDecl>>, kw_offset: Option<usize>) -> bool {
         match decls {
             Some(d) if !d.is_empty() => {
+                self.flush_for(kw_offset);
                 self.writeln("var");
                 self.indent += 1;
                 for v in d {
@@ -1301,9 +1324,103 @@ end.
             );
         }
 
+        // The file-header comment must stay above the `program` line, not drift
+        // into the first declaration section.
+        assert!(
+            out.contains("{ file header }\nprogram Demo;"),
+            "file-header comment drifted off the top:\n{out}"
+        );
+
         // Re-formatting the output must keep every comment and be stable.
         let reparsed = parse(&out).expect("formatted output must parse");
         let out2 = format_compilation_unit(&reparsed, &out);
         assert_eq!(out, out2, "comment placement is not idempotent");
+    }
+
+    #[test]
+    fn section_header_comment_stays_above_keyword() {
+        // A standalone comment above a section keyword must stay above the
+        // keyword, not drift indented into the section body. A comment between
+        // the keyword and the first declaration must stay inside the section.
+        let src = "\
+program P;
+{ labels here }
+label 100;
+{ constants here }
+const
+  { the max }
+  MAX = 5;
+{ types here }
+type
+  T = integer;
+{ vars here }
+var
+  i: integer;
+begin
+  i := MAX;
+end.
+";
+        let ast = parse(src).expect("must parse");
+        let out = format_compilation_unit(&ast, src);
+
+        for (comment, keyword) in [
+            ("{ labels here }", "label"),
+            ("{ constants here }", "const"),
+            ("{ types here }", "type"),
+            ("{ vars here }", "var"),
+        ] {
+            // The header comment must appear on its own line immediately before
+            // the keyword, at the outer indentation (no leading spaces).
+            let needle = format!("{comment}\n{keyword}");
+            assert!(
+                out.contains(&needle),
+                "section header {comment:?} did not stay above {keyword:?}:\n{out}"
+            );
+        }
+        // The inner comment stays inside the const section, indented above MAX.
+        assert!(
+            out.contains("  { the max }\n  MAX = 5;"),
+            "inner const comment drifted out of its section:\n{out}"
+        );
+
+        let reparsed = parse(&out).expect("formatted output must parse");
+        let out2 = format_compilation_unit(&reparsed, &out);
+        assert_eq!(out, out2, "section-header comment placement is not idempotent");
+    }
+
+    #[test]
+    fn interface_header_comment_stays_in_interface() {
+        // Comments above unit interface procedure/function headers must stay in
+        // the interface, not drift down into the implementation section.
+        let src = "\
+unit U;
+interface
+{ math }
+function Sqr(n: integer): integer;
+{ control }
+procedure Stop;
+implementation
+function Sqr(n: integer): integer;
+begin
+  Sqr := n * n;
+end;
+procedure Stop;
+begin
+  writeln('stop');
+end;
+end.
+";
+        let ast = parse(src).expect("must parse");
+        let out = format_compilation_unit(&ast, src);
+
+        let iface = out.split("implementation").next().unwrap();
+        assert!(
+            iface.contains("{ math }") && iface.contains("{ control }"),
+            "interface header comments drifted out of the interface:\n{out}"
+        );
+
+        let reparsed = parse(&out).expect("formatted output must parse");
+        let out2 = format_compilation_unit(&reparsed, &out);
+        assert_eq!(out, out2, "interface comment placement is not idempotent");
     }
 }

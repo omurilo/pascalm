@@ -1,4 +1,5 @@
 program TestFunction;
+
 var
   x: integer;
   resultado: integer;
