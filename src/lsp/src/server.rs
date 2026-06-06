@@ -11,6 +11,7 @@ use lalrpop_util::ParseError;
 use log::debug;
 use pascalm::lexer::{self, Token};
 use pascalm::loader::{resolve_uses, ModuleLoader};
+use pascalm::symbol_table::SymbolInfo;
 use pascalm::{parser, CompilationUnit, SemanticAnalyzer, SymbolKind};
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
@@ -93,31 +94,10 @@ impl Backend {
     /// go-to-definition. Returns `None` if no used unit exports `name`.
     fn cross_file_definition(&self, uses: &[String], name: &str) -> Option<Location> {
         for spec in uses {
-            // A `uses` spec can be a path (e.g. `uses math/math_lib`); the index
-            // is keyed by the bare file stem, so match on the last component.
-            let stem = spec.rsplit(['/', '\\']).next().unwrap_or(spec);
-            let Some(module_id) = self.unit_by_stem.get(stem).map(|r| r.value().clone()) else {
-                continue;
-            };
-            let Some(unit) = self.analyses.get(&module_id) else {
+            let Some((uri, symbol_info)) = self.extract_symbol_info(spec, name) else {
                 continue;
             };
 
-            if !unit.interface.contains_key(name) {
-                continue;
-            }
-
-            let Some(symbol_info) = unit
-                .analyzer
-                .symbol_table
-                .all_symbols
-                .iter()
-                .find(|s| s.name == name && s.span.start != s.span.end)
-            else {
-                continue;
-            };
-
-            let uri = Url::parse(&unit.uri).ok()?;
             let path = uri.to_file_path().ok()?;
             let text = std::fs::read_to_string(&path).ok()?;
             let rope = Rope::from(text);
@@ -127,6 +107,34 @@ impl Backend {
         }
 
         None
+    }
+
+    fn extract_symbol_info(&self, spec: &String, name: &str) -> Option<(Url, SymbolInfo)> {
+        let stem = spec.rsplit(['/', '\\']).next().unwrap_or(spec);
+        let Some(module_id) = self.unit_by_stem.get(stem).map(|r| r.value().clone()) else {
+            return None;
+        };
+        let Some(unit) = self.analyses.get(&module_id) else {
+            return None;
+        };
+
+        if !unit.interface.contains_key(name) {
+            return None;
+        }
+
+        let Some(symbol_info) = unit
+            .analyzer
+            .symbol_table
+            .all_symbols
+            .iter()
+            .find(|s| s.name == name && s.span.start != s.span.end)
+        else {
+            return None;
+        };
+
+        let uri = Url::parse(&unit.uri).ok()?;
+
+        Some((uri.clone(), symbol_info.clone()))
     }
 
     /// Scan the workspace for Pascal sources, parse each, and index it by file
@@ -1018,8 +1026,27 @@ impl LanguageServer for Backend {
                         }));
                     }
                 }
+
+                let text = rope.to_string();
+                if let Some(name) = word_at_offset(&text, offset) {
+                    let Some((_, symbol_info)) = unit_uses(&result.ast)
+                        .iter()
+                        .find_map(|spec| self.extract_symbol_info(spec, &name))
+                    else {
+                        return Ok(None);
+                    };
+                    let content = format!("```pascal\n{}: {}\n```", name, symbol_info.kind);
+                    return Ok(Some(Hover {
+                        contents: HoverContents::Markup(MarkupContent {
+                            kind: MarkupKind::Markdown,
+                            value: content,
+                        }),
+                        range: None,
+                    }));
+                }
             }
         }
+
         Ok(None)
     }
 

@@ -379,6 +379,37 @@ fn goto_definition_jumps_into_a_used_unit() {
 }
 
 #[test]
+fn hover_resolves_symbol_from_a_used_unit() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/xfile");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/prog.pascalm");
+    let text = std::fs::read_to_string(format!("{dir}/prog.pascalm")).unwrap();
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+    s.did_open(&prog_uri, &text);
+
+    // Hover over `triple` (from `uses mylib`) should show its imported signature.
+    let resp = s.request_until(
+        "textDocument/hover",
+        json!({
+            "textDocument": { "uri": prog_uri },
+            "position": { "line": 3, "character": 10 }
+        }),
+        |r| !r.is_null(),
+    );
+    let value = resp["result"]["contents"]["value"]
+        .as_str()
+        .unwrap_or("");
+    assert!(
+        value.contains("triple"),
+        "hover should describe the imported symbol, got: {}",
+        resp["result"]
+    );
+}
+
+#[test]
 fn goto_definition_resolves_path_style_uses() {
     // `uses sub/mylib` (a path spec) must resolve to the unit's file too — the
     // index is keyed by bare stem, so the lookup matches the last path segment.
