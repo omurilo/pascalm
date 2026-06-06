@@ -37,7 +37,7 @@ struct Args {
     lib_path: Vec<String>,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 fn main() {
@@ -47,7 +47,7 @@ fn main() {
     loader.search_paths = args.lib_path.iter().map(PathBuf::from).collect();
 
     match args.command {
-        Commands::Fmt { all, file_path } => {
+        Some(Commands::Fmt { all, file_path }) => {
             if all {
                 fn visit_dir(path: &Path) -> std::io::Result<()> {
                     for entry in fs::read_dir(path)? {
@@ -102,6 +102,7 @@ fn main() {
             let _ = std::fs::write(file, formatted);
             return;
         }
+        _ => {}
     }
 
     let file = args.file.expect("file is required");
