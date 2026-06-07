@@ -1,0 +1,44 @@
+{ collections_demo — exercita a stdlib `collections` (List e Map).
+  Nota: funções sem parâmetros são chamadas com parênteses — `ListNew()`,
+  `MapNew()` — pois um nome "pelado" é uma referência à função (para passá-la
+  como argumento), enquanto `nome()` é a chamada. }
+program CollectionsDemo;
+uses Collections;
+
+var
+  stack, freq, i: integer;
+
+{ Conta mais uma ocorrência de `word` na tabela de frequências (padrão
+  read-modify-write sobre o Map). }
+procedure Bump(m: integer; word: string);
+begin
+  MapPut(m, word, MapGet(m, word) + 1);
+end;
+
+begin
+  { ---- List usada como pilha (LIFO) ---- }
+  writeln('== Stack (LIFO) ==');
+  stack := ListNew();
+  for i := 1 to 5 do
+    ListPush(stack, i * i);
+  write('  popping:');
+  while ListLen(stack) > 0 do
+    write(' ', ListPop(stack));
+  writeln;
+  ListFree(stack);
+  { ---- Map usada como tabela de frequências ---- }
+  writeln('== Word frequencies ==');
+  freq := MapNew();
+  Bump(freq, 'apple');
+  Bump(freq, 'banana');
+  Bump(freq, 'apple');
+  Bump(freq, 'apple');
+  Bump(freq, 'cherry');
+  Bump(freq, 'banana');
+  writeln('  apple  = ', MapGet(freq, 'apple'));
+  writeln('  banana = ', MapGet(freq, 'banana'));
+  writeln('  cherry = ', MapGet(freq, 'cherry'));
+  writeln('  grape? ', MapHas(freq, 'grape'));
+  writeln('  distinct words = ', MapLen(freq));
+  MapFree(freq);
+end.

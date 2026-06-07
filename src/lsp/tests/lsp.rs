@@ -653,6 +653,37 @@ fn real_examples_have_no_false_diagnostics() {
 }
 
 #[test]
+fn collections_stdlib_symbols_resolve() {
+    // The `collections` unit is embedded stdlib; its List/Map functions must
+    // resolve (no false "undeclared"/type diagnostics) when `use`d.
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/stdlib");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/coll_prog.pascalm");
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+
+    let text = "\
+program P;
+uses Collections;
+var xs: integer;
+begin
+  xs := ListNew();
+  ListPush(xs, 42);
+  writeln(ListGet(xs, 0));
+  ListFree(xs);
+end.
+";
+    s.did_open(&prog_uri, text);
+    let diags = s.wait_diagnostics(&prog_uri);
+    assert!(
+        diags.is_empty(),
+        "collections program produced diagnostics: {diags:?}"
+    );
+}
+
+#[test]
 fn imported_symbols_are_not_flagged() {
     // `triple` comes from `uses mylib`; it must not be reported as undeclared.
     let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/xfile");

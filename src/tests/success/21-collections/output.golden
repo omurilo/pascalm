@@ -1,0 +1,8 @@
+== Stack (LIFO) ==
+  popping: 25 16 9 4 1
+== Word frequencies ==
+  apple  = 3
+  banana = 2
+  cherry = 1
+  grape? FALSE
+  distinct words = 3

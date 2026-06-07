@@ -219,6 +219,16 @@ impl Backend {
                 }
             }
         }
+        // Also load every embedded stdlib unit (system/net/json/collections),
+        // even when no workspace file uses it yet, so diagnostics can resolve
+        // its symbols (`uses Collections` must know `ListNew`, etc.).
+        for path in embedded_paths.values() {
+            if loader.load_recursively(path, false).is_ok() {
+                if let Ok(id) = ModuleLoader::file_module_id(path) {
+                    id_to_path.insert(id, path.clone());
+                }
+            }
+        }
 
         let Some(order) = loader.topological_sort() else {
             return 0;
