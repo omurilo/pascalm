@@ -725,7 +725,21 @@ impl Formatter {
             Expr::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
             Expr::Nil => "nil".to_string(),
             Expr::Variable(v) => self.variable(v),
-            Expr::FunctionCall { name, args, .. } => format!("{}{}", name, self.args(args)),
+            Expr::FunctionCall { name, args, .. } => {
+                // A function call always keeps its parentheses, even with no
+                // arguments: dropping them turns `who()` (a call) into `who` (a
+                // bare variable / function reference), which reparses to a
+                // different AST node and changes the program's meaning.
+                let inner = match args {
+                    Some(list) => list
+                        .iter()
+                        .map(|e| self.expr(e))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    None => String::new(),
+                };
+                format!("{}({})", name, inner)
+            }
             Expr::Set(elems) => {
                 let inner = elems
                     .iter()
@@ -1351,6 +1365,37 @@ end.
         let reparsed = parse(&out).expect("formatted output must parse");
         let out2 = format_compilation_unit(&reparsed, &out);
         assert_eq!(out, out2, "case-branch comment placement is not idempotent");
+    }
+
+    #[test]
+    fn empty_arg_function_call_keeps_parens() {
+        // `who()` is a call (FunctionCall); `who` is a bare reference (Variable).
+        // The formatter must NOT drop the parens, or the reparse changes meaning.
+        let src = "\
+program P;
+
+function who(): integer;
+begin
+  who := 1;
+end;
+
+begin
+  writeln('a=', who());
+end.
+";
+        let ast = parse(src).expect("must parse");
+        let out = format_compilation_unit(&ast, src);
+        assert!(
+            out.contains("who()"),
+            "empty-arg call lost its parens:\n{out}"
+        );
+        assert!(
+            !out.contains("', who)"),
+            "call `who()` was rendered as bare `who`:\n{out}"
+        );
+        // Stable under a second pass.
+        let reparsed = parse(&out).expect("formatted output must parse");
+        assert_eq!(out, format_compilation_unit(&reparsed, &out), "not idempotent");
     }
 
     #[test]
