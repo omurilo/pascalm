@@ -4,8 +4,7 @@
   only in b/util) would be missing and this test would fail to compile. }
 program ModuleNameCollision;
 uses a/util, b/util;
-
 begin
-  writeln('a=', who);
-  writeln('b=', whoB);
+  writeln('a=', who());
+  writeln('b=', whoB());
 end.
