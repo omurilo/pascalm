@@ -781,6 +781,7 @@ impl SemanticAnalyzer {
                     let typed_idx = self.analyze_expr(idx)?;
                     let elem_ty = match &cur_expr.ty {
                         typed::Type::Array { element_type, .. } => (**element_type).clone(),
+                        typed::Type::String => typed::Type::Char,
                         _ => typed::Type::Void,
                     };
                     let tv = typed::TypedVariable::ArrayAccess {
@@ -829,13 +830,12 @@ impl SemanticAnalyzer {
                 }
                 typed::Type::Void
             }
-            typed::TypedVariable::ArrayAccess { array, .. } => {
-                if let typed::Type::Array { element_type, .. } = &array.ty {
-                    *element_type.clone()
-                } else {
-                    typed::Type::Void
-                }
-            }
+            typed::TypedVariable::ArrayAccess { array, .. } => match &array.ty {
+                typed::Type::Array { element_type, .. } => *element_type.clone(),
+                // Indexing a string yields a char.
+                typed::Type::String => typed::Type::Char,
+                _ => typed::Type::Void,
+            },
             typed::TypedVariable::PointerDeref(p) => {
                 if let typed::Type::Pointer(inner) = &p.ty {
                     *inner.clone()

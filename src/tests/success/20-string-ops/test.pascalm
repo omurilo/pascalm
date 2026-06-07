@@ -1,0 +1,34 @@
+program StringOps;
+
+var
+  s, t: string;
+  c: char;
+  i: integer;
+
+begin
+  { char ' ' (a single-char literal) assigned to a string variable }
+  s := 'Ola';
+  t := ' ';
+  writeln(s + t + 'Mundo');
+  { 1-based character indexing (read) }
+  c := s[1];
+  writeln(c);
+  write('reverse: ');
+  for i := 3 downto 1 do
+    write(s[i]);
+  writeln;
+  { character mutation through index — needs writable string storage }
+  s := 'cat';
+  s[1] := 'h';
+  writeln(s);
+  { lowercase a string in place via Ord/Chr }
+  s := 'PASCAL';
+  for i := 1 to 6 do
+    s[i] := Chr(Ord(s[i]) + 32);
+  writeln(s);
+  { value semantics: assigning copies, so mutating one leaves the other intact }
+  s := 'abc';
+  t := s;
+  t[1] := 'X';
+  writeln(s, ' ', t);
+end.

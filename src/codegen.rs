@@ -102,6 +102,19 @@ impl<'ctx> CodeGen<'ctx> {
         )
     }
 
+    /// `i8* pascal_strdup(i8*)` — copies a string into a fresh writable buffer.
+    fn get_strdup(&self) -> FunctionValue<'ctx> {
+        if let Some(f) = self.module.get_function("pascal_strdup") {
+            return f;
+        }
+        let ptr_t = self.context.ptr_type(inkwell::AddressSpace::default());
+        self.module.add_function(
+            "pascal_strdup",
+            ptr_t.fn_type(&[ptr_t.into()], false),
+            Some(inkwell::module::Linkage::External),
+        )
+    }
+
     /// Produces a `i8*` C-string pointer for a value being concatenated:
     /// strings are already pointers, chars are materialized into a 2-byte
     /// stack buffer.
@@ -530,6 +543,27 @@ impl<'ctx> CodeGen<'ctx> {
             typed::TypedStmt::Assignment { target, value } => {
                 let val = self.gen_typed_expr(value)?;
                 let ptr = self.gen_typed_target_ptr(target)?;
+                // Assigning to a `string` variable copies the right-hand side
+                // into a fresh writable buffer (`pascal_strdup`). This gives
+                // Pascal value semantics (no aliasing between string variables)
+                // and, crucially, makes later character mutation (`s[i] := c`)
+                // safe — a bare literal would otherwise be a read-only global.
+                // A `char` source is first promoted to a 1-char C-string.
+                let val = if matches!(target.ty, typed::Type::String) {
+                    let src = match value.ty {
+                        typed::Type::Char => self.to_cstr_ptr(val, &value.ty)?,
+                        _ => val.into_pointer_value(),
+                    };
+                    let strdup = self.get_strdup();
+                    self.builder
+                        .build_call(strdup, &[src.into()], "strdup")
+                        .unwrap()
+                        .try_as_basic_value()
+                        .left()
+                        .unwrap()
+                } else {
+                    val
+                };
                 self.builder.build_store(ptr, val).unwrap();
             }
             typed::TypedStmt::If {
@@ -1456,6 +1490,21 @@ impl<'ctx> CodeGen<'ctx> {
                 ))
             }
             typed::TypedVariable::ArrayAccess { array, index } => {
+                // Indexing a string is a char access into its `i8*` buffer, not
+                // an aggregate GEP — strings carry no length and are plain
+                // pointers, so we load the pointer and offset it by one byte.
+                // Pascal strings are 1-based, hence `index - 1`.
+                if matches!(array.ty, typed::Type::String) {
+                    let base = self.gen_typed_expr(array)?.into_pointer_value();
+                    let idx = self.gen_typed_expr(index)?.into_int_value();
+                    let one = self.context.i64_type().const_int(1, false);
+                    let idx0 = self.builder.build_int_sub(idx, one, "stridx").unwrap();
+                    let i8_t = self.context.i8_type();
+                    let elem = unsafe {
+                        self.builder.build_gep(i8_t, base, &[idx0], "strgep").unwrap()
+                    };
+                    return Ok((elem, i8_t.as_basic_type_enum()));
+                }
                 let (p, l_t) = self.gen_typed_variable_ptr_from_expr(array)?;
                 let a_t = l_t.into_array_type();
                 let idx = self.gen_typed_expr(index)?.into_int_value();

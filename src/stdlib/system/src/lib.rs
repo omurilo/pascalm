@@ -54,6 +54,28 @@ pub extern "C" fn pascal_strcat(a: *const u8, b: *const u8) -> *mut u8 {
     }
 }
 
+/// Copies a null-terminated C string into a freshly allocated, **writable**
+/// buffer. String literals compile to read-only globals, so assigning one to a
+/// variable and then mutating a character (`s[i] := c`) would fault; copying on
+/// assignment gives each string variable its own writable storage (and proper
+/// Pascal value semantics — no aliasing between variables). A null input yields
+/// an empty 1-byte string so the result is always safe to read and index.
+/// Ownership is handed to the generated code, which never frees (leaked).
+#[no_mangle]
+pub extern "C" fn pascal_strdup(s: *const u8) -> *mut u8 {
+    unsafe {
+        let len = c_strlen(s);
+        let mut buf: Vec<u8> = Vec::with_capacity(len + 1);
+        for i in 0..len {
+            buf.push(*s.add(i));
+        }
+        buf.push(0);
+        let ptr = buf.as_mut_ptr();
+        core::mem::forget(buf);
+        ptr
+    }
+}
+
 unsafe fn c_strlen(s: *const u8) -> usize {
     if s.is_null() {
         return 0;
