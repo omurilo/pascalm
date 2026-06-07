@@ -106,16 +106,17 @@ pub CompilationUnit: CompilationUnit = {
 };
 
 pub Program: Program = {
-    "program" <name:Identifier> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." => Program {
+    <kw:@L> "program" <name:Identifier> <heading:HeadingOpt> ";" <uses:UsesClause?> <block:Block> "." => Program {
         name,
         heading,
         uses,
         block,
+        kw_offset: kw,
     }
 };
 
 pub Unit: Unit = {
-    "unit" <name:Identifier> ";"
+    <kw:@L> "unit" <name:Identifier> ";"
     "interface" <interface:InterfaceSection>
     "implementation" <implementation:ImplementationSection>
     <initialization:Initialization?>
@@ -124,6 +125,7 @@ pub Unit: Unit = {
         interface,
         implementation,
         initialization,
+        kw_offset: kw,
     }
 };
 
@@ -176,6 +178,17 @@ IdentifierList: Vec<String> = {
     }
 };
 
+// Like IdentifierList, but also captures the source span of each identifier so
+// the analyzer can record variable/parameter definitions for the LSP.
+SpannedIdentifierList: (Vec<String>, Vec<Span>) = {
+    <s:@L> <id:Identifier> <e:@R> => (vec![id], vec![Span::new(s, e)]),
+    <mut list:SpannedIdentifierList> "," <s:@L> <id:Identifier> <e:@R> => {
+        list.0.push(id);
+        list.1.push(Span::new(s, e));
+        list
+    }
+};
+
 PathList: Vec<String> = {
     <p:Path> => vec![p],
     <mut list:PathList> "," <p:Path> => {
@@ -204,12 +217,21 @@ AbsoluteSegments: Vec<String> = {
 };
 
 Block: Block = {
-    <labels:(LabelDecl ";")?>
-    <constants:(ConstDecl ";")?>
-    <types:(TypeDecl ";")?>
-    <variables:(VarDecl ";")?>
+    <lpos:@L> <labels:(LabelDecl ";")?>
+    <cpos:@L> <constants:(ConstDecl ";")?>
+    <tpos:@L> <types:(TypeDecl ";")?>
+    <vpos:@L> <variables:(VarDecl ";")?>
     <procs:(ProcFuncDecl ";")?>
     <stmts:CompoundStmtInner> => {
+        // Each `@L` is the offset of the token that begins its section; it is
+        // only meaningful (and only used by the formatter) when that section is
+        // actually present, so it is recorded as the section keyword position.
+        let section_spans = SectionSpans {
+            labels: labels.as_ref().map(|_| lpos),
+            constants: constants.as_ref().map(|_| cpos),
+            types: types.as_ref().map(|_| tpos),
+            variables: variables.as_ref().map(|_| vpos),
+        };
         Block {
             labels: labels.map(|(l, _)| l),
             constants: constants.map(|(c, _)| c),
@@ -217,6 +239,7 @@ Block: Block = {
             variables: variables.map(|(v, _)| v),
             procedures_functions: procs.map(|(p, _)| p),
             statements: stmts,
+            section_spans,
         }
     }
 };
@@ -238,7 +261,7 @@ ConstDecl: Vec<ConstDecl> = {
 };
 
 ConstItem: ConstDecl = {
-    <id:Identifier> "=" <val:Constant> => ConstDecl { name: id, value: val },
+    <s:@L> <id:Identifier> <e:@R> "=" <val:Constant> => ConstDecl { name: id, name_span: Span::new(s, e), value: val },
 };
 
 TypeDecl: Vec<TypeDecl> = {
@@ -250,7 +273,7 @@ TypeDecl: Vec<TypeDecl> = {
 };
 
 TypeItem: TypeDecl = {
-    <id:Identifier> "=" <te:TypeExpr> => TypeDecl { name: id, type_expr: te },
+    <s:@L> <id:Identifier> <e:@R> "=" <te:TypeExpr> => TypeDecl { name: id, name_span: Span::new(s, e), type_expr: te },
 };
 
 VarDecl: Vec<VarDecl> = {
@@ -262,7 +285,7 @@ VarDecl: Vec<VarDecl> = {
 };
 
 VarItem: VarDecl = {
-    <ids:IdentifierList> ":" <te:TypeExpr> => VarDecl { ids, type_expr: te },
+    <ids:SpannedIdentifierList> ":" <te:TypeExpr> => VarDecl { ids: ids.0, id_spans: ids.1, type_expr: te },
 };
 
 ProcFuncHeaderList: Vec<ProcFuncDecl> = {
@@ -274,11 +297,11 @@ ProcFuncHeaderList: Vec<ProcFuncDecl> = {
 };
 
 ProcFuncHeader: ProcFuncDecl = {
-    "procedure" <name:Identifier> <params:Parameters?> => {
-        ProcFuncDecl::Procedure { name, params, block_or_forward: BlockOrForward::Forward }
+    "procedure" <s:@L> <name:Identifier> <e:@R> <params:Parameters?> => {
+        ProcFuncDecl::Procedure { name, name_span: Span::new(s, e), params, block_or_forward: BlockOrForward::Forward }
     },
-    "function" <name:Identifier> <params:Parameters?> ":" <rt:TypeName> => {
-        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: BlockOrForward::Forward }
+    "function" <s:@L> <name:Identifier> <e:@R> <params:Parameters?> ":" <rt:TypeName> => {
+        ProcFuncDecl::Function { name, name_span: Span::new(s, e), params, return_type: rt, block_or_forward: BlockOrForward::Forward }
     }
 };
 
@@ -291,11 +314,11 @@ ProcFuncDecl: Vec<ProcFuncDecl> = {
 };
 
 ProcOrFunc: ProcFuncDecl = {
-    "procedure" <name:Identifier> <params:Parameters?> ";" <block:BlockOrExternal> => {
-        ProcFuncDecl::Procedure { name, params, block_or_forward: block }
+    "procedure" <s:@L> <name:Identifier> <e:@R> <params:Parameters?> ";" <block:BlockOrExternal> => {
+        ProcFuncDecl::Procedure { name, name_span: Span::new(s, e), params, block_or_forward: block }
     },
-    "function" <name:Identifier> <params:Parameters?> ":" <rt:TypeName> ";" <block:BlockOrExternal> => {
-        ProcFuncDecl::Function { name, params, return_type: rt, block_or_forward: block }
+    "function" <s:@L> <name:Identifier> <e:@R> <params:Parameters?> ":" <rt:TypeName> ";" <block:BlockOrExternal> => {
+        ProcFuncDecl::Function { name, name_span: Span::new(s, e), params, return_type: rt, block_or_forward: block }
     }
 };
 
@@ -318,10 +341,10 @@ ParamList: Vec<Param> = {
 };
 
 ParamSection: Param = {
-    "var" <ids:IdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: true, ids, type_name: tn },
-    <ids:IdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: false, ids, type_name: tn },
-    "procedure" <id:Identifier> <params:Parameters?> => Param::Procedure { id, params },
-    "function" <id:Identifier> <params:Parameters?> ":" <tn:TypeName> => Param::Function { id, params, return_type: tn },
+    "var" <ids:SpannedIdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: true, ids: ids.0, id_spans: ids.1, type_name: tn },
+    <ids:SpannedIdentifierList> ":" <tn:TypeName> => Param::Variable { is_var: false, ids: ids.0, id_spans: ids.1, type_name: tn },
+    "procedure" <s:@L> <id:Identifier> <e:@R> <params:Parameters?> => Param::Procedure { id, id_span: Span::new(s, e), params },
+    "function" <s:@L> <id:Identifier> <e:@R> <params:Parameters?> ":" <tn:TypeName> => Param::Function { id, id_span: Span::new(s, e), params, return_type: tn },
 };
 
 TypeName: String = {
@@ -340,9 +363,9 @@ Constant: Expr = {
     <c:"char_code"> => Expr::Char(c),
     <s:"string_lit"> => Expr::String(s),
     <b:"boolean_lit"> => Expr::Boolean(b),
-    <id:Identifier> => Expr::Variable(Box::new(Variable::Id(id))),
-    "+" <id:Identifier> => Expr::Unary { op: UnaryOp::Plus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
-    "-" <id:Identifier> => Expr::Unary { op: UnaryOp::Minus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id)))) },
+    <s:@L> <id:Identifier> <e:@R> => Expr::Variable(Box::new(Variable::Id(id, Span::new(s, e)))),
+    "+" <s:@L> <id:Identifier> <e:@R> => Expr::Unary { op: UnaryOp::Plus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id, Span::new(s, e))))) },
+    "-" <s:@L> <id:Identifier> <e:@R> => Expr::Unary { op: UnaryOp::Minus, expr: Box::new(Expr::Variable(Box::new(Variable::Id(id, Span::new(s, e))))) },
 };
 
 TypeExpr: TypeExpr = {
@@ -457,7 +480,7 @@ MatchedStmt: Stmt = {
     "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:MatchedStmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) },
     "while" <cond:Expr> "do" <body:MatchedStmt> => Stmt::While { condition: cond, body: Box::new(body) },
     "repeat" <body:StmtList> "until" <cond:Expr> => Stmt::Repeat { body, until: cond },
-    "for" <id:Identifier> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:MatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
+    "for" <s:@L> <id:Identifier> <e:@R> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:MatchedStmt> => Stmt::For { id, id_span: Span::new(s, e), start, up: to, end, body: Box::new(body) },
     "with" <ids:VariableList> "do" <body:MatchedStmt> => Stmt::With { ids, body: Box::new(body) },
     <l:"int_lit"> ":" <s:MatchedStmt> => Stmt::Labeled(l, Box::new(s)),
     "case" <expr:Expr> "of" <items:CaseList> <else_stmt:CaseElseOpt> "end" => Stmt::Case { expr, items, else_stmt: else_stmt.map(Box::new) },
@@ -467,7 +490,7 @@ UnmatchedStmt: Stmt = {
     "if" <cond:Expr> "then" <ts:Stmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: None },
     "if" <cond:Expr> "then" <ts:MatchedStmt> "else" <es:UnmatchedStmt> => Stmt::If { condition: cond, then_stmt: Box::new(ts), else_stmt: Some(Box::new(es)) },
     "while" <cond:Expr> "do" <body:UnmatchedStmt> => Stmt::While { condition: cond, body: Box::new(body) },
-    "for" <id:Identifier> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:UnmatchedStmt> => Stmt::For { id, start, up: to, end, body: Box::new(body) },
+    "for" <s:@L> <id:Identifier> <e:@R> ":=" <start:Expr> <to:ForTo> <end:Expr> "do" <body:UnmatchedStmt> => Stmt::For { id, id_span: Span::new(s, e), start, up: to, end, body: Box::new(body) },
     "with" <ids:VariableList> "do" <body:UnmatchedStmt> => Stmt::With { ids, body: Box::new(body) },
     <l:"int_lit"> ":" <s:UnmatchedStmt> => Stmt::Labeled(l, Box::new(s)),
 };
@@ -509,19 +532,19 @@ CaseElseOpt: Option<Stmt> = {
 };
 
 ProcedureCall: Stmt = {
-    <name:BuiltinProc> => Stmt::ProcedureCall { name, args: None },
-    <name:BuiltinProc> "(" <args:ExprList?> ")" => Stmt::ProcedureCall { name, args },
-    
-    <id:Identifier> => Stmt::ProcedureCall { name: id, args: None },
+    <s:@L> <name:BuiltinProc> <e:@R> => Stmt::ProcedureCall { name, name_span: Span::new(s, e), args: None },
+    <s:@L> <name:BuiltinProc> <e:@R> "(" <args:ExprList?> ")" => Stmt::ProcedureCall { name, name_span: Span::new(s, e), args },
+
+    <s:@L> <id:Identifier> <e:@R> => Stmt::ProcedureCall { name: id, name_span: Span::new(s, e), args: None },
     <v:Variable> "(" <args:ExprList?> ")" => {
         match v {
-            Variable::Id(id) => Stmt::ProcedureCall { name: id, args },
+            Variable::Id(id, sp) => Stmt::ProcedureCall { name: id, name_span: sp, args },
             Variable::MemberAccess { record, field } => {
                 let mut new_args = vec![*record];
                 if let Some(mut a) = args {
                     new_args.append(&mut a);
                 }
-                Stmt::ProcedureCall { name: field, args: Some(new_args) }
+                Stmt::ProcedureCall { name: field, name_span: Span::default(), args: Some(new_args) }
             },
             _ => panic!("Invalid procedure call target"),
         }
@@ -576,13 +599,13 @@ PrimaryExpr: Expr = {
     // Function calls and UFCS (Method calls desugared to function calls)
     <v:Variable> "(" <args:ExprList?> ")" => {
         match v {
-            Variable::Id(id) => Expr::FunctionCall { name: id, args },
+            Variable::Id(id, sp) => Expr::FunctionCall { name: id, name_span: sp, args },
             Variable::MemberAccess { record, field } => {
                 let mut new_args = vec![*record];
                 if let Some(mut a) = args {
                     new_args.append(&mut a);
                 }
-                Expr::FunctionCall { name: field, args: Some(new_args) }
+                Expr::FunctionCall { name: field, name_span: Span::default(), args: Some(new_args) }
             },
             _ => panic!("Invalid function call target"),
         }
@@ -613,7 +636,7 @@ Element: Element = {
 };
 
 Variable: Variable = {
-    <id:Identifier> => Variable::Id(id),
+    <s:@L> <id:Identifier> <e:@R> => Variable::Id(id, Span::new(s, e)),
     <v:Variable> "." <f:Identifier> => Variable::MemberAccess { record: Box::new(Expr::Variable(Box::new(v))), field: f },
     <v:Variable> "[" <ids:ExprList> "]" => Variable::ArrayAccess { array: Box::new(Expr::Variable(Box::new(v))), indices: ids },
     <v:Variable> "^" => Variable::PointerDeref(Box::new(Expr::Variable(Box::new(v)))),

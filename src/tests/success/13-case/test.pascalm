@@ -1,20 +1,17 @@
-program TesteParser (input, output);
+program TesteParser(input, output);
 
 { Declaração de labels }
 label 100, 200, 300;
-
 { Declaração de constantes }
 const
   MAX = 5;
   MIN = 1;
-
 { Declaração de tipos }
 type
   TAluno = record
     nome: string;
     nota: integer;
   end;
-
 { Declaração de variáveis }
 var
   i, soma: integer;
@@ -28,15 +25,14 @@ function Dobro(x: integer): integer;
 begin
   Dobro := x * 2;
 end;
+
 { Função que recebe função }
-function AplicarOperacao(x, y: real; 
-                        function op(a, b: real): real): real;
-forward;
+function AplicarOperacao(x, y: real; function op(a, b: real): real): real; forward;
 
 { Função que é passada como parâmetro de outra função }
 function Multiplicar(a, b: real): real;
 begin
-    Multiplicar := a * b;
+  Multiplicar := a * b;
 end;
 
 { Procedimento simples }
@@ -46,22 +42,20 @@ begin
 end;
 
 { Procedure que recebe procedure }
-procedure ExecutarOperacao(x, y: integer; 
-                           procedure operacao(a, b: integer));
+procedure ExecutarOperacao(x, y: integer; procedure operacao(a, b: integer));
 begin
-    operacao(x, y);
+  operacao(x, y);
 end;
 
 { Procedure que é passada como parâmetro para outra procedure }
 procedure Somar(a, b: integer);
 begin
-    writeln(a + b);
+  writeln(a + b);
 end;
 
-function AplicarOperacao(x, y: real; 
-                        function op(a, b: real): real): real;
+function AplicarOperacao(x, y: real; function op(a, b: real): real): real;
 begin
-    AplicarOperacao := op(x, y);
+  AplicarOperacao := op(x, y);
 end;
 
 begin
@@ -73,34 +67,29 @@ begin
     alunos[i].nota := i * 10;
     soma := soma + alunos[i].nota;
   end;
-
   for i := MAX downto MIN do
   begin
     writeln(i);
   end;
-
   { Testa função }
   opt := Dobro(soma);
-
   { Testa função com parâmetro de função }
   resultado := AplicarOperacao(4.5, 2.0, Multiplicar);
   writeln(resultado);
-
   { Testa procedure com parâmetro de procedure }
   ExecutarOperacao(5, 3, Somar);
-
   { Testa case }
   case opt of
-    100: write('Total x2 = 100');
-    50: write('Total /2 = 50');
-  else
-    write('Total x2 = ', opt);
+    100:
+      write('Total x2 = 100');
+    50:
+      write('Total /2 = 50');
+    else
+      write('Total x2 = ', opt);
   end;
-
   writeln;
   write('Imprimindo lista de alunos:');
   writeln;
-  
   { Testa while }
   i := 1;
   while i <= MAX do
@@ -109,7 +98,6 @@ begin
     writeln;
     i := i + 1;
   end;
-  
   { Testa repeat }
   repeat
     write('Digite 0 para sair: ');

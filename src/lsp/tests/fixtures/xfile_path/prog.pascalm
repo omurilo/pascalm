@@ -1,0 +1,6 @@
+program P;
+uses sub/mylib;
+
+begin
+  writeln(triple(3));
+end.

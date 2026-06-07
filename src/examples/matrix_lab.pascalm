@@ -1,0 +1,125 @@
+{ matrix_lab — mini-laboratório de álgebra linear sobre matrizes NxN de inteiros.
+  Demonstra: arrays multidimensionais, constantes em limites de array, procedures
+  com parâmetros por referência (var) usados como entrada e saída, funções que
+  retornam inteiro/booleano, e laços aninhados. }
+program MatrixLab;
+
+const
+  N = 3;
+type
+  TMatrix = array[1..N, 1..N] of integer;
+var
+  a, b, c: TMatrix;
+
+{ Preenche m com uma sequência determinística a partir de `base`. }
+procedure Fill(var m: TMatrix; base: integer);
+var
+  i, j: integer;
+
+begin
+  for i := 1 to N do
+    for j := 1 to N do
+      m[i, j] := base + (i - 1) * N + j;
+end;
+
+{ Escreve a identidade NxN em m. }
+procedure Identity(var m: TMatrix);
+var
+  i, j: integer;
+
+begin
+  for i := 1 to N do
+    for j := 1 to N do
+      if i = j then
+        m[i, j] := 1
+      else
+        m[i, j] := 0;
+end;
+
+procedure Print(var m: TMatrix; title: string);
+var
+  i, j: integer;
+
+begin
+  writeln(title);
+  for i := 1 to N do
+  begin
+    write('  [');
+    for j := 1 to N do
+    begin
+      write(m[i, j]);
+      if j < N then
+        write(', ');
+    end;
+    writeln(']');
+  end;
+end;
+
+{ dst := x * y (produto matricial clássico). }
+procedure Multiply(var x, y, dst: TMatrix);
+var
+  i, j, k, acc: integer;
+
+begin
+  for i := 1 to N do
+    for j := 1 to N do
+    begin
+      acc := 0;
+      for k := 1 to N do
+        acc := acc + x[i, k] * y[k, j];
+      dst[i, j] := acc;
+    end;
+end;
+
+{ dst := transposta de m. }
+procedure Transpose(var m, dst: TMatrix);
+var
+  i, j: integer;
+
+begin
+  for i := 1 to N do
+    for j := 1 to N do
+      dst[j, i] := m[i, j];
+end;
+
+function Trace(var m: TMatrix): integer;
+var
+  i, s: integer;
+
+begin
+  s := 0;
+  for i := 1 to N do
+    s := s + m[i, i];
+  Trace := s;
+end;
+
+function IsSymmetric(var m: TMatrix): boolean;
+var
+  i, j: integer;
+  ok: boolean;
+
+begin
+  ok := true;
+  for i := 1 to N do
+    for j := 1 to N do
+      if m[i, j] <> m[j, i] then
+        ok := false;
+  IsSymmetric := ok;
+end;
+
+begin
+  Fill(a, 0);
+  Identity(b);
+  Print(a, 'A =');
+  Print(b, 'I =');
+  { A * I deve devolver a própria A. }
+  Multiply(a, b, c);
+  Print(c, 'A * I =');
+  Transpose(a, c);
+  Print(c, 'A^T =');
+  writeln('trace(A) = ', Trace(a));
+  if IsSymmetric(a) then
+    writeln('A is symmetric')
+  else
+    writeln('A is NOT symmetric');
+end.

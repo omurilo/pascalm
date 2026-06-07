@@ -1,0 +1,122 @@
+{ bank_system — um pequeno núcleo bancário sobre um array de contas.
+  Demonstra: tipos enumerados, records com PARTE VARIANTE (`case ... of`) onde
+  cada tipo de conta carrega campos diferentes, aritmética com `real`, despacho
+  por `case`, e procedures que recebem a conta por referência para mutá-la. }
+program BankSystem;
+
+const
+  CAP = 4;
+type
+  TKind = (Checking, Savings, Loan);
+  TStatus = (Active, Frozen, Closed);
+  TAccount = record
+    id: integer;
+    owner: string;
+    balance: real;
+    status: TStatus;
+    case kind: TKind of
+      Checking: (overdraft: real);
+      Savings: (rate: real);
+      Loan: (principal: real; term_months: integer);
+  end;
+var
+  accounts: array[1..CAP] of TAccount;
+  i: integer;
+
+procedure Deposit(var acc: TAccount; amount: real);
+begin
+  if acc.status = Active then
+    acc.balance := acc.balance + amount
+  else
+    writeln('  [denied] deposit to non-active account ', acc.id);
+end;
+
+{ Saque que respeita o limite de cheque especial das contas Checking. }
+procedure Withdraw(var acc: TAccount; amount: real);
+var
+  floor: real;
+
+begin
+  if acc.status <> Active then
+  begin
+    writeln('  [denied] withdraw from non-active account ', acc.id);
+  end
+  else
+  begin
+    floor := 0.0;
+    if acc.kind = Checking then
+      floor := -acc.overdraft;
+    if acc.balance - amount < floor then
+      writeln('  [denied] insufficient funds on account ', acc.id)
+    else
+      acc.balance := acc.balance - amount;
+  end;
+end;
+
+{ Aplica um ciclo de juros: rende na poupança, acumula no empréstimo e não
+  altera a conta corrente (ramo Checking é um no-op deliberado). }
+procedure Accrue(var acc: TAccount);
+begin
+  case acc.kind of
+    Savings:
+      acc.balance := acc.balance + acc.balance * acc.rate;
+    Loan:
+      acc.principal := acc.principal + acc.principal * 0.02;
+    Checking:
+      acc.balance := acc.balance;
+  end;
+end;
+
+procedure Report(var acc: TAccount);
+begin
+  write('  #', acc.id, ' ', acc.owner, ' [', acc.status, '] ');
+  case acc.kind of
+    Checking:
+      writeln('Checking balance=', acc.balance, ' overdraft=', acc.overdraft);
+    Savings:
+      writeln('Savings balance=', acc.balance, ' rate=', acc.rate);
+    Loan:
+      writeln('Loan principal=', acc.principal, ' term=', acc.term_months);
+  end;
+end;
+
+begin
+  accounts[1].id := 1;
+  accounts[1].owner := 'Ada';
+  accounts[1].status := Active;
+  accounts[1].kind := Checking;
+  accounts[1].balance := 500.0;
+  accounts[1].overdraft := 200.0;
+  accounts[2].id := 2;
+  accounts[2].owner := 'Linus';
+  accounts[2].status := Active;
+  accounts[2].kind := Savings;
+  accounts[2].balance := 1000.0;
+  accounts[2].rate := 0.05;
+  accounts[3].id := 3;
+  accounts[3].owner := 'Grace';
+  accounts[3].status := Active;
+  accounts[3].kind := Loan;
+  accounts[3].principal := 10000.0;
+  accounts[3].term_months := 24;
+  accounts[3].balance := 0.0;
+  accounts[4].id := 4;
+  accounts[4].owner := 'Dennis';
+  accounts[4].status := Frozen;
+  accounts[4].kind := Checking;
+  accounts[4].balance := 75.0;
+  accounts[4].overdraft := 0.0;
+  writeln('== Initial state ==');
+  for i := 1 to CAP do
+    Report(accounts[i]);
+  writeln('== Transactions ==');
+  Withdraw(accounts[1], 650.0);  { ok: usa o cheque especial (-150) }
+  Withdraw(accounts[1], 100.0);  { negado: estouraria o limite }
+  Deposit(accounts[4], 50.0);  { negado: conta congelada }
+  Deposit(accounts[2], 500.0);
+  writeln('== After one interest cycle ==');
+  for i := 1 to CAP do
+    Accrue(accounts[i]);
+  for i := 1 to CAP do
+    Report(accounts[i]);
+end.

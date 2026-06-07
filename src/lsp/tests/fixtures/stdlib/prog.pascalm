@@ -1,0 +1,5 @@
+program P;
+
+begin
+  writeln(Sqrt(100.0));
+end.

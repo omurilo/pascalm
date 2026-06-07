@@ -1,6 +1,8 @@
 program TestIO;
+
 var
-  a, b, soma : integer;
+  a, b, soma: integer;
+
 begin
   writeln('Digite um numero:');
   readln(a);

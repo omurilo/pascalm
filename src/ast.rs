@@ -1,3 +1,17 @@
+/// A source byte range, used by the language server to map AST identifiers
+/// back to their location in the original text (go-to-definition, hover).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    pub fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum CompilationUnit {
     Program(Program),
@@ -10,6 +24,9 @@ pub struct Program {
     pub heading: Option<Vec<String>>,
     pub uses: Option<Vec<String>>,
     pub block: Block,
+    /// Byte offset of the `program` keyword, so the formatter can flush a
+    /// file-header comment above the heading instead of into a later section.
+    pub kw_offset: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -18,6 +35,8 @@ pub struct Unit {
     pub interface: InterfaceSection,
     pub implementation: ImplementationSection,
     pub initialization: Option<Vec<Stmt>>,
+    /// Byte offset of the `unit` keyword; see [`Program::kw_offset`].
+    pub kw_offset: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -46,23 +65,43 @@ pub struct Block {
     pub variables: Option<Vec<VarDecl>>,
     pub procedures_functions: Option<Vec<ProcFuncDecl>>,
     pub statements: Vec<Stmt>,
+    /// Byte offset of each declaration section's keyword (`label`/`const`/
+    /// `type`/`var`), when the section is present. Used only by the formatter to
+    /// anchor section-header comments above the keyword instead of letting them
+    /// drift into the section body.
+    pub section_spans: SectionSpans,
+}
+
+/// Byte offsets of the declaration-section keywords within a [`Block`], so the
+/// formatter can tell a comment that precedes a section keyword apart from one
+/// that sits between the keyword and its first declaration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct SectionSpans {
+    pub labels: Option<usize>,
+    pub constants: Option<usize>,
+    pub types: Option<usize>,
+    pub variables: Option<usize>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ConstDecl {
     pub name: String,
+    pub name_span: Span,
     pub value: Expr,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TypeDecl {
     pub name: String,
+    pub name_span: Span,
     pub type_expr: TypeExpr,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarDecl {
     pub ids: Vec<String>,
+    /// Source span of each identifier in `ids`, in the same order.
+    pub id_spans: Vec<Span>,
     pub type_expr: TypeExpr,
 }
 
@@ -70,11 +109,13 @@ pub struct VarDecl {
 pub enum ProcFuncDecl {
     Procedure {
         name: String,
+        name_span: Span,
         params: Option<Vec<Param>>,
         block_or_forward: BlockOrForward,
     },
     Function {
         name: String,
+        name_span: Span,
         params: Option<Vec<Param>>,
         return_type: String,
         block_or_forward: BlockOrForward,
@@ -93,14 +134,17 @@ pub enum Param {
     Variable {
         is_var: bool,
         ids: Vec<String>,
+        id_spans: Vec<Span>,
         type_name: String,
     },
     Procedure {
         id: String,
+        id_span: Span,
         params: Option<Vec<Param>>,
     },
     Function {
         id: String,
+        id_span: Span,
         params: Option<Vec<Param>>,
         return_type: String,
     },
@@ -171,6 +215,7 @@ pub enum Stmt {
     },
     For {
         id: String,
+        id_span: Span,
         start: Expr,
         up: bool, // true for 'to', false for 'downto'
         end: Expr,
@@ -184,6 +229,7 @@ pub enum Stmt {
     Goto(i64),
     ProcedureCall {
         name: String,
+        name_span: Span,
         args: Option<Vec<Expr>>,
     },
     With {
@@ -220,6 +266,7 @@ pub enum Expr {
     Variable(Box<Variable>),
     FunctionCall {
         name: String,
+        name_span: Span,
         args: Option<Vec<Expr>>,
     },
     Set(Vec<Element>),
@@ -227,7 +274,7 @@ pub enum Expr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Variable {
-    Id(String),
+    Id(String, Span),
     MemberAccess {
         record: Box<Expr>,
         field: String,

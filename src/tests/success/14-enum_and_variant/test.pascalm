@@ -4,23 +4,15 @@ type
   ContactInfo = record
     email: string;
   end;
-
   EmployeeStatus = (Active, OnLeave, Terminated);
-
   Employee = record
     id: integer;
-    contact: ContactInfo; 
+    contact: ContactInfo;
     case status: EmployeeStatus of
-      Active: (
-        salary: real;
-        projects: array[1..5] of string;
-      );
-      OnLeave: (
-        return_date: string;
-      );
-      Terminated: (); 
+      Active: (salary: real; projects: array[1..5] of string);
+      OnLeave: (return_date: string);
+      Terminated: ();
   end;
-
 var
   devs: array[1..10] of Employee;
   manager: Employee;
@@ -28,13 +20,12 @@ var
 
 begin
   manager.id := 101;
-  manager.contact.email := 'manager@corp.com'; 
+  manager.contact.email := 'manager@corp.com';
   manager.status := Active;
   manager.salary := 9500.0;
-
   devs[1].id := 201;
   devs[1].status := Active;
-  devs[1].projects[1] := 'Compiler Project'; 
+  devs[1].projects[1] := 'Compiler Project';
   { Acesso a array dentro de variante de record dentro de array }
   writeln('id:', devs[1].id, ' status:', devs[1].status, ' project:', devs[1].projects[1]);
 end.

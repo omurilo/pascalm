@@ -11,3 +11,7 @@ inkwell = { version = "0.5.0", features = ["llvm18-0"] }
 
 [build-dependencies]
 lalrpop = "0.20"
+
+[lib]
+name = "pascalm"
+path = "src/lib.rs"

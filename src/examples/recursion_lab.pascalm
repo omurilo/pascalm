@@ -1,0 +1,89 @@
+{ recursion_lab — uma coletânea de algoritmos recursivos clássicos.
+  Demonstra: recursão simples e em cascata, funções recursivas que retornam valor,
+  parâmetros char, variáveis globais como acumulador, e construção de uma tabela
+  (triângulo de Pascal) num array bidimensional a partir da recorrência de
+  binomiais. }
+program RecursionLab;
+
+const
+  ROWS = 7;
+type
+  TTriangle = array[1..ROWS, 1..ROWS] of integer;
+var
+  tri: TTriangle;
+  moves, row, col: integer;
+
+{ Torres de Hanói: imprime cada movimento e conta o total no acumulador global. }
+procedure Hanoi(n: integer; src, via, dst: char);
+begin
+  if n = 1 then
+  begin
+    writeln('  move disk 1: ', src, ' -> ', dst);
+    moves := moves + 1;
+  end
+  else
+  begin
+    Hanoi(n - 1, src, dst, via);
+    writeln('  move disk ', n, ': ', src, ' -> ', dst);
+    moves := moves + 1;
+    Hanoi(n - 1, via, src, dst);
+  end;
+end;
+
+{ Função de Ackermann — recursão não-primitiva (cresce explosivamente). }
+function Ack(m, n: integer): integer;
+begin
+  if m = 0 then
+    Ack := n + 1
+  else
+    if n = 0 then
+      Ack := Ack(m - 1, 1)
+    else
+      Ack := Ack(m - 1, Ack(m, n - 1));
+end;
+
+{ Máximo divisor comum pelo algoritmo de Euclides. }
+function Gcd(a, b: integer): integer;
+begin
+  if b = 0 then
+    Gcd := a
+  else
+    Gcd := Gcd(b, a mod b);
+end;
+
+{ Preenche `t` com os coeficientes binomiais (triângulo de Pascal). }
+procedure BuildTriangle(var t: TTriangle);
+var
+  i, j: integer;
+
+begin
+  for i := 1 to ROWS do
+  begin
+    t[i, 1] := 1;
+    t[i, i] := 1;
+    for j := 2 to i - 1 do
+      t[i, j] := t[i - 1, j - 1] + t[i - 1, j];
+  end;
+end;
+
+begin
+  writeln('== Towers of Hanoi (3 disks) ==');
+  moves := 0;
+  Hanoi(3, 'A', 'B', 'C');
+  writeln('  total moves: ', moves);
+  writeln('== Ackermann ==');
+  writeln('  A(2, 3) = ', Ack(2, 3));
+  writeln('  A(3, 3) = ', Ack(3, 3));
+  writeln('== GCD / LCM ==');
+  writeln('  gcd(48, 36) = ', Gcd(48, 36));
+  writeln('  lcm(48, 36) = ', 48 div Gcd(48, 36) * 36);
+  writeln('== Pascal''s Triangle ==');
+  BuildTriangle(tri);
+  for row := 1 to ROWS do
+  begin
+    write('  ');
+    for col := 1 to row do
+      write(tri[row, col], ' ');
+    writeln;
+  end;
+end.

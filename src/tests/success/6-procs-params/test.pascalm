@@ -1,10 +1,12 @@
 program TestProcedures;
+
 var
   a, b: integer;
 
 procedure troca(var x, y: integer);
 var
   temp: integer;
+
 begin
   temp := x;
   x := y;
@@ -19,8 +21,8 @@ end;
 begin
   a := 10;
   b := 20;
-  mostra(a, b);       { Passagem por valor }
-  troca(a, b);        { Passagem por referência }
+  mostra(a, b);  { Passagem por valor }
+  troca(a, b);  { Passagem por referência }
   writeln('Depois da troca...');
   mostra(a, b);
 end.

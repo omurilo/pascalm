@@ -1,0 +1,159 @@
+{ sort_arena — compara dois algoritmos de ordenação no mesmo conjunto de dados.
+  Demonstra: geração pseudoaleatória com um LCG, bubble sort iterativo, quicksort
+  RECURSIVO com particionamento de Hoare sobre um array passado por referência,
+  contadores globais de comparações/trocas, e o cálculo da mediana com `real`. }
+program SortArena;
+
+const
+  N = 12;
+type
+  TArr = array[1..N] of integer;
+var
+  data, work: TArr;
+  comparisons, swaps: integer;
+
+{ Gerador linear congruente — determinístico, valores em 0..999. }
+function NextRand(seed: integer): integer;
+begin
+  NextRand := (seed * 1103515 + 12345) mod 1000;
+end;
+
+procedure FillRandom(var arr: TArr);
+var
+  i, seed: integer;
+
+begin
+  seed := 7;
+  for i := 1 to N do
+  begin
+    seed := NextRand(seed);
+    arr[i] := seed;
+  end;
+end;
+
+procedure CopyArr(var src, dst: TArr);
+var
+  i: integer;
+
+begin
+  for i := 1 to N do
+    dst[i] := src[i];
+end;
+
+procedure Print(var arr: TArr; title: string);
+var
+  i: integer;
+
+begin
+  write(title, ' [');
+  for i := 1 to N do
+  begin
+    write(arr[i]);
+    if i < N then
+      write(', ');
+  end;
+  writeln(']');
+end;
+
+function IsSorted(var arr: TArr): boolean;
+var
+  i: integer;
+  ok: boolean;
+
+begin
+  ok := true;
+  for i := 1 to N - 1 do
+    if arr[i] > arr[i + 1] then
+      ok := false;
+  IsSorted := ok;
+end;
+
+procedure BubbleSort(var arr: TArr);
+var
+  i, j, tmp: integer;
+
+begin
+  for i := 1 to N - 1 do
+    for j := 1 to N - i do
+    begin
+      comparisons := comparisons + 1;
+      if arr[j] > arr[j + 1] then
+      begin
+        tmp := arr[j];
+        arr[j] := arr[j + 1];
+        arr[j + 1] := tmp;
+        swaps := swaps + 1;
+      end;
+    end;
+end;
+
+{ Quicksort recursivo (partição de Hoare) sobre o intervalo [lo, hi]. }
+procedure QuickSort(var arr: TArr; lo, hi: integer);
+var
+  i, j, pivot, tmp: integer;
+
+begin
+  i := lo;
+  j := hi;
+  pivot := arr[(lo + hi) div 2];
+  while i <= j do
+  begin
+    while arr[i] < pivot do
+    begin
+      comparisons := comparisons + 1;
+      i := i + 1;
+    end;
+    while arr[j] > pivot do
+    begin
+      comparisons := comparisons + 1;
+      j := j - 1;
+    end;
+    if i <= j then
+    begin
+      tmp := arr[i];
+      arr[i] := arr[j];
+      arr[j] := tmp;
+      swaps := swaps + 1;
+      i := i + 1;
+      j := j - 1;
+    end;
+  end;
+  if lo < j then
+    QuickSort(arr, lo, j);
+  if i < hi then
+    QuickSort(arr, i, hi);
+end;
+
+{ Mediana de um array JÁ ordenado. }
+function Median(var arr: TArr): real;
+var
+  mid: integer;
+
+begin
+  mid := N div 2;
+  if N mod 2 = 1 then
+    Median := arr[mid + 1]
+  else
+    Median := (arr[mid] + arr[mid + 1]) / 2.0;
+end;
+
+begin
+  FillRandom(data);
+  Print(data, 'input   :');
+  writeln('== Bubble sort ==');
+  CopyArr(data, work);
+  comparisons := 0;
+  swaps := 0;
+  BubbleSort(work);
+  Print(work, 'sorted  :');
+  writeln('  comparisons=', comparisons, ' swaps=', swaps, ' sorted=', IsSorted(work));
+  writeln('  median=', Median(work));
+  writeln('== Quicksort ==');
+  CopyArr(data, work);
+  comparisons := 0;
+  swaps := 0;
+  QuickSort(work, 1, N);
+  Print(work, 'sorted  :');
+  writeln('  comparisons=', comparisons, ' swaps=', swaps, ' sorted=', IsSorted(work));
+  writeln('  median=', Median(work));
+end.

@@ -1,0 +1,92 @@
+{ prime_explorer — teoria dos números elementar.
+  Demonstra: o Crivo de Eratóstenes sobre um array de booleanos, tipos SET
+  (`set of 0..9`) com teste de pertinência `in`, extração de dígitos com
+  `div`/`mod`, e funções auxiliares (soma de divisores) para achar números
+  perfeitos. }
+program PrimeExplorer;
+
+const
+  LIMIT = 60;
+type
+  TSieve = array[2..LIMIT] of boolean;
+var
+  sieve: TSieve;
+  i, primes: integer;
+
+{ Marca em `s` quais números de 2..LIMIT são primos. }
+procedure BuildSieve(var s: TSieve);
+var
+  i, j: integer;
+
+begin
+  for i := 2 to LIMIT do
+    s[i] := true;
+  for i := 2 to LIMIT do
+    if s[i] then
+    begin
+      j := i + i;
+      while j <= LIMIT do
+      begin
+        s[j] := false;
+        j := j + i;
+      end;
+    end;
+end;
+
+{ Soma dos divisores próprios de n (1 .. n-1). }
+function DivisorSum(n: integer): integer;
+var
+  d, s: integer;
+
+begin
+  s := 0;
+  for d := 1 to n - 1 do
+    if n mod d = 0 then
+      s := s + d;
+  DivisorSum := s;
+end;
+
+{ Quantos dígitos de n pertencem ao conjunto dos dígitos primos (2, 3, 5, 7). }
+function CountPrimeDigits(n: integer): integer;
+var
+  c, d: integer;
+  prime_digits: set of 0..9;
+
+begin
+  prime_digits := [2, 3, 5, 7];
+  c := 0;
+  while n > 0 do
+  begin
+    d := n mod 10;
+    if d in prime_digits then
+      c := c + 1;
+    n := n div 10;
+  end;
+  CountPrimeDigits := c;
+end;
+
+begin
+  BuildSieve(sieve);
+  writeln('== Primes up to ', LIMIT, ' ==');
+  primes := 0;
+  write('  ');
+  for i := 2 to LIMIT do
+    if sieve[i] then
+    begin
+      write(i, ' ');
+      primes := primes + 1;
+    end;
+  writeln;
+  writeln('  count: ', primes);
+  writeln('== Twin primes (p, p+2) ==');
+  for i := 2 to LIMIT - 2 do
+    if sieve[i] and sieve[i + 2] then
+      writeln('  (', i, ', ', i + 2, ')');
+  writeln('== Perfect numbers up to ', LIMIT, ' ==');
+  for i := 2 to LIMIT do
+    if DivisorSum(i) = i then
+      writeln('  ', i, ' = sum of its proper divisors');
+  writeln('== Prime-digit richness ==');
+  writeln('  237 has ', CountPrimeDigits(237), ' prime digits');
+  writeln('  1408 has ', CountPrimeDigits(1408), ' prime digits');
+end.

@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Configuration
-COMPILER_DIR="compiler-rust"
+COMPILER_DIR="src"
 TESTS_DIR="src/tests/success"
-LOCAL_LIBS="$PWD/compiler-rust/lib"
+LOCAL_LIBS="$PWD/lib"
 LLVM_PREFIX="/usr/lib/llvm-18"
 
 export LIBRARY_PATH="$LOCAL_LIBS:/usr/lib/x86_64-linux-gnu"
@@ -34,7 +34,7 @@ for test_dir in $TESTS_DIR/*; do
     echo -n "Running test $test_name... "
 
     # Run compiler
-    ./compiler-rust/target/debug/pascalm --file "$test_file" --output "test.ll" >/dev/null 2>&1
+    ./target/debug/pascalm --file "$test_file" --output "test.ll" >/dev/null 2>&1
 
     if [ $? -eq 0 ]; then
       if [ -f "test.ll" ]; then
