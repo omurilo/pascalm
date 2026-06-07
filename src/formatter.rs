@@ -657,6 +657,9 @@ impl Formatter {
                 self.writeln(&format!("case {} of", e));
                 self.indent += 1;
                 for item in items {
+                    // Comments standing before this whole alternative (above its
+                    // labels), at the alternative's indentation.
+                    self.flush_for(item.labels.iter().filter_map(expr_min_start).min());
                     let labels = item
                         .labels
                         .iter()
@@ -664,11 +667,11 @@ impl Formatter {
                         .collect::<Vec<_>>()
                         .join(", ");
                     self.writeln(&format!("{}:", labels));
-                    self.branch(&item.stmt, ";");
+                    self.branch_with_comments(&item.stmt);
                 }
                 if let Some(els) = else_stmt {
                     self.writeln("else");
-                    self.branch(els, ";");
+                    self.branch_with_comments(els);
                 }
                 self.indent -= 1;
                 self.writeln(&format!("end{}", suffix));
@@ -685,6 +688,29 @@ impl Formatter {
             self.indent += 1;
             self.statement(s, suffix);
             self.indent -= 1;
+        }
+    }
+
+    /// Like [`branch`] (always with a `;` suffix), but flushes the comments that
+    /// belong to the branch statement: leading ones above it (at the statement's
+    /// own indentation) and trailing ones on its final line. Case alternatives go
+    /// through here so their comments don't drift out to the closing `end`.
+    fn branch_with_comments(&mut self, s: &Stmt) {
+        // A compound's `begin` sits at the current level; everything else is one
+        // level deeper. Flush leading comments at that same depth so they line up
+        // with the statement they precede.
+        let deeper = !matches!(s, Stmt::Compound(_));
+        if deeper {
+            self.indent += 1;
+        }
+        self.flush_for(stmt_min_start(s));
+        if deeper {
+            self.indent -= 1;
+        }
+        self.branch(s, ";");
+        if let Some(end) = stmt_max_end(s) {
+            let line = self.line_of(end);
+            self.flush_through_line(line);
         }
     }
 
@@ -1281,6 +1307,50 @@ end.
             out.contains("writeln(x);  { prints }"),
             "trailing comment on last main statement misplaced:\n{out}"
         );
+    }
+
+    #[test]
+    fn case_branch_comments_stay_in_their_branch() {
+        // Comments inside a `case` (leading a branch's statement, or trailing it)
+        // must stay with that branch, not drift out to the closing `end`.
+        let src = "\
+program P;
+var
+  n, x: integer;
+
+begin
+  case n of
+    1:
+      { leads branch one }
+      x := 10;
+    2:
+      x := 20; { trails branch two }
+  end;
+end.
+";
+        let ast = parse(src).expect("must parse");
+        let out = format_compilation_unit(&ast, src);
+
+        // The leading comment stays right above its statement (indented inside
+        // the branch), not piled after the case's `end`.
+        assert!(
+            out.contains("{ leads branch one }\n      x := 10;"),
+            "leading case-branch comment drifted:\n{out}"
+        );
+        assert!(
+            out.contains("x := 20;  { trails branch two }"),
+            "trailing case-branch comment drifted:\n{out}"
+        );
+        // Nothing should have piled onto the closing `end`.
+        assert!(
+            !out.contains("end;  {") && !out.contains("end;\n  {"),
+            "a case comment drifted onto the closing end:\n{out}"
+        );
+
+        // Stable under a second pass.
+        let reparsed = parse(&out).expect("formatted output must parse");
+        let out2 = format_compilation_unit(&reparsed, &out);
+        assert_eq!(out, out2, "case-branch comment placement is not idempotent");
     }
 
     #[test]
