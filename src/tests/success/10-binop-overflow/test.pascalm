@@ -13,7 +13,7 @@ begin
 end;
 
 begin
-  if foo and bar then
+  if foo() and bar() then
     writeln('e esse não deve!')
   else
     writeln('mas esse deve!');  { "bar called" deve ser impresso }

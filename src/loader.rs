@@ -22,6 +22,11 @@ pub struct LoadedModule {
     pub unit: CompilationUnit,
     /// use-spec (lowercased) -> module id
     pub uses_map: HashMap<String, String>,
+    /// The module's source text, kept so callers can map diagnostic byte spans
+    /// back to line/column for human-readable error output.
+    pub source: String,
+    /// The module's source path (a synthetic name for embedded stdlib units).
+    pub path: PathBuf,
 }
 
 pub struct ModuleLoader {
@@ -92,13 +97,14 @@ impl ModuleLoader {
         let input = fs::read_to_string(source_path)
             .map_err(|e| format!("Failed to read {}: {}", source_path.display(), e))?;
         let base_dir = source_path.parent().unwrap_or(Path::new(".")).to_path_buf();
-        self.load_unit(id, input, base_dir, verbose)
+        self.load_unit(id, input, source_path.to_path_buf(), base_dir, verbose)
     }
 
     fn load_unit(
         &mut self,
         id: String,
         input: String,
+        path: PathBuf,
         base_dir: PathBuf,
         verbose: bool,
     ) -> Result<String, String> {
@@ -162,8 +168,15 @@ impl ModuleLoader {
             uses_map.insert(spec_lower, dep_id);
         }
 
-        self.modules
-            .insert(id.clone(), LoadedModule { unit, uses_map });
+        self.modules.insert(
+            id.clone(),
+            LoadedModule {
+                unit,
+                uses_map,
+                source: input,
+                path,
+            },
+        );
         self.loading_stack.pop();
         Ok(id)
     }
@@ -180,7 +193,8 @@ impl ModuleLoader {
         if let Some(content) = self.embedded_units.get(spec_lower).cloned() {
             let id = spec_lower.to_string();
             if !self.modules.contains_key(&id) {
-                self.load_unit(id.clone(), content, PathBuf::from("."), verbose)?;
+                let synthetic = PathBuf::from(format!("<builtin {}>", id));
+                self.load_unit(id.clone(), content, synthetic, PathBuf::from("."), verbose)?;
             }
             return Ok(id);
         }

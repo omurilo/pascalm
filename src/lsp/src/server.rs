@@ -143,6 +143,30 @@ impl Backend {
         Some((uri.clone(), symbol_info.clone()))
     }
 
+    /// The interfaces a diagnostics analysis of `unit` needs: every unit it
+    /// `uses`, plus the implicit `system` runtime. Resolved from the workspace
+    /// index, so it's empty until the workspace has been analyzed (single-file
+    /// mode without a root yields nothing, and stdlib calls there can't be
+    /// resolved). Keyed by the import spec; the analyzer preloads all of them.
+    fn interfaces_for(
+        &self,
+        unit: &CompilationUnit,
+    ) -> HashMap<String, HashMap<String, SymbolKind>> {
+        let mut interfaces = HashMap::new();
+        let specs = unit_uses(unit)
+            .into_iter()
+            .chain(std::iter::once(IMPLICIT_RUNTIME_UNIT.to_string()));
+        for spec in specs {
+            let stem = use_spec_stem(&spec);
+            if let Some(id) = self.unit_by_stem.get(&stem).map(|r| r.value().clone()) {
+                if let Some(au) = self.analyses.get(&id) {
+                    interfaces.insert(spec, au.interface.clone());
+                }
+            }
+        }
+        interfaces
+    }
+
     /// Scan the workspace for Pascal sources, parse each, and index it by file
     /// stem (the key a `uses` spec resolves by). Returns how many were indexed.
     fn index_workspace(&self, root: &Path) -> usize {
@@ -599,7 +623,8 @@ impl Backend {
 
         match parser.parse(lexer) {
             Ok(unit) => {
-                let (diags, analyzer) = get_diagnostics(item.text, &unit);
+                let interfaces = self.interfaces_for(&unit);
+                let (diags, analyzer) = get_diagnostics(item.text, &unit, interfaces);
                 diagnostics.extend(diags);
 
                 self.semanticast_map.insert(
@@ -807,9 +832,15 @@ fn lalrpop_error_to_diagnostic(text: &str, err: ParseError<usize, Token, String>
 pub fn get_diagnostics(
     text: &str,
     compilation_unit: &CompilationUnit,
+    interfaces: HashMap<String, HashMap<String, SymbolKind>>,
 ) -> (Vec<Diagnostic>, SemanticAnalyzer) {
     let mut all_diagnostics = Vec::new();
-    let mut analyzer = SemanticAnalyzer::new();
+    // Built with the current file's `uses` (plus `system`) interfaces and with
+    // those symbols preloaded into scope, so references to imported names
+    // resolve. Only then is undeclared-identifier checking enabled.
+    let mut analyzer = SemanticAnalyzer::with_interfaces(interfaces);
+    analyzer.preload_external_interfaces();
+    analyzer.report_diagnostics = true;
 
     // The analyzer reports semantic problems both through its `diagnostics` buffer
     // and (for the first fatal error) as a `Result::Err`; capture the latter too so
@@ -1403,7 +1434,8 @@ impl LanguageServer for Backend {
         let lexer = lexer::Lexer::new(&text);
         let parser = parser::CompilationUnitParser::new();
         if let Ok(unit) = parser.parse(lexer) {
-            let (diagnostics, analyzer) = get_diagnostics(&text, &unit);
+            let interfaces = self.interfaces_for(&unit);
+            let (diagnostics, analyzer) = get_diagnostics(&text, &unit, interfaces);
 
             self.client
                 .publish_diagnostics(params.text_document.uri, diagnostics, None)

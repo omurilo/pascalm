@@ -125,14 +125,25 @@ fn main() {
                 let loaded = loader.modules.get(&id).unwrap();
                 let uses_map = loaded.uses_map.clone();
                 let unit = loaded.unit.clone();
+                let source = loaded.source.clone();
+                let mod_path = loaded.path.clone();
                 match &unit {
                     CompilationUnit::Program(p) => {
                         let mut resolved_p = p.clone();
                         resolved_p.uses = resolve_uses(&p.uses, &uses_map);
                         let mut analyzer =
                             analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
+                        // Report semantic errors (undeclared names, type
+                        // mismatches, bad call args) up front so a broken program
+                        // fails with diagnostics instead of panicking in codegen.
+                        analyzer.report_diagnostics = true;
                         match analyzer.analyze_program(&resolved_p) {
                             Ok(typed_ast) => {
+                                if !analyzer.diagnostics.is_empty() {
+                                    print_diagnostics(&mod_path, &source, &analyzer.diagnostics);
+                                    std::process::exit(1);
+                                }
+
                                 let mut codegen = codegen::CodeGen::with_interfaces(
                                     &context,
                                     &p.name,
@@ -163,8 +174,14 @@ fn main() {
                             resolve_uses(&u.implementation.uses, &uses_map);
                         let mut analyzer =
                             analyzer::SemanticAnalyzer::with_interfaces(module_interfaces.clone());
+                        analyzer.report_diagnostics = true;
                         match analyzer.analyze_unit(&resolved_u) {
                             Ok((interface, typed_block)) => {
+                                if !analyzer.diagnostics.is_empty() {
+                                    print_diagnostics(&mod_path, &source, &analyzer.diagnostics);
+                                    std::process::exit(1);
+                                }
+
                                 module_interfaces.insert(id.clone(), interface);
 
                                 if !is_builtin {
@@ -255,5 +272,41 @@ fn main() {
             eprintln!("Error loading modules: {}", e);
             std::process::exit(1);
         }
+    }
+}
+
+/// Convert a byte offset into 1-based line and column numbers.
+fn line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+    for (i, ch) in source.char_indices() {
+        if i >= offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
+
+/// Print semantic diagnostics in a `path:line.col-line.col: error: message`
+/// form, mapping each diagnostic's byte span back to line/column in `source`.
+fn print_diagnostics(path: &Path, source: &str, diagnostics: &[analyzer::Diagnostic]) {
+    for d in diagnostics {
+        let (sl, sc) = line_col(source, d.span.start);
+        let (el, ec) = line_col(source, d.span.end);
+        eprintln!(
+            "{}:{}.{}-{}.{}: error: {}",
+            path.display(),
+            sl,
+            sc,
+            el,
+            ec,
+            d.message
+        );
     }
 }

@@ -134,6 +134,22 @@ impl Server {
         .map(|m| m["params"]["message"].as_str().unwrap().to_string())
         .unwrap_or_else(|| panic!("no logMessage containing {needle:?}"))
     }
+
+    /// Wait for the server's `publishDiagnostics` notification for `uri` and
+    /// return the diagnostics array.
+    fn wait_diagnostics(&self, uri: &str) -> Vec<Value> {
+        self.recv(Duration::from_secs(15), |m| {
+            m.get("method").and_then(Value::as_str) == Some("textDocument/publishDiagnostics")
+                && m["params"]["uri"].as_str() == Some(uri)
+        })
+        .map(|m| {
+            m["params"]["diagnostics"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+        })
+        .unwrap_or_else(|| panic!("no publishDiagnostics for {uri}"))
+    }
 }
 
 impl Drop for Server {
@@ -505,6 +521,157 @@ fn workspace_units_are_analyzed_on_init() {
         .and_then(|n| n.parse().ok())
         .unwrap_or(0);
     assert!(analyzed > 0, "expected some analyzed units, log was: {log}");
+}
+
+#[test]
+fn undeclared_identifier_is_reported() {
+    // With the workspace indexed, an unknown name use is flagged — but symbols
+    // from the implicit `system` runtime (e.g. `Sqrt`) must NOT be.
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/stdlib");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/diag_prog.pascalm");
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+
+    let text = "\
+program P;
+var
+  x: real;
+begin
+  x := Sqrt(4.0);
+  writeln(missing_var);
+end.
+";
+    s.did_open(&prog_uri, text);
+    let diags = s.wait_diagnostics(&prog_uri);
+
+    assert!(
+        diags
+            .iter()
+            .any(|d| d["message"].as_str().unwrap_or("").contains("missing_var")),
+        "undeclared `missing_var` not reported: {diags:?}"
+    );
+    assert!(
+        !diags
+            .iter()
+            .any(|d| d["message"].as_str().unwrap_or("").contains("Sqrt")),
+        "stdlib `Sqrt` was wrongly flagged as undeclared: {diags:?}"
+    );
+}
+
+#[test]
+fn type_mismatch_in_assignment_is_reported() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/stdlib");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/tm_prog.pascalm");
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+
+    let text = "\
+program P;
+var
+  i: integer;
+  st: string;
+begin
+  i := 'texto';
+  st := i;
+end.
+";
+    s.did_open(&prog_uri, text);
+    let diags = s.wait_diagnostics(&prog_uri);
+    let msgs: Vec<&str> = diags.iter().filter_map(|d| d["message"].as_str()).collect();
+    assert!(
+        msgs.iter().filter(|m| m.contains("Type mismatch")).count() >= 2,
+        "expected two type-mismatch diagnostics, got: {msgs:?}"
+    );
+}
+
+#[test]
+fn var_parameter_requires_an_lvalue() {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/stdlib");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/vp_prog.pascalm");
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+
+    let text = "\
+program P;
+procedure Bump(var n: integer);
+begin
+  n := n + 1;
+end;
+begin
+  Bump(5);
+end.
+";
+    s.did_open(&prog_uri, text);
+    let diags = s.wait_diagnostics(&prog_uri);
+    assert!(
+        diags
+            .iter()
+            .any(|d| d["message"].as_str().unwrap_or("").contains("L-value")),
+        "passing a literal to a VAR parameter was not flagged: {diags:?}"
+    );
+}
+
+#[test]
+fn real_examples_have_no_false_diagnostics() {
+    // The example programs exercise records, enums, arrays, `with`, var params
+    // and stdlib calls — none should trip the new type/undeclared checks.
+    // Canonicalize so the URI has no `..` segment (the server normalizes its
+    // published URIs, which would otherwise never match what we wait for).
+    let dir = std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/../examples")).unwrap();
+    let dir = dir.to_str().unwrap();
+    let root_uri = format!("file://{dir}");
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+
+    for ex in [
+        "matrix_lab",
+        "recursion_lab",
+        "bank_system",
+        "prime_explorer",
+        "sort_arena",
+    ] {
+        let uri = format!("file://{dir}/{ex}.pascalm");
+        let text = std::fs::read_to_string(format!("{dir}/{ex}.pascalm")).unwrap();
+        s.did_open(&uri, &text);
+        let diags = s.wait_diagnostics(&uri);
+        assert!(
+            diags.is_empty(),
+            "example {ex} produced false diagnostics: {diags:?}"
+        );
+    }
+}
+
+#[test]
+fn imported_symbols_are_not_flagged() {
+    // `triple` comes from `uses mylib`; it must not be reported as undeclared.
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/xfile");
+    let root_uri = format!("file://{dir}");
+    let prog_uri = format!("file://{dir}/prog.pascalm");
+    let text = std::fs::read_to_string(format!("{dir}/prog.pascalm")).unwrap();
+
+    let mut s = Server::start();
+    s.initialize(Some(&root_uri));
+    s.wait_log_containing("analyzed");
+    s.did_open(&prog_uri, &text);
+    let diags = s.wait_diagnostics(&prog_uri);
+
+    assert!(
+        !diags
+            .iter()
+            .any(|d| d["message"].as_str().unwrap_or("").contains("triple")),
+        "imported `triple` was wrongly flagged: {diags:?}"
+    );
 }
 
 #[test]

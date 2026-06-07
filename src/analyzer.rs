@@ -21,6 +21,12 @@ pub struct SemanticAnalyzer {
     pub definitions: Vec<(Span, SymbolId)>,
     /// Reference sites: where each symbol is used.
     pub references: Vec<(Span, SymbolId)>,
+    /// When set, recoverable semantic problems (undeclared identifiers, type
+    /// mismatches, bad call arguments) are reported as diagnostics. Off by
+    /// default and for the compiler, which still catches these at codegen — the
+    /// LSP turns it on only after preloading the imported (`uses` + `system`)
+    /// interfaces, so genuine imports aren't mistaken for errors.
+    pub report_diagnostics: bool,
 }
 
 impl SemanticAnalyzer {
@@ -32,6 +38,7 @@ impl SemanticAnalyzer {
             diagnostics: Vec::new(),
             definitions: Vec::new(),
             references: Vec::new(),
+            report_diagnostics: false,
         };
         analyzer.setup_builtins();
         analyzer
@@ -43,11 +50,91 @@ impl SemanticAnalyzer {
         analyzer
     }
 
+    /// Bring every known external interface into the global scope. The LSP uses
+    /// this on the diagnostics analyzer (whose `external_interfaces` holds just
+    /// the current file's `uses` plus `system`) so that references to imported
+    /// symbols resolve and aren't flagged as undeclared.
+    pub fn preload_external_interfaces(&mut self) {
+        let interfaces: Vec<HashMap<String, SymbolKind>> =
+            self.external_interfaces.values().cloned().collect();
+        for interface in interfaces {
+            for (name, kind) in interface {
+                let _ = self.symbol_table.insert(name, kind, Span::default());
+            }
+        }
+    }
+
     /// Insert a declaration and record its definition span for the LSP.
     fn define(&mut self, name: String, kind: SymbolKind, span: Span) -> Result<SymbolId, String> {
         let id = self.symbol_table.insert(name, kind, span)?;
         self.definitions.push((span, id));
         Ok(id)
+    }
+
+    /// Record a recovered semantic error so analysis can continue. The LSP
+    /// publishes these (with spans); the compiler treats any non-empty
+    /// `diagnostics` as a failed analysis and refuses to codegen.
+    fn report(&mut self, span: Span, msg: String) {
+        self.diagnostics.push(Diagnostic { span, message: msg });
+    }
+
+    /// Check a call against the callee's signature (diagnostics mode only):
+    /// argument count, `var`-parameter l-values, and primitive argument types.
+    /// Skips builtins (variadic `write`/`read`) and anything that isn't a known
+    /// user/imported procedure or function.
+    fn check_call(&mut self, name: &str, name_span: Span, args: &[Expr], typed_args: &[typed::TypedExpr]) {
+        if !self.report_diagnostics || matches!(name, "write" | "writeln" | "read" | "readln") {
+            return;
+        }
+        let params = match self.symbol_table.lookup(name) {
+            Some(SymbolKind::Procedure { params, .. })
+            | Some(SymbolKind::Function { params, .. }) => params.clone(),
+            _ => return,
+        };
+        let slots = flatten_params(&params);
+        if slots.len() != args.len() {
+            self.report(
+                name_span,
+                format!(
+                    "'{}' expects {} argument(s) but got {}",
+                    name,
+                    slots.len(),
+                    args.len()
+                ),
+            );
+            return;
+        }
+        for (i, (type_expr, is_var)) in slots.iter().enumerate() {
+            // Literal arguments carry no span; fall back to the call site so the
+            // diagnostic still points somewhere meaningful.
+            let arg_span = {
+                let s = expr_span(&args[i]);
+                if s == Span::default() {
+                    name_span
+                } else {
+                    s
+                }
+            };
+            if *is_var && !is_lvalue(&args[i]) {
+                self.report(
+                    arg_span,
+                    "An L-value (variable) is expected for a VAR parameter.".to_string(),
+                );
+                continue;
+            }
+            let param_ty = self.convert_type(type_expr);
+            if let Some(false) = primitive_assignable(&param_ty, &typed_args[i].ty) {
+                self.report(
+                    arg_span,
+                    format!(
+                        "Type mismatch: argument is {} but '{}' expects {}",
+                        type_name(&typed_args[i].ty),
+                        name,
+                        type_name(&param_ty)
+                    ),
+                );
+            }
+        }
     }
 
     /// Record a use-site reference to `name`, if it resolves to a known symbol.
@@ -57,6 +144,8 @@ impl SemanticAnalyzer {
         }
         if let Some(id) = self.symbol_table.lookup_id(name) {
             self.references.push((span, id));
+        } else if self.report_diagnostics {
+            self.report(span, format!("Undeclared identifier '{}'", name));
         }
     }
 
@@ -124,14 +213,16 @@ impl SemanticAnalyzer {
                             BlockOrForward::External(n) => n.clone(),
                             _ => None,
                         };
-                        self.define(
+                        if let Err(e) = self.define(
                             name.clone(),
                             SymbolKind::Procedure {
                                 params: params.clone().unwrap_or_default(),
                                 external_name,
                             },
                             *name_span,
-                        )?;
+                        ) {
+                            self.report(*name_span, e);
+                        }
                     }
                     ProcFuncDecl::Function {
                         name,
@@ -144,7 +235,7 @@ impl SemanticAnalyzer {
                             BlockOrForward::External(n) => n.clone(),
                             _ => None,
                         };
-                        self.define(
+                        if let Err(e) = self.define(
                             name.clone(),
                             SymbolKind::Function {
                                 params: params.clone().unwrap_or_default(),
@@ -152,7 +243,9 @@ impl SemanticAnalyzer {
                                 external_name,
                             },
                             *name_span,
-                        )?;
+                        ) {
+                            self.report(*name_span, e);
+                        }
                     }
                 }
             }
@@ -229,34 +322,49 @@ impl SemanticAnalyzer {
         let mut typed_constants = Vec::new();
         if let Some(consts) = constants {
             for c in consts {
-                let typed_val = self.analyze_expr(&c.value)?;
+                let typed_val = match self.analyze_expr(&c.value) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        self.report(c.name_span, e);
+                        continue;
+                    }
+                };
                 let const_kind = SymbolKind::Constant {
                     type_expr: self.convert_to_legacy_type(&typed_val.ty),
                     value: format!("{:?}", c.value),
                 };
-                self.define(c.name.clone(), const_kind, c.name_span)?;
+                if let Err(e) = self.define(c.name.clone(), const_kind, c.name_span) {
+                    self.report(c.name_span, e);
+                    continue;
+                }
                 typed_constants.push((c.name.clone(), typed_val));
             }
         }
         if let Some(t_decls) = types {
             for t in t_decls {
-                self.define(
+                if let Err(e) = self.define(
                     t.name.clone(),
                     SymbolKind::Type {
                         type_expr: t.type_expr.clone(),
                     },
                     t.name_span,
-                )?;
+                ) {
+                    self.report(t.name_span, e);
+                    continue;
+                }
                 if let TypeExpr::Enum(ids) = &t.type_expr {
                     for (i, id) in ids.iter().enumerate() {
-                        self.define(
+                        if let Err(e) = self.define(
                             id.clone(),
                             SymbolKind::Constant {
                                 type_expr: TypeExpr::Simple(t.name.clone()),
                                 value: i.to_string(),
                             },
                             Span::default(),
-                        )?;
+                        ) {
+                            self.report(t.name_span, e);
+                            continue;
+                        }
                         typed_constants.push((
                             id.clone(),
                             typed::TypedExpr {
@@ -274,13 +382,16 @@ impl SemanticAnalyzer {
                 let ty = self.convert_type(&v.type_expr);
                 for (i, id) in v.ids.iter().enumerate() {
                     let span = v.id_spans.get(i).copied().unwrap_or_default();
-                    self.define(
+                    if let Err(e) = self.define(
                         id.clone(),
                         SymbolKind::Variable {
                             type_expr: v.type_expr.clone(),
                         },
                         span,
-                    )?;
+                    ) {
+                        self.report(span, e);
+                        continue;
+                    }
                     typed_vars.push((id.clone(), ty.clone()));
                 }
             }
@@ -300,14 +411,16 @@ impl SemanticAnalyzer {
                                 BlockOrForward::External(n) => n.clone(),
                                 _ => None,
                             };
-                            self.define(
+                            if let Err(e) = self.define(
                                 name.clone(),
                                 SymbolKind::Procedure {
                                     params: params.clone().unwrap_or_default(),
                                     external_name,
                                 },
                                 *name_span,
-                            )?;
+                            ) {
+                                self.report(*name_span, e);
+                            }
                         }
                     }
                     ProcFuncDecl::Function {
@@ -322,7 +435,7 @@ impl SemanticAnalyzer {
                                 BlockOrForward::External(n) => n.clone(),
                                 _ => None,
                             };
-                            self.define(
+                            if let Err(e) = self.define(
                                 name.clone(),
                                 SymbolKind::Function {
                                     params: params.clone().unwrap_or_default(),
@@ -330,7 +443,9 @@ impl SemanticAnalyzer {
                                     external_name,
                                 },
                                 *name_span,
-                            )?;
+                            ) {
+                                self.report(*name_span, e);
+                            }
                         }
                     }
                 }
@@ -339,9 +454,9 @@ impl SemanticAnalyzer {
                 match p {
                     ProcFuncDecl::Procedure {
                         name,
+                        name_span,
                         params,
                         block_or_forward,
-                        ..
                     } => {
                         let mut typed_params = Vec::new();
                         if let Some(params_vec) = params {
@@ -382,10 +497,18 @@ impl SemanticAnalyzer {
                         }
                         let body = if let BlockOrForward::Block(b) = block_or_forward {
                             self.symbol_table.enter_scope();
-                            self.add_params_to_scope(params)?;
-                            let tb = self.analyze_block(b)?;
+                            if let Err(e) = self.add_params_to_scope(params) {
+                                self.report(*name_span, e);
+                            }
+                            let tb = match self.analyze_block(b) {
+                                Ok(tb) => Some(tb),
+                                Err(e) => {
+                                    self.report(*name_span, e);
+                                    None
+                                }
+                            };
                             self.symbol_table.exit_scope();
-                            Some(tb)
+                            tb
                         } else {
                             None
                         };
@@ -403,10 +526,10 @@ impl SemanticAnalyzer {
                     }
                     ProcFuncDecl::Function {
                         name,
+                        name_span,
                         params,
                         return_type,
                         block_or_forward,
-                        ..
                     } => {
                         let mut typed_params = Vec::new();
                         if let Some(params_vec) = params {
@@ -447,17 +570,27 @@ impl SemanticAnalyzer {
                         }
                         let body = if let BlockOrForward::Block(b) = block_or_forward {
                             self.symbol_table.enter_scope();
-                            self.add_params_to_scope(params)?;
-                            self.symbol_table.insert(
+                            if let Err(e) = self.add_params_to_scope(params) {
+                                self.report(*name_span, e);
+                            }
+                            // The function name doubles as the result variable
+                            // inside its own body; a clash here is non-fatal.
+                            let _ = self.symbol_table.insert(
                                 name.clone(),
                                 SymbolKind::Variable {
                                     type_expr: TypeExpr::Simple(return_type.clone()),
                                 },
                                 Span::default(),
-                            )?;
-                            let tb = self.analyze_block(b)?;
+                            );
+                            let tb = match self.analyze_block(b) {
+                                Ok(tb) => Some(tb),
+                                Err(e) => {
+                                    self.report(*name_span, e);
+                                    None
+                                }
+                            };
                             self.symbol_table.exit_scope();
-                            Some(tb)
+                            tb
                         } else {
                             None
                         };
@@ -478,7 +611,10 @@ impl SemanticAnalyzer {
         }
         let mut typed_stmts = Vec::new();
         for stmt in statements {
-            typed_stmts.push(self.analyze_stmt(stmt)?);
+            match self.analyze_stmt(stmt) {
+                Ok(ts) => typed_stmts.push(ts),
+                Err(msg) => self.report(stmt_span(stmt), msg),
+            }
         }
         self.current_block_labels = old_labels;
         Ok(typed::TypedBlock {
@@ -502,6 +638,20 @@ impl SemanticAnalyzer {
             Stmt::Assignment { target, value } => {
                 let typed_target = self.analyze_expr(target)?;
                 let typed_value = self.analyze_expr(value)?;
+                if self.report_diagnostics {
+                    if let Some(false) =
+                        primitive_assignable(&typed_target.ty, &typed_value.ty)
+                    {
+                        self.report(
+                            expr_span(target),
+                            format!(
+                                "Type mismatch: cannot assign {} to {}",
+                                type_name(&typed_value.ty),
+                                type_name(&typed_target.ty)
+                            ),
+                        );
+                    }
+                }
                 Ok(typed::TypedStmt::Assignment {
                     target: typed_target,
                     value: typed_value,
@@ -576,6 +726,7 @@ impl SemanticAnalyzer {
                         typed_args.push(self.analyze_expr(arg)?);
                     }
                 }
+                self.check_call(name, *name_span, args.as_deref().unwrap_or(&[]), &typed_args);
                 Ok(typed::TypedStmt::ProcedureCall {
                     name: name.clone(),
                     args: typed_args,
@@ -714,6 +865,7 @@ impl SemanticAnalyzer {
                         typed_args.push(self.analyze_expr(arg)?);
                     }
                 }
+                self.check_call(name, *name_span, args.as_deref().unwrap_or(&[]), &typed_args);
                 let ret_ty = if let Some(kind) = self.symbol_table.lookup(name) {
                     match kind {
                         SymbolKind::Function { return_type, .. } => {
@@ -1050,5 +1202,118 @@ impl SemanticAnalyzer {
             }
         }
         Ok(())
+    }
+}
+
+/// Best-effort source span for a statement, used to anchor a recovered
+/// diagnostic at the offending statement rather than at offset 0.
+fn stmt_span(s: &Stmt) -> Span {
+    match s {
+        Stmt::Assignment { target, .. } => expr_span(target),
+        Stmt::ProcedureCall { name_span, .. } => *name_span,
+        Stmt::If { condition, .. } => expr_span(condition),
+        Stmt::While { condition, .. } => expr_span(condition),
+        Stmt::Repeat { until, .. } => expr_span(until),
+        Stmt::For { id_span, .. } => *id_span,
+        Stmt::Case { expr, .. } => expr_span(expr),
+        Stmt::With { ids, .. } => ids.first().map(expr_span).unwrap_or_default(),
+        Stmt::Labeled(_, inner) => stmt_span(inner),
+        Stmt::Compound(ss) => ss.first().map(stmt_span).unwrap_or_default(),
+        Stmt::Goto(_) | Stmt::Empty => Span::default(),
+    }
+}
+
+fn expr_span(e: &Expr) -> Span {
+    match e {
+        Expr::Variable(v) => var_span(v),
+        Expr::FunctionCall { name_span, .. } => *name_span,
+        Expr::Binary { left, .. } => expr_span(left),
+        Expr::Unary { expr, .. } => expr_span(expr),
+        _ => Span::default(),
+    }
+}
+
+fn var_span(v: &Variable) -> Span {
+    match v {
+        Variable::Id(_, s) => *s,
+        Variable::MemberAccess { record, .. } => expr_span(record),
+        Variable::ArrayAccess { array, .. } => expr_span(array),
+        Variable::PointerDeref(e) => expr_span(e),
+    }
+}
+
+/// Whether an argument expression can be passed to a `var` parameter — i.e. it
+/// denotes a storage location (a variable, field, element or deref), not a
+/// literal or computed value.
+fn is_lvalue(e: &Expr) -> bool {
+    matches!(e, Expr::Variable(_))
+}
+
+/// Flatten a parameter list into one `(type, is_var)` slot per actual argument
+/// (a `var a, b: integer` group expands to two slots).
+fn flatten_params(params: &[Param]) -> Vec<(TypeExpr, bool)> {
+    let mut out = Vec::new();
+    for p in params {
+        match p {
+            Param::Variable {
+                is_var,
+                ids,
+                type_name,
+                ..
+            } => {
+                for _ in ids {
+                    out.push((TypeExpr::Simple(type_name.clone()), *is_var));
+                }
+            }
+            Param::Procedure { .. } => out.push((TypeExpr::Procedure { params: None }, false)),
+            Param::Function { return_type, .. } => out.push((
+                TypeExpr::Function {
+                    params: None,
+                    return_type: return_type.clone(),
+                },
+                false,
+            )),
+        }
+    }
+    out
+}
+
+/// Conservative assignability between two types. Returns `None` when either side
+/// isn't a primitive (records, arrays, enums, etc. are left unjudged to avoid
+/// false positives); `Some(true/false)` for primitive pairs. Numeric types
+/// interconvert, and a `char` promotes to a one-character `string`.
+fn primitive_assignable(target: &typed::Type, value: &typed::Type) -> Option<bool> {
+    use typed::Type::*;
+    let is_prim = |t: &typed::Type| matches!(t, Integer | Real | Boolean | Char | String);
+    if !is_prim(target) || !is_prim(value) {
+        return None;
+    }
+    let ok = match (target, value) {
+        (a, b) if a == b => true,
+        (Real, Integer) | (Integer, Real) => true,
+        (String, Char) => true,
+        _ => false,
+    };
+    Some(ok)
+}
+
+/// Short human-readable name of a type, for diagnostics.
+fn type_name(t: &typed::Type) -> &'static str {
+    use typed::Type::*;
+    match t {
+        Integer => "integer",
+        Real => "real",
+        Boolean => "boolean",
+        Char => "char",
+        String => "string",
+        Array { .. } => "array",
+        Record { .. } => "record",
+        Pointer(_) => "pointer",
+        Set(_) => "set",
+        Subrange { .. } => "subrange",
+        Enum(_) => "enum",
+        Procedure => "procedure",
+        Function(_) => "function",
+        Void => "void",
     }
 }

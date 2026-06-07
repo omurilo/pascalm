@@ -21,7 +21,7 @@ begin
 
   Teste(5);          { ERRO: Passando literal para um parâmetro VAR }
   
-  s := RetornaString(&s);
+  s := RetornaString(s);
   
   writeln(variavel_nao_declarada); { ERRO: Variável não existe }
 end.
