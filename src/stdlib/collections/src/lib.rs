@@ -78,6 +78,32 @@ pub unsafe extern "C" fn coll_list_pop(handle: i64) -> i64 {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn coll_list_get_str(handle: i64, index: i64) -> *const c_char {
+    let empty = b"\0".as_ptr() as *const c_char;
+    if index - 1 < 0 {
+        return empty;
+    }
+
+    match list_mut(handle).and_then(|list| list.get((index - 1) as usize).copied()) {
+        Some(ptr) if ptr != 0 => ptr as *const c_char,
+        _ => empty,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn coll_list_push_str(handle: i64, value: *const c_char) {
+    if let Some(list) = list_mut(handle) {
+        let owned = if value.is_null() {
+            std::ffi::CString::default()
+        } else {
+            CStr::from_ptr(value).to_owned()
+        };
+
+        list.push(owned.into_raw() as i64);
+    }
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn coll_list_free(handle: i64) {
     if handle != 0 {
         drop(Box::from_raw(handle as *mut Vec<i64>));

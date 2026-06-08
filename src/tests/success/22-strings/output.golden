@@ -1,0 +1,13 @@
+Len de fim: 3
+int 3 to str + string(0): 30
+string 33 to int + 3: 36
+letra grande -> uppercase: LETRA GRANDE
+LETRA PEQUENA -> lowercase: letra pequena
+trimmed length: 7
+     not trimmed      length: 21
+Sub string start: 4, len: 3 de Bom Dia: Dia
+Bom dia, index of dia 5
+Contains dia em Boa tarde: FALSE
+Replace dia por tarde em Bom dia: Boa tarde
+Indice 2 da lista de Split(Olá, bom dia!): bom dia!
+Join da lista de Split(Olá, bom dia!) com o separador -: Olá- bom dia!

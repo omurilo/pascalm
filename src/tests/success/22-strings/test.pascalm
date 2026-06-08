@@ -1,0 +1,26 @@
+program TestStrings;
+uses Strings;
+
+var
+  str: string;
+  list: integer;
+  list_str: string;
+
+begin
+  str := 'fim';
+  list := Split('Olá, bom dia!', ', ');
+  list_str := Join(list, '- ');
+  writeln('Len de ', str, ': ', Length(str));
+  writeln('int 3 to str + string(0): ', IntToStr(3) + '0');
+  writeln('string 33 to int + 3: ', StrToInt('33') + 3);
+  writeln('letra grande -> uppercase: ', UpperCase('Letra grande'));
+  writeln('LETRA PEQUENA -> lowercase: ', LowerCase('LETRA PEQUENA'));
+  writeln(Trim('     trimmed'), ' length: ', Length(Trim('     trimmed    ')));
+  writeln('     not trimmed     ', ' length: ', Length('     not trimmed     '));
+  writeln('Sub string start: 4, len: 3 de Bom Dia: ', Substring('Bom Dia', 4, 3));
+  writeln('Bom dia, index of dia ', IndexOf('Bom dia', 'dia'));
+  writeln('Contains dia em Boa tarde: ', Contains('Boa tarde', 'dia'));
+  writeln('Replace dia por tarde em Bom dia: ', Replace('Bom dia', 'm dia', 'a tarde'));
+  writeln('Indice 2 da lista de Split(Olá, bom dia!): ', Trim(ListGetStr(list, 2)));
+  writeln('Join da lista de Split(Olá, bom dia!) com o separador -: ', list_str);
+end.

@@ -1,0 +1,125 @@
+program TuringMachinePascalm;
+
+const
+  TAPE_SIZE = 1000;
+  MAX_STATES = 5;
+  MAX_SYMBOLS = 3;  { 0 -> '_', 1 -> '0', 2 -> '1' }
+type
+  { Record para encapsular as ações de transição }
+  TransitionAction = record
+    WriteSymbol: char;
+    MoveDir: char;
+    NextState: integer;
+  end;  { 'L' para Esquerda, 'R' para Direita, 'H' para Halt }
+  { Matriz multidimensional representada por arrays estruturados }
+  SymbolArray = array[0..MAX_SYMBOLS] of TransitionAction;
+  StateTransitionMatrix = array[0..MAX_STATES] of SymbolArray;
+  TapeArray = array[0..TAPE_SIZE] of char;
+var
+  Tape: TapeArray;
+  TransitionTable: StateTransitionMatrix;
+  HeadPosition: integer;
+  CurrentState: integer;
+  HaltState: integer;
+  I: integer;
+  CurrentSymbol: char;
+  SymIdx: integer;
+
+{ Função auxiliar para mapear o caractere ao índice da matriz }
+function GetSymbolIndex(Sym: char): integer;
+begin
+  if Sym = '_' then
+    GetSymbolIndex := 0
+  else
+    if Sym = '0' then
+      GetSymbolIndex := 1
+    else
+      GetSymbolIndex := 2;
+end;
+
+procedure InitializeTape;
+begin
+  for I := 0 to TAPE_SIZE do
+  begin
+    Tape[I] := '_';
+  end;
+  { Entrada binária de teste: "1011" (Número 11 em decimal) }
+  { O objetivo da máquina é somar +1, resultando em "1100" (12 em decimal) }
+  Tape[500] := '1';
+  Tape[501] := '0';
+  Tape[502] := '1';
+  Tape[503] := '1';
+end;
+
+procedure SetupTransitionMatrix;
+begin
+  { --- ESTADO 0: Avançar até ao fim da string à direita --- }
+  { Se ler '0', mantém '0', move para a Direita, continua no Estado 0 }
+  TransitionTable[0][1].WriteSymbol := '0';
+  TransitionTable[0][1].MoveDir := 'R';
+  TransitionTable[0][1].NextState := 0;
+  { Se ler '1', mantém '1', move para a Direita, continua no Estado 0 }
+  TransitionTable[0][2].WriteSymbol := '1';
+  TransitionTable[0][2].MoveDir := 'R';
+  TransitionTable[0][2].NextState := 0;
+  { Ao encontrar o espaço em branco '_', recua um passo e vai para o Estado 1 (Somar) }
+  TransitionTable[0][0].WriteSymbol := '_';
+  TransitionTable[0][0].MoveDir := 'L';
+  TransitionTable[0][0].NextState := 1;
+  { --- ESTADO 1: Processar a adição (+1) da direita para a esquerda (Vai-um) --- }
+  { Se ler '0', vira '1' (fim do transporte/vai-um), move para a Esquerda e vai para o Estado 2 }
+  TransitionTable[1][1].WriteSymbol := '1';
+  TransitionTable[1][1].MoveDir := 'L';
+  TransitionTable[1][1].NextState := 2;
+  { Se ler '1', vira '0' (propaga o vai-um) e continua para a Esquerda no Estado 1 }
+  TransitionTable[1][2].WriteSymbol := '0';
+  TransitionTable[1][2].MoveDir := 'L';
+  TransitionTable[1][2].NextState := 1;
+  { Se a fita acabar '_' e ainda houver vai-um, escreve '1', move para a Esquerda e para }
+  TransitionTable[1][0].WriteSymbol := '1';
+  TransitionTable[1][0].MoveDir := 'L';
+  TransitionTable[1][0].NextState := 9;  { Halt }
+  { --- ESTADO 2: Estado de retorno (Apenas move o cabeçote para o início) --- }
+  TransitionTable[2][1].WriteSymbol := '0';
+  TransitionTable[2][1].MoveDir := 'L';
+  TransitionTable[2][1].NextState := 2;
+  TransitionTable[2][2].WriteSymbol := '1';
+  TransitionTable[2][2].MoveDir := 'L';
+  TransitionTable[2][2].NextState := 2;
+  { Encontrou o início da string '_', move uma posição para a direita e para no sucesso }
+  TransitionTable[2][0].WriteSymbol := '_';
+  TransitionTable[2][0].MoveDir := 'R';
+  TransitionTable[2][0].NextState := 9;  { Halt }
+end;
+
+begin
+  InitializeTape;
+  SetupTransitionMatrix;
+  HeadPosition := 500;
+  CurrentState := 0;
+  HaltState := 9;
+  writeln('--- Estado Inicial da Fita ---');
+  writeln('Posicao 500 a 504: ', Tape[500], Tape[501], Tape[502], Tape[503], Tape[504]);
+  { O loop central consome a matriz multidimensional e os campos do record }
+  while CurrentState <> HaltState do
+  begin
+    CurrentSymbol := Tape[HeadPosition];
+    SymIdx := GetSymbolIndex(CurrentSymbol);
+    { Aceder de forma combinada à Matriz e ao Record nativo do Pascalm }
+    Tape[HeadPosition] := TransitionTable[CurrentState][SymIdx].WriteSymbol;
+    { Lógica de movimentação baseada na ação obtida }
+    if TransitionTable[CurrentState][SymIdx].MoveDir = 'R' then
+    begin
+      HeadPosition := HeadPosition + 1;
+    end
+    else
+      if TransitionTable[CurrentState][SymIdx].MoveDir = 'L' then
+      begin
+        HeadPosition := HeadPosition - 1;
+      end;
+    { Transição do Estado }
+    CurrentState := TransitionTable[CurrentState][SymIdx].NextState;
+  end;
+  writeln('--- Estado Final da Fita (Soma Concluida) ---');
+  writeln('Posicao 500 a 504: ', Tape[500], Tape[501], Tape[502], Tape[503], Tape[504]);
+end.
